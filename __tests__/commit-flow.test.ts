@@ -530,6 +530,42 @@ describe("commit flow helpers", () => {
     assert.deepEqual(events, []);
   });
 
+  test("runTaskCommitFlow rolls back merged files when out-of-scope blocks a worktree merge", async () => {
+    const rollbacks = [];
+    const result = await runTaskCommitFlow({
+      rootDir: "/repo",
+      task: { id: "T-SCOPE", task_kind: "feature" },
+      code: ["src/app.ts", "test/app.test.ts"],
+      hasRealCode: true,
+      businessFiles: ["src/app.ts", "test/app.test.ts"],
+      outOfScope: ["src/app.ts"],
+      rollbackFilesOnBlockedScope: true,
+      rollbackMergedFiles: async (payload) => {
+        rollbacks.push(payload);
+        return { rolledBack: true, files: payload.files };
+      },
+      updateDocs: async () => {
+        throw new Error("should not update docs");
+      },
+      commitChanges: () => {
+        throw new Error("should not commit");
+      },
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(rollbacks, [{
+      rootDir: "/repo",
+      files: ["src/app.ts", "test/app.test.ts"],
+      reason: "out_of_scope_files: src/app.ts",
+    }]);
+    assert.equal("rollbackResult" in result, true);
+    const rollbackResult = "rollbackResult" in result ? result.rollbackResult : null;
+    assert.deepEqual(rollbackResult, {
+      rolledBack: true,
+      files: ["src/app.ts", "test/app.test.ts"],
+    });
+  });
+
   test("runTaskCommitFlow blocks package app lib skipped out-of-scope files", async () => {
     const result = await runTaskCommitFlow({
       task: { id: "T-PKG", task_kind: "feature" },

@@ -1,5 +1,11 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
-import { appendFileSync as defaultAppendFileSync } from "node:fs";
+import {
+  appendFileSync as defaultAppendFileSync,
+  existsSync as defaultExistsSync,
+  rmSync as defaultRmSync,
+} from "node:fs";
+import { isAbsolute } from "node:path";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { allowsMetadataOnlyCompletion } from "./post-commit-outcome.js";
 
 export const DEFAULT_DOC_UPDATE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
@@ -159,6 +165,114 @@ export function buildOutOfScopeBlock({
 
 function uniqueFiles(files = []) {
   return [...new Set(files.filter(Boolean))];
+}
+
+function safeRepoFile(file) {
+  const normalized = String(file || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!normalized || normalized.includes("\0") || isAbsolute(normalized)) return null;
+  if (normalized.split("/").includes("..")) return null;
+  return normalized;
+}
+
+function resolveRollbackPath(rootDir, file) {
+  const resolved = resolveWithinRoot(rootDir, file);
+  return resolved.ok ? resolved.path : null;
+}
+
+function gitFileTracked({ rootDir, file, execFileSync = defaultExecFileSync } = Object()) {
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", "--", file], {
+      cwd: rootDir,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function rollbackMergedTaskFiles({
+  rootDir,
+  files = [],
+  reason = "blocked",
+  execFileSync = defaultExecFileSync,
+  existsSync = defaultExistsSync,
+  rmSync = defaultRmSync,
+} = Object()) {
+  const safeFiles = uniqueFiles(files.map(safeRepoFile).filter(Boolean));
+  const restored = [];
+  const removed = [];
+  const untouched = [];
+  const errors = [];
+  for (const file of safeFiles) {
+    const absolutePath = resolveRollbackPath(rootDir, file);
+    if (!absolutePath) {
+      untouched.push(file);
+      continue;
+    }
+    try {
+      if (gitFileTracked({ rootDir, file, execFileSync })) {
+        execFileSync("git", ["restore", "--staged", "--worktree", "--", file], {
+          cwd: rootDir,
+          encoding: "utf8",
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        restored.push(file);
+        continue;
+      }
+      try {
+        execFileSync("git", ["rm", "--cached", "--ignore-unmatch", "--", file], {
+          cwd: rootDir,
+          encoding: "utf8",
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+      } catch {}
+      if (existsSync(absolutePath)) {
+        rmSync(absolutePath, { recursive: true, force: true });
+        removed.push(file);
+      } else {
+        untouched.push(file);
+      }
+    } catch (error) {
+      errors.push({ file, error: error?.message || String(error) });
+    }
+  }
+  return {
+    rolledBack: errors.length === 0,
+    files: safeFiles,
+    restored,
+    removed,
+    untouched,
+    reason,
+    ...(errors.length > 0 ? { errors } : {}),
+  };
+}
+
+async function rollbackBlockedScopeFiles({
+  rootDir,
+  files = [],
+  reason,
+  enabled = false,
+  rollbackMergedFiles = rollbackMergedTaskFiles,
+  log = (..._args) => {},
+  task = Object(),
+} = Object()) {
+  if (!enabled || files.length === 0) return null;
+  try {
+    const result = await rollbackMergedFiles({ rootDir, files, reason });
+    log(task.id, "ROLLBACK", `已回滚 blocked merge 文件: ${result.files?.join(", ") || "none"}`);
+    return result;
+  } catch (error) {
+    const result = {
+      rolledBack: false,
+      files,
+      reason,
+      error: error?.message || String(error),
+    };
+    log(task.id, "!!", `blocked merge rollback failed: ${result.error}`);
+    return result;
+  }
 }
 
 export function buildCommitSkipDecision({
@@ -321,6 +435,8 @@ export async function runTaskCommitFlow({
   updateDocs,
   importDocUpdater,
   commitChanges = commitTaskChanges,
+  rollbackFilesOnBlockedScope = false,
+  rollbackMergedFiles = rollbackMergedTaskFiles,
 } = Object()) {
   const effectiveOutOfScope = uniqueFiles(outOfScope);
   const dryRunOutOfScopeBlock = buildDryRunOutOfScopeBlock({
@@ -331,7 +447,20 @@ export async function runTaskCommitFlow({
     outOfScope: effectiveOutOfScope,
   });
   if (dryRunOutOfScopeBlock) {
-    return { status: "blocked", result: dryRunOutOfScopeBlock };
+    const rollbackResult = await rollbackBlockedScopeFiles({
+      rootDir,
+      files: code,
+      reason: dryRunOutOfScopeBlock.blockReason,
+      enabled: rollbackFilesOnBlockedScope,
+      rollbackMergedFiles,
+      log,
+      task,
+    });
+    return {
+      status: "blocked",
+      ...(rollbackResult ? { rollbackResult } : {}),
+      result: dryRunOutOfScopeBlock,
+    };
   }
 
   const outOfScopeBlock = buildOutOfScopeBlock({
@@ -342,7 +471,20 @@ export async function runTaskCommitFlow({
     outOfScope: effectiveOutOfScope,
   });
   if (outOfScopeBlock) {
-    return { status: "blocked", result: outOfScopeBlock };
+    const rollbackResult = await rollbackBlockedScopeFiles({
+      rootDir,
+      files: code,
+      reason: outOfScopeBlock.blockReason,
+      enabled: rollbackFilesOnBlockedScope,
+      rollbackMergedFiles,
+      log,
+      task,
+    });
+    return {
+      status: "blocked",
+      ...(rollbackResult ? { rollbackResult } : {}),
+      result: outOfScopeBlock,
+    };
   }
 
   const docsResult = Object.assign(Object(), await updateDocsBeforeCommit({

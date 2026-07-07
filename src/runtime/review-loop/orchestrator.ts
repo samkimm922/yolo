@@ -36,6 +36,10 @@ import {
 } from "./task-application.js";
 import { resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
 import { circuitBreakerThreshold, hasRepeatedFailure } from "../recovery/retry-policy.js";
+import {
+  commitTaskChanges,
+  rollbackMergedTaskFiles,
+} from "../execution/commit-flow.js";
 
 type Prd = Record<string, unknown>;
 type Task = Record<string, unknown>;
@@ -75,6 +79,16 @@ type LogReviewIssueFn = (
 ) => void;
 type LogReviewDoneFn = (status: string, findings: number, fixed: number, meta: Record<string, unknown>) => void;
 type LogReviewErrorFn = (title: string, detail: unknown, meta: Record<string, unknown>) => void;
+type CommitAutoFixChangesFn = (payload: {
+  rootDir: string;
+  files: string[];
+  message: string;
+}) => Promise<Record<string, unknown>> | Record<string, unknown>;
+type RollbackAutoFixChangesFn = (payload: {
+  rootDir: string;
+  files: string[];
+  reason: string;
+}) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 function noop(): void {}
 
@@ -119,6 +133,35 @@ function reviewScannerArtifactState(scanResult: string): { ok: boolean; detail?:
 function defaultReviewReportPath(prdPath: string): string {
   const normalized = String(prdPath || "").replace(/\\/g, "/");
   return normalized.includes("/.yolo/") ? ".yolo/lifecycle/review-report.json" : "review-report.json";
+}
+
+function uniqueStrings(values: unknown[] = []): string[] {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function buildReviewAutoFixCommitMessage(round: number): string {
+  return `fix: REVIEW-AUTO-FIX-R${round} [code] apply review auto-fixes`;
+}
+
+function defaultCommitAutoFixChanges({ rootDir, files, message }: {
+  rootDir: string;
+  files: string[];
+  message: string;
+}): Record<string, unknown> {
+  return commitTaskChanges({
+    rootDir,
+    files,
+    docUpdateFiles: [],
+    message,
+  });
+}
+
+function defaultRollbackAutoFixChanges({ rootDir, files, reason }: {
+  rootDir: string;
+  files: string[];
+  reason: string;
+}): Record<string, unknown> {
+  return rollbackMergedTaskFiles({ rootDir, files, reason });
 }
 
 function cleanString(value: unknown): string {
@@ -391,6 +434,8 @@ export async function runReviewLoop({
   config = Object(),
   execFileSync,
   processExecPath = process.execPath,
+  commitAutoFixChanges = defaultCommitAutoFixChanges,
+  rollbackAutoFixChanges = defaultRollbackAutoFixChanges,
   logProgress = noop as LogProgressFn,
   logReviewStart = noop as LogReviewStartFn,
   logReviewGate = noop as LogReviewGateFn,
@@ -416,6 +461,8 @@ export async function runReviewLoop({
   config?: Record<string, unknown>;
   execFileSync?: (file: string, args: string[], options: Record<string, unknown>) => string;
   processExecPath?: string;
+  commitAutoFixChanges?: CommitAutoFixChangesFn;
+  rollbackAutoFixChanges?: RollbackAutoFixChangesFn;
   logProgress?: LogProgressFn;
   logReviewStart?: LogReviewStartFn;
   logReviewGate?: LogReviewGateFn;
@@ -724,6 +771,32 @@ export async function runReviewLoop({
           const normalized = normalizeAutoFixResult(autoResult);
           escalatedFromAuto = normalized.escalatedFromAuto;
           autoFixedCount = normalized.autoFixedCount;
+          const autoModifiedFiles = uniqueStrings(Array.isArray(autoResult.modifiedFiles) ? autoResult.modifiedFiles : []);
+          if (autoFixedCount > 0) {
+            if (autoModifiedFiles.length === 0) {
+              throw new Error("AUTO_FIX reported fixed files but returned no modifiedFiles");
+            }
+            const message = buildReviewAutoFixCommitMessage(round);
+            const commitResult = await commitAutoFixChanges({
+              rootDir,
+              files: autoModifiedFiles,
+              message,
+            });
+            if (!commitResult?.committed) {
+              const reason = String(commitResult?.reason || commitResult?.commitWarning || "unknown");
+              await rollbackAutoFixChanges({
+                rootDir,
+                files: autoModifiedFiles,
+                reason: `auto_fix_commit_failed: ${reason}`,
+              });
+              throw new Error(`AUTO_FIX commit failed: ${reason}`);
+            }
+            logReviewGate("AUTO_FIX_COMMIT", "pass", reviewLogMeta({
+              round,
+              files: autoModifiedFiles,
+              commit: commitResult?.commit ?? null,
+            }));
+          }
           logProgress("REVIEW", "", normalized.summary);
           logReviewGate("AUTO_FIX", "pass", reviewLogMeta({
             round,
