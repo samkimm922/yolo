@@ -1640,7 +1640,22 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
     return { instructions: [], criteria: [], postConditions: [] };
   }
 
-  const requiredTexts = ["spawnSync", "git init", "--repo", "--since", "--until", "--output", "bad repo"];
+  const behaviorMarkers = [
+    { label: "spawnSync", type: "code_contains", params: { file: testFile, text: "spawnSync" } },
+    {
+      label: "git init",
+      type: "code_matches",
+      params: {
+        file: testFile,
+        pattern: String.raw`(?:\bgit\s+init\b|['"]git['"]\s*,\s*\[\s*['"]init['"])`,
+      },
+    },
+    { label: "--repo", type: "code_contains", params: { file: testFile, text: "--repo" } },
+    { label: "--since", type: "code_contains", params: { file: testFile, text: "--since" } },
+    { label: "--until", type: "code_contains", params: { file: testFile, text: "--until" } },
+    { label: "--output", type: "code_contains", params: { file: testFile, text: "--output" } },
+    { label: "bad repo", type: "code_contains", params: { file: testFile, text: "bad repo" } },
+  ];
   return {
     instructions: [
       "This is behavior acceptance, not helper-unit coverage: import spawnSync from node:child_process and execute the CLI process from the test.",
@@ -1654,12 +1669,12 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
       "The node:test file executes the CLI process with spawnSync against a git init fixture repository.",
       "The test asserts stdout Markdown for --repo/--since/--until, --output file writing, and bad repo non-zero exit behavior.",
     ],
-    postConditions: requiredTexts.map((requiredText, index) => ({
+    postConditions: behaviorMarkers.map((marker, index) => ({
       id: `POST-${taskId}-BEHAVIOR-${index + 1}`,
-      type: "code_contains",
+      type: marker.type,
       severity: "FAIL",
-      params: { file: testFile, text: requiredText },
-      message: `Synthetic acceptance test must exercise required behavior marker: ${requiredText}`,
+      params: marker.params,
+      message: `Synthetic acceptance test must exercise required behavior marker: ${marker.label}`,
     })),
   };
 }
