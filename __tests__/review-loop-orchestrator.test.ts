@@ -555,6 +555,7 @@ test("runReviewLoop loads auto-fix from dist src layout", async () => {
     description: "Remove console.log",
   };
   let scanRuns = 0;
+  const commits = [];
 
   try {
     mkdirSync(resolve(fakeYoloRoot, "src/lib"), { recursive: true });
@@ -584,12 +585,21 @@ test("runReviewLoop loads auto-fix from dist src layout", async () => {
       },
       loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
       normalizeRepoPath: (value) => value,
+      commitAutoFixChanges: async (payload) => {
+        commits.push(payload);
+        return { committed: true, commit: "abc123" };
+      },
       logReviewError: (...args) => reviewErrors.push(args),
     });
 
     assert.equal(scanRuns, 2);
     assert.deepEqual(result.failed, []);
     assert.equal(reviewErrors.some(([title]) => title === "AUTO_FIX 异常"), false);
+    assert.deepEqual(commits, [{
+      rootDir: root,
+      files: ["src/app.js"],
+      message: "fix: REVIEW-AUTO-FIX-R1 [code] apply review auto-fixes",
+    }]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

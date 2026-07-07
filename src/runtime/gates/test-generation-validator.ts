@@ -74,6 +74,10 @@ function hasNodeTestImport(content) {
     || /\bimport\s*\(\s*['"]node:test['"]\s*\)/.test(content);
 }
 
+function usesConsoleAssert(content) {
+  return /\bconsole\s*\.\s*assert\s*\(/.test(content);
+}
+
 function testOutputLooksEmpty(output = "") {
   return String(output || "").split(/\r?\n/).some((line) => {
     const trimmed = line.trim();
@@ -236,6 +240,13 @@ export function validateTestGeneration(task, options = Object()) {
         failures.push({
           code: "TEST_TARGET_NO_NODE_TEST_IMPORT",
           detail: `node --test 项目的目标测试文件必须显式导入 node:test: ${file}`,
+        });
+        continue;
+      }
+      if (usesConsoleAssert(content)) {
+        failures.push({
+          code: "TEST_TARGET_CONSOLE_ASSERT",
+          detail: `node:test 目标文件不能使用 console.assert；它只打印 Assertion failed，不会让测试失败: ${file}`,
         });
         continue;
       }

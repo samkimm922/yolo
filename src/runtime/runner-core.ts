@@ -273,7 +273,7 @@ async function commitTask(task, prdPath, worktreeFiles = null) {
     hasRealCode,
     businessFiles,
     metadataFiles,
-    outOfScope,
+    outOfScope, rollbackFilesOnBlockedScope: Boolean(worktreeFiles?.fromWorktreeMerge),
     mode: globalMode,
     log: logP,
     emitEvent: logEvent,

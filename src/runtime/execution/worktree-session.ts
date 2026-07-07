@@ -1074,5 +1074,9 @@ export function cleanupTaskWorktree({
     value: outOfScopeSkipped,
     enumerable: false,
   });
+  Object.defineProperty(copiedFiles, "fromWorktreeMerge", {
+    value: Boolean(mergeToMain),
+    enumerable: false,
+  });
   return copiedFiles;
 }

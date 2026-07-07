@@ -2067,13 +2067,21 @@ describe("demand runtime", () => {
       assert.match(syntheticAcceptanceText, /--repo/);
       assert.match(syntheticAcceptanceText, /--output/);
       assert.match(syntheticAcceptanceText, /bad repo/i);
-      for (const requiredText of ["spawnSync", "git init", "--repo", "--since", "--until", "--output", "bad repo"]) {
+      for (const requiredText of ["spawnSync", "--repo", "--since", "--until", "--output", "bad repo"]) {
         assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
           condition.type === "code_contains" &&
           condition.params?.file === "test/cli-git-weekly.test.ts" &&
           condition.params?.text === requiredText
         ), `synthetic acceptance task must gate test file on ${requiredText}`);
       }
+      const gitInitCondition = syntheticAcceptance.post_conditions.find((condition) =>
+        condition.type === "code_matches" &&
+        condition.params?.file === "test/cli-git-weekly.test.ts" &&
+        String(condition.params?.pattern || condition.params?.text || "").includes("init")
+      );
+      assert.ok(gitInitCondition, "synthetic acceptance task must gate argv-style git init calls");
+      const gitInitPattern = String(gitInitCondition.params?.pattern || gitInitCondition.params?.text || "");
+      assert.match('spawnSync("git", ["init"], { cwd: repo });', new RegExp(gitInitPattern));
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {

@@ -525,6 +525,87 @@ describe("run lifecycle finalization helpers", () => {
     assert.ok(nestedDryRun.issues.some((issue) => issue.code === "RUN_REPORT_DRY_RUN"));
   });
 
+  test("buildRunFinalVerdict treats recovered auto remediation as clean history", () => {
+    const autoRemediation = {
+      task_id: "T-acceptance",
+      action: "REROUTE_REVIEW_FIX",
+      status: "remediation_required",
+      automation_can_continue: true,
+      requires_human: false,
+      unsafe_stop: false,
+    };
+    const result = buildRunFinalVerdict({
+      taskResults: {
+        status: "success",
+        completed: ["T-acceptance"],
+        failed: [],
+        skipped: [],
+        blocked: [],
+        contractReview: [],
+        remediation: [autoRemediation],
+        immediateRemediationQueue: [],
+      },
+      runReportResult: {
+        report: {
+          status: "success",
+          summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+          gates: { failed_count: 0 },
+          review: { issue_count: 0, error_count: 0 },
+          fixtures: { fail_count: 0 },
+          spec_governance: { blocked_count: 0 },
+          remediation: {
+            item_count: 1,
+            automation_continuable_count: 1,
+            human_required_count: 0,
+            unsafe_stop_count: 0,
+            items: [autoRemediation],
+          },
+          recent_events: [{ event: "gate_remediation", status: "remediation_required" }],
+        },
+        final_answer: {
+          status: "success",
+          outcome: "success",
+          checks: [
+            { name: "tasks", status: "pass" },
+            { name: "remediation", status: "pass" },
+          ],
+          blockers: [],
+        },
+      },
+    });
+
+    assert.equal(result.status, "success");
+    assert.deepEqual(result.issues, []);
+  });
+
+  test("buildRunFinalVerdict still blocks human remediation", () => {
+    const result = buildRunFinalVerdict({
+      taskResults: {
+        status: "success",
+        completed: ["T-acceptance"],
+        failed: [],
+        skipped: [],
+        blocked: [],
+        contractReview: [],
+        remediation: [{
+          task_id: "T-acceptance",
+          action: "ASK_HUMAN",
+          status: "remediation_required",
+          automation_can_continue: false,
+          requires_human: true,
+          unsafe_stop: false,
+        }],
+      },
+      runReportResult: {
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+        final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+      },
+    });
+
+    assert.equal(result.status, "error");
+    assert.ok(result.issues.some((issue) => issue.code === "HUMAN_REMEDIATION_REQUIRED"));
+  });
+
   test("buildRunReturnResult fails closed when successful runs lack report artifacts", () => {
     const result = buildRunReturnResult({
       runId: "run-missing-report",

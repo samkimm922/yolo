@@ -28,6 +28,14 @@ const RAW_STATE_LOG_FILES = [
   "review-log.jsonl",
 ];
 
+type StatusEntry = { field: string; status: string };
+type RemediationItem = {
+  action?: unknown;
+  requires_human?: unknown;
+  unsafe_stop?: unknown;
+  [key: string]: unknown;
+};
+
 function isSafeWorktreeRoot(worktreeRoot) {
   if (!worktreeRoot) return false;
   const normalized = resolve(worktreeRoot);
@@ -304,6 +312,9 @@ function collectStatusEntries(value, field = "", depth = 0, seen = new Set()) {
     if (nextField.includes("review.historical_issues") || nextField.includes("review.historicalIssues")) {
       continue;
     }
+    if (nextField.includes("recent_events") || nextField.includes("recentEvents")) {
+      continue;
+    }
     if (STATUS_FIELDS.has(key)) {
       const status = cleanStatus(child);
       const wrapperStatus = key === "status" &&
@@ -345,6 +356,37 @@ function reportHasNonCleanStatus(report = Object()) {
   return reportStatusValues(report).some((status) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(status));
 }
 
+function isRemediationStatusEntry(entry: Partial<StatusEntry> = {}) {
+  return /(^|\.)remediation(\.items)?\.\d+\.status$/.test(entry.field || "");
+}
+
+function nonCleanStatusCount(
+  entries: StatusEntry[] = [],
+  { ignoreRemediationHistory = false }: { ignoreRemediationHistory?: boolean } = {},
+) {
+  return entries.filter((entry) =>
+    !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status) &&
+    !(ignoreRemediationHistory && isRemediationStatusEntry(entry)),
+  ).length;
+}
+
+function remediationItems(value: { remediation?: unknown } = {}): RemediationItem[] {
+  if (Array.isArray(value.remediation)) return value.remediation as RemediationItem[];
+  const remediation = value.remediation;
+  if (remediation && typeof remediation === "object") {
+    return asArray((remediation as { items?: unknown }).items) as RemediationItem[];
+  }
+  return [];
+}
+
+function remediationRequiresHuman(item: RemediationItem = {}) {
+  return item?.requires_human === true || cleanStatus(item?.action) === "ask_human";
+}
+
+function remediationIsUnsafe(item: RemediationItem = {}) {
+  return item?.unsafe_stop === true;
+}
+
 function pathCount(value) {
   return typeof value === "string" && value.trim() ? 1 : 0;
 }
@@ -352,9 +394,13 @@ function pathCount(value) {
 function collectTaskResultStatusIssues(result = Object()) {
   const issues = [];
   const statusEntries = collectStatusEntries(result);
-  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status)).length);
+  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", nonCleanStatusCount(statusEntries, { ignoreRemediationHistory: true }));
   pushIssue(issues, "RUNNER_RESULT_DRY_RUN", "runner result contains dry-run evidence", collectDryRunFlags(result).length);
   pushIssue(issues, "RUNNER_RESULT_ERRORS", "runner result contains errors", countItems(result.error) + countItems(result.errors));
+  const taskRemediationItems = remediationItems(result);
+  pushIssue(issues, "HUMAN_REMEDIATION_REQUIRED", "runner result requires human remediation", taskRemediationItems.filter(remediationRequiresHuman).length);
+  pushIssue(issues, "UNSAFE_REMEDIATION_STOP", "runner result contains unsafe remediation stops", taskRemediationItems.filter(remediationIsUnsafe).length);
+  pushIssue(issues, "UNRESOLVED_REMEDIATION_QUEUE", "runner result still has immediate remediation queued", countItems(result.immediateRemediationQueue || result.immediate_remediation_queue));
   const reviewOutcomeStatus = cleanStatus(result.review_outcome?.status);
   pushIssue(
     issues,
@@ -389,7 +435,7 @@ function collectRunReportIssues(runReportResult = Object(), { requireArtifacts =
 
   if (report) {
     const statusEntries = collectStatusEntries(report);
-    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", statusEntries.filter((entry) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status)).length);
+    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", nonCleanStatusCount(statusEntries, { ignoreRemediationHistory: true }));
     pushIssue(issues, "RUN_REPORT_DRY_RUN", "run report contains dry-run evidence", collectDryRunFlags(report).length);
     pushIssue(issues, "RUN_REPORT_ERRORS", "run report contains errors", countItems(report.errors) + countItems(report.error));
     pushIssue(issues, "EVIDENCE_FAILURES", "run report contains evidence failures", positiveNumber(report.summary?.evidence_failures ?? report.evidence_failure_count ?? report.evidence_failures));
@@ -398,8 +444,15 @@ function collectRunReportIssues(runReportResult = Object(), { requireArtifacts =
     pushIssue(issues, "GATE_FAILURES", "run report contains gate failures", positiveNumber(report.gates?.failed_count));
     pushIssue(issues, "FIXTURE_FAILURES", "run report contains fixture failures", positiveNumber(report.fixtures?.fail_count));
     pushIssue(issues, "SPEC_GOVERNANCE_BLOCKED", "run report contains spec governance blockers", positiveNumber(report.spec_governance?.blocked_count));
-    pushIssue(issues, "HUMAN_REMEDIATION_REQUIRED", "run report requires human remediation", positiveNumber(report.remediation?.human_required_count));
-    pushIssue(issues, "UNSAFE_REMEDIATION_STOP", "run report contains unsafe remediation stops", positiveNumber(report.remediation?.unsafe_stop_count));
+    const reportRemediationItems = asArray(report.remediation?.items);
+    pushIssue(issues, "HUMAN_REMEDIATION_REQUIRED", "run report requires human remediation", Math.max(
+      positiveNumber(report.remediation?.human_required_count),
+      reportRemediationItems.filter(remediationRequiresHuman).length,
+    ));
+    pushIssue(issues, "UNSAFE_REMEDIATION_STOP", "run report contains unsafe remediation stops", Math.max(
+      positiveNumber(report.remediation?.unsafe_stop_count),
+      reportRemediationItems.filter(remediationIsUnsafe).length,
+    ));
     pushIssue(issues, "EVIDENCE_ERRORS", "run report evidence contains errors", countItems(report.evidence?.errors) + positiveNumber(report.evidence?.error_count));
     pushIssue(issues, "EVIDENCE_FAILURE_COUNT", "run report evidence contains failures", positiveNumber(report.evidence?.failure_count ?? report.evidence?.failed_count));
   }
