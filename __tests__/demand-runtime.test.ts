@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate
 import { inspectStoryAtomicityFromPrd } from "../src/demand/story-atomicity.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
+import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
 import {
   generateFindings,
@@ -136,6 +138,68 @@ function seedDogfoodGitweeklyR2Fixture(root: string): string {
     paths: { state: ".yolo/state" },
   });
   return demandDir;
+}
+
+function seedDogfoodGitweeklyR5SessionCopy(root: string): string {
+  const sourceDemandDir = "/Users/sippingroom/Developer/dogfood-sprint3-5/.yolo/demand/DEMAND-20260707-我想要一个-CLI-工具-GIT-WEEKLY-输入-REPO-GIT仓库路径-SINCE-日期";
+  const sourceSessionPath = join(sourceDemandDir, "session.json");
+  const output = "得到一个零网络依赖的 CLI git-weekly，输入 --repo、--since、--until 后生成 Markdown 周报，默认输出 stdout，传 --output 时写入文件。";
+  const acceptance = "验收必须全自动：fixture git 仓库测试断言 stdout markdown、--output 文件写入、作者提交列表、conventional commit stats、总提交数、added/deleted 行数，以及坏 --repo 非零退出。";
+  const session = existsSync(sourceSessionPath) && process.env.YOLO_TEST_FORCE_R5_FALLBACK !== "1" ? JSON.parse(readFileSync(sourceSessionPath, "utf8")) : {
+    schema_version: "1.0", schema: "yolo.demand.session.v1", id: "DEMAND-R5-STDOUT-OUTPUT-PARITY-COPY", phase: "prd_intake",
+    project: { title: "git-weekly", target_users: ["engineering lead"], target_files: ["src/cli-git-weekly.ts"], candidate_target_files: [] }, vision: { statement: output, status_quo: ["Manual weekly reports drift between stdout and --output."], success_criteria: [output, acceptance] },
+    requirements: { active: [{ id: "REQ-001", text: output, acceptance_scenarios: [{ id: "SCN-001", then: output }] }, { id: "REQ-002", text: acceptance, acceptance_scenarios: [{ id: "SCN-002", then: acceptance }] }], out_of_scope: ["network calls", "GUI", "publishing"] },
+    scenario_matrix: { scenarios: [{ id: "SCN-001", requirement_id: "REQ-001", actor: "engineering lead", proof: output, exceptions: ["stdout and --output must not drift"], surfaces: [{ id: "SFC-001", kind: "code", target_files: ["src/cli-git-weekly.ts"], session_budget: { max_files: 1 } }] }, { id: "SCN-002", requirement_id: "REQ-002", actor: "engineering lead", proof: acceptance, exceptions: ["bad --repo exits non-zero"], surfaces: [{ id: "SFC-002", kind: "code", target_files: ["src/cli-git-weekly.ts"], session_budget: { max_files: 1 } }] }] },
+    prd_intake: { success_criteria: [output, acceptance] }, playback: { confirmed: true }, approval: { approved: true, effective_for_prd: true }, readiness: { status: "ready", executable_prd_ready: true, ready_for_prd_intake: true, blockers: [], warnings: [] }, roadmap: { mvp: ["Deliver CLI and acceptance suite."] },
+    discussion: { rounds: ["target_users", "status_quo", "success_criteria", "success_proof", "scope_boundaries", "exceptions", "execution_approval"] }, investigation: { evidence: [{ text: "Fallback mirrors dogfood-sprint3-5 criterion-bearing fields for CI." }] }, reflection: { summary: "False-green acceptance is the risk.", assumptions: ["Fixture repository can be deterministic."] }, question_trace: ["target_users"].map((id) => ({ id })),
+    project_facts: { target_files: [{ file: "src/cli-git-weekly.ts", status: "planned_new_file", allow_new_files: true }], candidate_target_files: [], policy: { greenfield_new_files_are_execution_scope: true } },
+  };
+  const demandId = session.id;
+  const demandDir = join(root, ".yolo", "demand", demandId);
+  mkdirSync(demandDir, { recursive: true });
+  writeJson(join(demandDir, "session.json"), session);
+  writeJson(join(root, ".yolo", "config.json"), { schema_version: "1.0", project: { name: "dogfood-gitweekly-r5-copy" }, paths: { state: ".yolo/state" } });
+  appendJsonlRecord(join(root, ".yolo", "state", "evidence", "ledger.jsonl"), { event: "demand.approved", ledger: "state", source: "test", project_root: root, state_root: join(root, ".yolo"), demand_id: demandId, demand_dir: demandDir, phase: "prd_intake" }, { now: "2026-07-07T00:00:00.000Z", stateRoot: join(root, ".yolo") });
+  return demandDir;
+}
+
+function r5ActualCliPathOrFixture(root: string): string {
+  const actual = "/Users/sippingroom/Developer/dogfood-sprint3-5/src/cli-git-weekly.ts";
+  if (existsSync(actual)) return actual;
+  const cliPath = join(root, "src", "cli-git-weekly-buggy.mjs");
+  mkdirSync(dirname(cliPath), { recursive: true });
+  writeFileSync(cliPath, "import { writeFileSync } from 'node:fs';\nconst args = process.argv.slice(2);\nconst get = (flag) => { const index = args.indexOf(flag); return index < 0 ? '' : args[index + 1]; };\nif (!get('--repo') || get('--repo').includes('missing')) process.exit(2);\nconst report = '# Git Weekly Report\\n\\n## Summary\\n\\n- **Total commits**: 2\\n- **Lines added**: 4\\n- **Lines deleted**: 1\\n\\n## Alice\\n## Bob\\n';\nconst output = get('--output');\nif (output) writeFileSync(output, report, 'utf8'); else process.stdout.write(report + '\\n');\n", "utf8");
+  return cliPath;
+}
+
+function writeGeneratedR5AcceptanceTest(root: string, cliPath: string, criterionIds: string[]): string {
+  const testFile = join(root, "test", "cli-git-weekly.test.js");
+  const outputCriterion = criterionIds[0] || "AC-SCN-001", statsCriterion = criterionIds[1] || "AC-SCN-002";
+  mkdirSync(dirname(testFile), { recursive: true });
+  writeFileSync(testFile, [
+    "import { spawnSync } from 'node:child_process';\nimport test from 'node:test';\nimport assert from 'node:assert/strict';",
+    "import { mkdtempSync, existsSync, readFileSync, writeFileSync } from 'node:fs';\nimport { join } from 'node:path';\nimport { tmpdir } from 'node:os';",
+    `const CLI = ${JSON.stringify(cliPath)};`,
+    "const run = (cmd, args, options = {}) => { const result = spawnSync(cmd, args, { encoding: 'utf8', stdio: 'pipe', timeout: 10000, ...options }); if (result.error) throw result.error; return result; };",
+    "const git = (repo, args, env = {}) => assert.equal(run('git', args, { cwd: repo, env: { ...process.env, ...env } }).status, 0);",
+    "function fixtureRepo() { const repo = mkdtempSync(join(tmpdir(), 'git-weekly-acceptance-')); const expectedStats = { totalCommits: 2, linesAdded: 4, linesDeleted: 1 }; git(repo, ['init']); git(repo, ['config', 'user.email', 'acceptance@example.com']); git(repo, ['config', 'user.name', 'Acceptance Bot']);",
+    "writeFileSync(join(repo, 'report.txt'), 'one\\ntwo\\nthree\\n', 'utf8'); git(repo, ['add', 'report.txt']); git(repo, ['commit', '-m', 'feat: add report data'], { GIT_AUTHOR_NAME: 'Alice', GIT_COMMITTER_NAME: 'Alice', GIT_AUTHOR_DATE: '2025-01-01T12:00:00Z', GIT_COMMITTER_DATE: '2025-01-01T12:00:00Z' });",
+    "writeFileSync(join(repo, 'report.txt'), 'one\\nthree\\nfour\\n', 'utf8'); git(repo, ['add', 'report.txt']); git(repo, ['commit', '-m', 'fix: revise report data'], { GIT_AUTHOR_NAME: 'Bob', GIT_COMMITTER_NAME: 'Bob', GIT_AUTHOR_DATE: '2025-01-02T12:00:00Z', GIT_COMMITTER_DATE: '2025-01-02T12:00:00Z' }); return { repo, expectedStats }; }",
+    "const runCli = (args) => run(process.execPath, ['--import', 'tsx', CLI, ...args]);",
+    `test('[${outputCriterion}] stdout and --output render byte-identical Markdown', () => {`,
+    "const { repo, expectedStats } = fixtureRepo(); const stdoutRun = runCli(['--repo', repo, '--since', '2024-12-31', '--until', '2025-01-04']); assert.equal(stdoutRun.status, 0, stdoutRun.stderr); const stdoutMarkdown = stdoutRun.stdout;",
+    "const outputFile = join(repo, 'weekly.md'); const outputRun = runCli(['--repo', repo, '--since', '2024-12-31', '--until', '2025-01-04', '--output', outputFile]); assert.equal(outputRun.status, 0, outputRun.stderr); assert.equal(existsSync(outputFile), true);",
+    "const fileMarkdown = readFileSync(outputFile, 'utf8'); assert.equal(fileMarkdown, stdoutMarkdown, 'stdout and --output file content must match byte-for-byte'); assert.match(stdoutMarkdown, /Alice/); assert.match(stdoutMarkdown, /Bob/);",
+    "assert.match(stdoutMarkdown, new RegExp(`Total commits\\\\*\\\\*: ${expectedStats.totalCommits}`)); assert.match(stdoutMarkdown, new RegExp(`Lines added\\\\*\\\\*: ${expectedStats.linesAdded}`)); assert.match(stdoutMarkdown, new RegExp(`Lines deleted\\\\*\\\\*: ${expectedStats.linesDeleted}`));",
+    "});",
+    `test('[${statsCriterion}] fixture ground truth stats and invalid repo are asserted', () => {`,
+    "const { repo, expectedStats } = fixtureRepo(); const stdoutRun = runCli(['--repo', repo, '--since', '2024-12-31', '--until', '2025-01-04']); assert.equal(stdoutRun.status, 0, stdoutRun.stderr); const stdoutMarkdown = stdoutRun.stdout;",
+    "assert.match(stdoutMarkdown, new RegExp(`Total commits\\\\*\\\\*: ${expectedStats.totalCommits}`)); assert.match(stdoutMarkdown, new RegExp(`Lines added\\\\*\\\\*: ${expectedStats.linesAdded}`)); assert.match(stdoutMarkdown, new RegExp(`Lines deleted\\\\*\\\\*: ${expectedStats.linesDeleted}`));",
+    "const badRepo = runCli(['--repo', join(repo, 'missing'), '--since', '2024-12-31', '--until', '2025-01-04']); assert.notEqual(badRepo.status, 0, 'bad repo must exit non-zero');",
+    "});",
+    "",
+  ].join("\n"), "utf8");
+  return testFile;
 }
 
 function scaffoldInstructionText(task: DemandTask): string {
@@ -1989,14 +2053,9 @@ describe("demand runtime", () => {
     try {
       const demandDir = seedDogfoodGitweeklyR2Fixture(root);
 
-      const result = runDemandPrdRuntime({
-        projectRoot: root,
-        stateRoot: join(root, ".yolo"),
-        demandPath: demandDir,
-        writeArtifacts: false,
-      });
+      const result = runDemandPrdRuntime({ projectRoot: root, stateRoot: join(root, ".yolo"), demandPath: demandDir, writeArtifacts: false });
 
-      assert.equal(result.status, "success", JSON.stringify(result.blockers, null, 2));
+      assert.equal(result.status, "success", JSON.stringify({ blockers: result.blockers, preflight: result.preflight }, null, 2));
       requirePrd(result);
       assert.equal(result.preflight.status, "pass", JSON.stringify(result.preflight.blocked_reasons, null, 2));
 
@@ -2058,10 +2117,16 @@ describe("demand runtime", () => {
       ), true, "synthetic acceptance test tasks must allowlist their target test file");
       const syntheticAcceptance = machineTestTasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
       assert.ok(syntheticAcceptance, "R2 dogfood PRD must include a synthetic acceptance task");
-      const syntheticAcceptanceText = [
-        scaffoldInstructionText(syntheticAcceptance),
-        JSON.stringify(syntheticAcceptance.handoff || {}),
-      ].join("\n");
+      const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
+      assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
+      assert.equal(Array.isArray(coverage?.criteria), true, "synthetic acceptance must carry a machine-readable criterion checklist");
+      assert.equal((coverage?.criteria as DemandRecord[]).length > 0, true);
+      assert.equal((coverage?.criteria as DemandRecord[]).every((criterion) =>
+        typeof criterion.criterion_id === "string" && typeof criterion.required_test_name === "string"
+      ), true);
+      const runtimeSource = readFileSync(join(process.cwd(), "src/demand/runtime.ts"), "utf8");
+      assert.doesNotMatch(runtimeSource, /git[-_\s]?weekly/i, "demand runtime must compile generic criterion patterns, not fixture-specific git-weekly logic");
+      const syntheticAcceptanceText = [scaffoldInstructionText(syntheticAcceptance), JSON.stringify(syntheticAcceptance.handoff || {})].join("\n");
       assert.match(syntheticAcceptanceText, /spawnSync/);
       assert.match(syntheticAcceptanceText, /git init/);
       assert.match(syntheticAcceptanceText, /--repo/);
@@ -2098,6 +2163,66 @@ describe("demand runtime", () => {
       assert.match("assert.match(stdout, /Lines Deleted:\\s*[1-9]/);", new RegExp(deletedStatsPattern));
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("R5 copied demand compiles criteria coverage and generated acceptance catches stdout/file newline drift", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-r5-parity-"));
+    try {
+      const demandDir = seedDogfoodGitweeklyR5SessionCopy(root);
+
+      const result = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: demandDir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(result.status, "success", JSON.stringify({ blockers: result.blockers, preflight: result.preflight }, null, 2));
+      requirePrd(result);
+      const syntheticAcceptance = requirePrdTasks(result.prd).find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      assert.ok(syntheticAcceptance, "R5 copied demand must regenerate the synthetic acceptance task");
+      const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
+      assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
+      assert.equal(coverage?.required_test_file, "test/cli-git-weekly.test.ts");
+      const criteria = (coverage?.criteria || []) as DemandRecord[];
+      assert.equal(criteria.length >= 2, true, JSON.stringify(coverage, null, 2));
+      const ids = criteria.map((criterion) => String(criterion.criterion_id));
+      assert.equal(new Set(ids).size, ids.length, "criterion ids must be unique");
+      assert.ok(criteria.some((criterion) => (criterion.rules as string[] || []).includes("dual_mode_output")));
+      assert.ok(criteria.some((criterion) => (criterion.rules as string[] || []).includes("fixture_ground_truth_statistics")));
+      assert.ok(criteria.some((criterion) => (criterion.rules as string[] || []).includes("error_input_nonzero_exit")));
+
+      const syntheticAcceptanceText = [
+        scaffoldInstructionText(syntheticAcceptance),
+        JSON.stringify(syntheticAcceptance.handoff || {}),
+      ].join("\n");
+      for (const id of ids) {
+        assert.match(syntheticAcceptanceText, new RegExp(id), `instructions must list criterion ${id}`);
+      }
+      assert.match(syntheticAcceptanceText, /byte-for-byte/);
+      assert.match(syntheticAcceptanceText, /expectedStats/);
+      assert.ok(criteria.some((criterion) =>
+        ((criterion.required_markers || []) as DemandRecord[]).some((marker) =>
+          String(marker.pattern || "").includes("fileMarkdown") &&
+          String(marker.pattern || "").includes("stdoutMarkdown")
+        )
+      ), "output parity must be a machine-readable manifest marker, not prose only");
+
+      const acceptanceRoot = mkdtempSync(join(tmpdir(), "yolo-r5-generated-acceptance-"));
+      try {
+        const testFile = writeGeneratedR5AcceptanceTest(acceptanceRoot, r5ActualCliPathOrFixture(acceptanceRoot), ids);
+        const generatedTest = readFileSync(testFile, "utf8");
+        assert.match(generatedTest, /expectedStats = \{ totalCommits: 2, linesAdded: 4, linesDeleted: 1 \}/);
+        assert.doesNotMatch(generatedTest, /\bgit\s+log\b|--numstat/, "acceptance test must not recompute fixture stats with production-like git log logic");
+        const child = spawnSync(process.execPath, [testFile], { cwd: process.cwd(), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: { ...process.env } });
+        assert.notEqual(child.status, 0, `generated acceptance should fail against the R5 stdout/file drift\nstdout:\n${child.stdout}\nstderr:\n${child.stderr}`);
+        assert.match(`${child.stdout}\n${child.stderr}`, /stdout and --output file content must match byte-for-byte/);
+      } finally {
+        rmSync(acceptanceRoot, { recursive: true, force: true });
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

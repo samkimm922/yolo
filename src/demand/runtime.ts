@@ -1633,6 +1633,104 @@ function collectSyntheticAcceptanceProofText(session = Object(), implementationT
   return uniqueStrings(values).join("\n");
 }
 
+const ACCEPTANCE_COVERAGE_SCHEMA = "yolo.test_generation.acceptance_coverage.v1";
+
+const ACCEPTANCE_COVERAGE_RULES = [
+  ["dual_mode_output",
+    (text = "") => /stdout/i.test(text) && /--output|output\s+file|write(?:s|n)?\s+(?:to\s+)?(?:a\s+)?file|file\s+output|输出文件|写入文件|文件/.test(text),
+    "Run stdout mode and --output mode against the same fixture, then assert byte-for-byte parity with assert.equal(fileMarkdown, stdoutMarkdown).",
+    [{ text: "--output", reason: "dual output mode must be exercised" }, { pattern: String.raw`assert\.(?:equal|strictEqual)\s*\(\s*fileMarkdown\s*,\s*stdoutMarkdown`, reason: "stdout/file parity assertion" }], []],
+  ["fixture_ground_truth_statistics",
+    (text = "") => /\b(?:count|counts|total|statistics?|stats?|line stats?|lines? added|lines? deleted|added\/deleted|commits?)\b|计数|统计|总提交|总 commit|行数|增删行|作者提交列表/i.test(text),
+    "Create fixture ground truth during fixture setup as expectedStats and assert exact report values from it; do not recompute with git log/--numstat in the test.",
+    [{ text: "expectedStats", reason: "fixture ground truth must be literal" }, { pattern: String.raw`Total commits[\s\S]{0,200}expectedStats\.totalCommits`, reason: "commit total must use expectedStats" }, { pattern: String.raw`Lines added[\s\S]{0,200}expectedStats\.linesAdded`, reason: "added lines must use expectedStats" }, { pattern: String.raw`Lines deleted[\s\S]{0,200}expectedStats\.linesDeleted`, reason: "deleted lines must use expectedStats" }],
+    [{ pattern: String.raw`\bgit\s+log\b`, reason: "do not recompute stats with git log" }, { text: "--numstat", reason: "do not mirror production line-stat logic" }]],
+  ["error_input_nonzero_exit",
+    (text = "") => /\b(?:bad|invalid|malformed|missing|unknown|error|non[- ]?zero|exit status|exit code|reject|fail(?:s|ure)?)\b|坏|错误|非法|不存在|缺失|非零|失败|异常/i.test(text),
+    "Run an invalid input case and assert its exit status is non-zero.",
+    [{ pattern: String.raw`assert\.(?:notEqual|notStrictEqual)\s*\(\s*(?:bad|invalid|error)[A-Za-z0-9_$]*\.status\s*,\s*0`, reason: "invalid input must assert non-zero exit" }],
+    []],
+];
+
+function collectAcceptanceCriterionRecords(session = Object()) {
+  const records = [];
+  const seenTexts = new Set();
+  const add = (text, sourceId = "") => {
+    const value = clean(text);
+    if (!value) return;
+    const key = value.toLowerCase();
+    if (seenTexts.has(key)) return;
+    seenTexts.add(key);
+    const baseId = `AC-${asciiIdPart(sourceId, `CRITERION-${String(records.length + 1).padStart(3, "0")}`)}`;
+    const duplicateCount = records.filter((record) => record.criterion_id === baseId).length;
+    records.push({ criterion_id: duplicateCount ? `${baseId}-${duplicateCount + 1}` : baseId, text: value });
+  };
+
+  for (const requirement of asArray(session.requirements?.active || session.requirements)) {
+    const requirementId = clean(requirement?.id);
+    asArray(requirement?.acceptance_criteria).forEach((criterion, index) => add(criterion, `${requirementId || "REQ"}-AC-${index + 1}`));
+    for (const [index, scenario] of asArray(requirement?.acceptance_scenarios || requirement?.scenarios).entries()) {
+      const scenarioId = clean(scenario?.id || `${requirementId || "REQ"}-SCN-${index + 1}`);
+      add(scenario?.then || scenario?.text || scenario?.proof || scenario?.acceptance || scenario?.evidence || scenario, scenarioId);
+    }
+  }
+
+  for (const [index, scenario] of scenarioMatrix(session).entries()) {
+    const scenarioId = clean(scenario.id || `SCN-${index + 1}`);
+    add(scenario.proof || scenario.acceptance || scenario.then || scenario.text || scenario.desired_behavior, scenarioId);
+  }
+
+  [session.success_criteria, session.acceptance_criteria, session.vision?.success_criteria, session.prd_intake?.success_criteria, session.nontechnical_intake?.success_criteria].forEach((values, groupIndex) => {
+    asArray(values).forEach((criterion, index) => add(criterion, `SUCCESS-${groupIndex + 1}-${index + 1}`));
+  });
+  return records;
+}
+
+function compileAcceptanceCriterion(record = Object()) {
+  const text = clean(record.text);
+  const summary = text.replace(/\s+/g, " ").slice(0, 90);
+  const matched = ACCEPTANCE_COVERAGE_RULES.filter((rule) => (rule[1] as (value: string) => boolean)(text));
+  const rules = matched.map((rule) => String(rule[0]));
+  const requiredAssertions = matched.map((rule) => String(rule[2])).join(" ");
+  const requiredMarkers = matched.flatMap((rule) => rule[3] as unknown[]);
+  const forbiddenPatterns = matched.flatMap((rule) => rule[4] as unknown[]);
+  if (rules.length === 0) rules.push("generic_named_criterion");
+  return {
+    ...record,
+    required_test_name: `[${record.criterion_id}] ${summary}`,
+    rules,
+    required_assertions: requiredAssertions || "At least one named test must include this criterion_id and assert the described behavior.",
+    required_markers: requiredMarkers,
+    forbidden_patterns: forbiddenPatterns,
+  };
+}
+
+function buildAcceptanceCoverageSpec(session = Object(), proofText = "", testFile = "") {
+  const records = collectAcceptanceCriterionRecords(session);
+  if (records.length === 0 && clean(proofText)) {
+    records.push({ criterion_id: "AC-AUTOMATED-ACCEPTANCE-001", text: proofText });
+  }
+  const criteria = records.map(compileAcceptanceCriterion);
+  const manifest = {
+    schema: ACCEPTANCE_COVERAGE_SCHEMA,
+    required_test_file: testFile,
+    criteria,
+  };
+  const instructions = [
+    "Acceptance coverage contract: every criterion below must have at least one node:test test name containing its criterion_id.",
+    "Use the required variable names in specialized assertions when listed so the gate can verify the contract: stdoutMarkdown, fileMarkdown, expectedStats.",
+    ...criteria.flatMap((criterion) => [
+      `${criterion.criterion_id}: ${criterion.text}`,
+      `Required test name: ${criterion.required_test_name}`,
+      `Required assertions: ${criterion.required_assertions}`,
+      criterion.forbidden_patterns.length
+        ? `Forbidden in the test for this criterion: ${criterion.forbidden_patterns.map((item) => item.text || item.pattern).join(", ")}`
+        : "",
+    ].filter(Boolean)),
+  ];
+  return { manifest, criteria, instructions };
+}
+
 function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile = "") {
   const text = clean(proofText);
   const needsCliFixtureSmoke = /(?:--repo|--output|stdout|stderr|exit code|non[- ]?zero|fixture|git repo|git 仓库|本地 git|非零|CLI|命令行)/i.test(text);
@@ -1657,10 +1755,10 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
     { label: "bad repo", type: "code_contains", params: { file: testFile, text: "bad repo" } },
   ];
   const proofSpecificInstructions: string[] = [];
-  const isGitWeeklyProof = /git[-_\s]?weekly|weekly report|周报|conventional|commit 类型|Total commits|总 commit|总提交|insertions|deletions|added\/deleted|增删行|line stats/i.test(text);
-  if (isGitWeeklyProof) {
+  const isCliReportStatsProof = /weekly report|周报|conventional|commit 类型|Total commits|总 commit|总提交|insertions|deletions|added\/deleted|增删行|line stats/i.test(text);
+  if (isCliReportStatsProof) {
     proofSpecificInstructions.push(
-      "For git weekly reports, assert concrete proof values instead of headings only: distinct fixture authors, conventional type counts, total commit count, and numeric added/deleted line stats.",
+      "For CLI report acceptance, assert concrete proof values instead of headings only: distinct fixture authors, conventional type counts, total commit count, and numeric added/deleted line stats.",
       "Set both GIT_AUTHOR_DATE and GIT_COMMITTER_DATE on fixture commits so date-window assertions are deterministic.",
       "Make the fixture include both an addition and a deletion when line stats are part of the proof, then assert non-zero added and deleted counts.",
     );
@@ -1704,7 +1802,7 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
     criteria: [
       "The node:test file executes the CLI process with spawnSync against a git init fixture repository.",
       "The test asserts stdout Markdown for --repo/--since/--until, --output file writing, and bad repo non-zero exit behavior.",
-      ...(isGitWeeklyProof ? ["Git weekly tests assert concrete author, type-count, commit-count, and numeric line-stat values from the approved proof."] : []),
+      ...(isCliReportStatsProof ? ["CLI report tests assert concrete author, type-count, commit-count, and numeric line-stat values from the approved proof."] : []),
     ],
     postConditions: behaviorMarkers.map((marker, index) => ({
       id: `POST-${taskId}-BEHAVIOR-${index + 1}`,
@@ -1739,11 +1837,14 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     scenarioId: "AUTOMATED-ACCEPTANCE",
     surfaceId: "SFC-AUTOMATED-TEST",
   });
+  const proofText = collectSyntheticAcceptanceProofText(session, implementationTasks);
   const behaviorSpec = syntheticAcceptanceBehaviorSpec(
     taskId,
-    collectSyntheticAcceptanceProofText(session, implementationTasks),
+    proofText,
     testFile,
   );
+  const acceptanceCoverage = buildAcceptanceCoverageSpec(session, proofText, testFile);
+  const testLineBudget = Math.max(120, acceptanceCoverage.criteria.length * 8 + 60);
 
   return {
     id: taskId,
@@ -1762,6 +1863,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       `Create or update exactly ${testFile} with node:test acceptance coverage.`,
       "The file must contain at least one test(...) declaration that npm test executes.",
       "Run npm test and confirm the output reports at least one executed test.",
+      ...acceptanceCoverage.instructions,
       ...behaviorSpec.instructions,
       `Read ${primarySource} first and do not edit implementation files in this task.`,
     ],
@@ -1773,7 +1875,9 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       reason: "Synthetic automated acceptance task must create one runnable node:test file so npm test is non-empty.",
       allowed_test_files: [testFile],
       max_new_test_files: 1,
-      max_test_lines_changed: 120,
+      max_test_lines_changed: testLineBudget,
+      acceptance_coverage_required: true,
+      acceptance_coverage: acceptanceCoverage.manifest,
     },
     handoff: {
       type: "agent_brief",
@@ -1806,21 +1910,24 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
         target_files: [testFile],
         readonly_files: sourceFiles,
         visual_style_source: [],
-        session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+        session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: testLineBudget },
       },
       key_interfaces: [testFile],
       read_first: sourceFiles,
       acceptance_criteria: [
         "npm test executes at least one node:test test.",
+        ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
         ...behaviorSpec.criteria,
       ],
       proof: [
         "npm test executes at least one node:test test.",
+        ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
         ...behaviorSpec.criteria,
       ].join(" "),
       verification_hint: [
         "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
         "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
+        ...acceptanceCoverage.instructions,
         ...behaviorSpec.instructions,
       ].join(" "),
       project_facts: {
@@ -1872,7 +1979,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       allow_new_files: true,
       allow_delete_files: false,
       max_files: 1,
-      max_lines_per_file: 120,
+      max_lines_per_file: testLineBudget,
     },
     pre_conditions: [],
     post_conditions: uniqueConditions([

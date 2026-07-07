@@ -284,4 +284,53 @@ describe("test generation validator", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("acceptance coverage manifest fails closed and validates named tests plus markers", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-coverage-"));
+    const task = (criteria = undefined) => ({
+      atomicity: { source: "synthetic_automated_acceptance" }, scope: { allow_new_files: true, targets: [{ file: "test/acceptance.test.js" }] },
+      post_conditions: [{ type: "tests_pass", params: { command: "npm test", require_tests: true } }],
+      test_generation: { mode: "add_minimal", reason: "Synthetic acceptance coverage.", allowed_test_files: ["test/acceptance.test.js"], max_new_test_files: 1, ...(criteria ? { acceptance_coverage: { schema: "yolo.test_generation.acceptance_coverage.v1", required_test_file: "test/acceptance.test.js", criteria } } : {}) },
+    });
+    const writeTest = (lines) => {
+      mkdirSync(join(root, "test"), { recursive: true });
+      writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module", scripts: { test: "node --test" } }), "utf8");
+      writeFileSync(join(root, "test/acceptance.test.js"), ["import test from 'node:test';", "import assert from 'node:assert/strict';", ...lines].join("\n"), "utf8");
+    };
+    const validate = (value) => validateTestGeneration(value, { cwd: root, changedFiles: changed("test/acceptance.test.js") });
+    try {
+      writeTest(["test('[AC-001] smoke', () => assert.equal(1, 1));"]);
+      let result = validate(task());
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "ACCEPTANCE_COVERAGE_MANIFEST_MISSING"));
+
+      const criteria = [{ criterion_id: "AC-001", required_test_name: "[AC-001] stdout and file output match" }, { criterion_id: "AC-002", required_test_name: "[AC-002] invalid input exits non-zero" }];
+      writeTest(["test('[AC-001] stdout and file output match', () => assert.equal(1, 1));"]);
+      result = validate(task(criteria));
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) =>
+        failure.code === "ACCEPTANCE_CRITERION_TEST_MISSING" && failure.detail.includes("AC-002")
+      ));
+
+      writeTest([
+        "test('[AC-001] stdout and file output match', () => assert.equal(1, 1));",
+        "test('[AC-002] invalid input exits non-zero', () => assert.notEqual(1, 0));",
+      ]);
+      result = validate(task(criteria));
+      assert.equal(result.status, "pass");
+
+      const markerCriteria = [{ criterion_id: "AC-STATS", required_test_name: "[AC-STATS] fixture ground truth stats are exact", required_markers: [{ text: "expectedStats" }, { pattern: "assert\\.equal\\(fileMarkdown, stdoutMarkdown" }], forbidden_patterns: [{ pattern: "\\bgit\\s+log\\b" }, { text: "--numstat" }] }];
+      writeTest(["test('[AC-STATS] fixture ground truth stats are exact', () => { const expectedStats = { totalCommits: 2 }; const stdoutMarkdown = 'x'; const fileMarkdown = 'x'; const recompute = 'git log --numstat'; assert.equal(stdoutMarkdown, fileMarkdown); assert.equal(expectedStats.totalCommits, 2); });"]);
+      result = validate(task(markerCriteria));
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "ACCEPTANCE_CRITERION_MARKER_MISSING"));
+      assert.ok(result.failures.some((failure) => failure.code === "ACCEPTANCE_CRITERION_FORBIDDEN_PATTERN"));
+
+      writeTest(["test('[AC-STATS] fixture ground truth stats are exact', () => { const expectedStats = { totalCommits: 2 }; const stdoutMarkdown = 'x'; const fileMarkdown = 'x'; assert.equal(fileMarkdown, stdoutMarkdown); assert.equal(expectedStats.totalCommits, 2); });"]);
+      result = validate(task(markerCriteria));
+      assert.equal(result.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
