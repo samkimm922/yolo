@@ -7,6 +7,12 @@ import { safeRegExp } from "../../lib/security/regex-guard.js";
 
 const DEFAULT_MODE = "reuse_existing";
 const TEST_FILE_RE = /(^__tests__\/|^tests\/|\/__tests__\/|\.(test|spec)\.[cm]?[jt]sx?$)/i;
+const DETERMINISTIC_ACCEPTANCE_RULES = new Set([
+  "generic_named_criterion",
+  "dual_mode_output",
+  "fixture_ground_truth_statistics",
+  "error_input_nonzero_exit",
+]);
 
 function asArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -121,6 +127,14 @@ function validateAcceptanceCoverage(task, cwd, failures) {
     if (!criterionId) {
       addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_ID_MISSING", "acceptance_coverage.criteria 中存在缺少 criterion_id 的条目。");
       continue;
+    }
+    const rules = asArray(criterion?.rules || criterion?.rule).map(clean).filter(Boolean);
+    const unknownRules = rules.filter((rule) => !DETERMINISTIC_ACCEPTANCE_RULES.has(rule));
+    if (unknownRules.length > 0) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_UNKNOWN_RULE", `成功标准 ${criterionId} 包含未知确定性规则: ${unknownRules.join(", ")}。`);
+    }
+    if (criterion?.requires_manual_test === true) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_REQUIRES_MANUAL_TEST", `成功标准 ${criterionId} 需要人工测试；确定性生成器不能静默跳过。`);
     }
     const requiredName = clean(criterion.required_test_name || criterion.test_name);
     const hasNamedTest = testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
