@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseStatusLine, validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
+import { normalizeAcceptanceCoverageForGeneration } from "../src/demand/acceptance-test-generator.js";
 
 const changed = (...files) => files.map((file) => ({ file, status: "A", isNew: true }));
 
@@ -365,6 +366,33 @@ describe("test generation validator", () => {
       writeTest(["test('[AC-STATS] fixture ground truth stats are exact', () => { const expectedStats = { totalCommits: 2 }; const stdoutMarkdown = 'x'; const fileMarkdown = 'x'; assert.equal(fileMarkdown, stdoutMarkdown); assert.equal(expectedStats.totalCommits, 2); });"]);
       result = validate(task(markerCriteria));
       assert.equal(result.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("unknown deterministic acceptance rules become requires_manual_test and validator blocks", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-manual-rule-"));
+    try {
+      const coverage = normalizeAcceptanceCoverageForGeneration({
+        schema: "yolo.test_generation.acceptance_coverage.v1",
+        required_test_file: "test/acceptance.test.js",
+        criteria: [{ criterion_id: "AC-FUTURE", required_test_name: "[AC-FUTURE] future rule", rules: ["future_ai_oracle_rule"] }],
+      });
+      assert.equal(coverage.unsupported_criteria.length, 1);
+      assert.equal((coverage.manifest.criteria as Array<Record<string, unknown>>)[0].requires_manual_test, true);
+
+      mkdirSync(join(root, "test"), { recursive: true });
+      writeFileSync(join(root, "test", "acceptance.test.js"), "import test from 'node:test';\ntest('[AC-FUTURE] future rule', () => {});\n", "utf8");
+
+      const result = validateTestGeneration({
+        scope: { allow_new_files: true, targets: [{ file: "test/acceptance.test.js" }] },
+        post_conditions: [{ type: "tests_pass", params: { command: "node --test", require_tests: true } }],
+        test_generation: { mode: "add_minimal", reason: "manual fallback must block", acceptance_coverage_required: true, acceptance_coverage: coverage.manifest },
+      }, { cwd: root, changedFiles: changed("test/acceptance.test.js") });
+
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "ACCEPTANCE_CRITERION_REQUIRES_MANUAL_TEST"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

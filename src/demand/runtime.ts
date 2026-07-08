@@ -13,6 +13,7 @@ import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { loadProjectToolchainConfig, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
+import { buildGeneratedAcceptanceTestRecord, generateAcceptanceTestFile } from "./acceptance-test-generator.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -1880,7 +1881,6 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
   const testFile = testTargetForSourceFile(primarySource);
   const requirementIds = uniqueStrings(implementationTasks.flatMap((task) => asArray(task.requirement_ids || task.trace?.requirement_id)));
   const designIds = uniqueStrings(implementationTasks.flatMap((task) => asArray(task.design_ids)));
-  const description = "Add one node:test acceptance test file for the approved PRD.";
   const sessionPlan = buildTaskSessionPlan({
     demandId: session.id,
     taskId,
@@ -1889,59 +1889,58 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     surfaceId: "SFC-AUTOMATED-TEST",
   });
   const proofText = collectSyntheticAcceptanceProofText(session, implementationTasks);
-  const behaviorSpec = syntheticAcceptanceBehaviorSpec(
-    taskId,
-    proofText,
-    testFile,
-  );
+  const behaviorSpec = syntheticAcceptanceBehaviorSpec(taskId, proofText, testFile);
   const acceptanceCoverage = buildAcceptanceCoverageSpec(session, proofText, testFile);
+  const generatedAcceptanceTest = buildGeneratedAcceptanceTestRecord({
+    file: testFile,
+    cliPath: primarySource,
+    coverage: acceptanceCoverage.manifest,
+  });
   const testLineBudget = Math.max(120, acceptanceCoverage.criteria.length * 8 + 60);
 
   return {
     id: taskId,
-    title: "测试/验证: automated acceptance coverage",
-    description,
+    title: "验收基准: yolo-generated automated acceptance",
+    description: "YOLO deterministically generated the automated acceptance test file for the approved PRD.",
     priority: "P1",
     type: "cleanup",
-    status: "pending",
-    task_kind: "demand_atomic_task",
+    status: "completed",
+    task_kind: "yolo_generated_acceptance_test",
     requirement_ids: requirementIds,
     design_ids: designIds,
+    evidence_files: ["EVID-001"],
     source_finding_ids: requirementIds,
     source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
     verification_hint: [
-      "Run npm test and verify node:test executes at least one acceptance test.",
+      `YOLO already generated ${testFile}; business implementation tasks must make this test pass.`,
       ...acceptanceCoverage.instructions,
     ].join(" "),
     instructions: [
-      `Create or update exactly ${testFile} with node:test acceptance coverage.`,
-      "The file must contain at least one test(...) declaration that npm test executes.",
-      "Run npm test and confirm the output reports at least one executed test.",
+      `YOLO already generated ${testFile} from the acceptance_coverage manifest; do not ask an executor to write this file.`,
+      "Business implementation tasks must make the CLI satisfy this generated node:test acceptance suite.",
       ...acceptanceCoverage.instructions,
       ...behaviorSpec.instructions,
-      `Read ${primarySource} first and do not edit implementation files in this task.`,
+      `The generated suite invokes ${primarySource}; executor sessions may edit implementation files in their own business tasks, not this completed yolo artifact record.`,
     ],
     inputs: sourceFiles,
     expected_output: [testFile],
-    depends_on: implementationTasks.map((task) => task.id).filter(Boolean),
+    depends_on: [],
     test_generation: {
-      mode: "add_minimal",
-      reason: "Synthetic automated acceptance task must create one runnable node:test file so npm test is non-empty.",
-      allowed_test_files: [testFile],
-      max_new_test_files: 1,
-      max_test_lines_changed: testLineBudget,
+      mode: "none",
+      reason: "YOLO writes the deterministic acceptance test during demand PRD/scaffold generation; executor must not generate it.",
       acceptance_coverage_required: true,
-      acceptance_coverage: acceptanceCoverage.manifest,
+      acceptance_coverage: generatedAcceptanceTest.acceptance_coverage,
     },
+    generated_acceptance_tests: [generatedAcceptanceTest],
     handoff: {
       type: "agent_brief",
       category: "test",
       session: sessionPlan,
-      plain_language_goal: description,
-      user_story: "As the delivery team, I want one automated acceptance test file, so that npm test is non-empty.",
+      plain_language_goal: "Use the yolo-generated acceptance test as the business acceptance standard.",
+      user_story: "As the delivery team, I want YOLO to generate acceptance tests deterministically, so executor sessions only implement business behavior.",
       source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
-      current_behavior: "The implementation tasks may pass typecheck before any test file exists.",
-      desired_behavior: "npm test executes one non-empty node:test acceptance suite.",
+      current_behavior: "The acceptance test file is generated by YOLO from the machine-readable coverage manifest.",
+      desired_behavior: "Business implementation tasks make npm test pass against the generated acceptance suite.",
       touchpoint: "automated acceptance test suite",
       trigger: "delivery verification runs npm test",
       scenario: {
@@ -1949,9 +1948,9 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
         actor: "delivery team",
         touchpoint: "automated acceptance test suite",
         trigger: "npm test runs",
-        current_behavior: "No test file is guaranteed before this task.",
-        desired_behavior: "node:test executes automated acceptance coverage.",
-        proof: "npm test executes at least one node:test test.",
+        current_behavior: `YOLO has placed ${testFile} before executor sessions run.`,
+        desired_behavior: "node:test executes automated acceptance coverage and the business CLI satisfies it.",
+        proof: `npm test executes ${testFile} and passes.`,
       },
       requirement: {
         id: requirementIds[0] || null,
@@ -1969,17 +1968,19 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       key_interfaces: [testFile],
       read_first: sourceFiles,
       acceptance_criteria: [
-        "npm test executes at least one node:test test.",
+        `YOLO generated ${testFile} before executor sessions.`,
+        `npm test executes ${testFile} and passes after business implementation.`,
         ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
         ...behaviorSpec.criteria,
       ],
       proof: [
-        "npm test executes at least one node:test test.",
+        `YOLO generated ${testFile} before executor sessions.`,
+        `npm test executes ${testFile} and passes after business implementation.`,
         ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
         ...behaviorSpec.criteria,
       ].join(" "),
       verification_hint: [
-        "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
+        "Use the approved PRD as the source of behavior; npm test must execute the yolo-generated node:test suite.",
         "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
         ...acceptanceCoverage.instructions,
         ...behaviorSpec.instructions,
@@ -2015,6 +2016,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       must_haves: {
         truths: ["npm test must execute at least one automated acceptance test."],
         artifacts: [
+          testFile,
           sessionPlan.state_path,
           sessionPlan.handoff_path,
           sessionPlan.evidence_path,
@@ -2028,7 +2030,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       },
     },
     scope: {
-      targets: [{ file: testFile, description: `Automated node:test coverage for ${primarySource}` }],
+      targets: [{ file: testFile, description: `YOLO-generated node:test acceptance coverage for ${primarySource}` }],
       readonly_files: sourceFiles,
       allow_new_files: true,
       allow_delete_files: false,
@@ -2037,9 +2039,20 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     },
     pre_conditions: [],
     post_conditions: uniqueConditions([
-      modifiedFileCondition(taskId, 0, testFile),
-      testsPassCondition(taskId, context, { requireTests: true }),
-      typecheckCondition(taskId, context),
+      {
+        id: `POST-${taskId}-GENERATED-TEST-FILE`,
+        type: "file_exists",
+        severity: "FAIL",
+        params: { file: testFile },
+        message: "YOLO-generated acceptance test file must exist before executor sessions run.",
+      },
+      {
+        id: `POST-${taskId}-GENERATED-NODE-TEST`,
+        type: "code_contains",
+        severity: "FAIL",
+        params: { file: testFile, text: "node:test" },
+        message: "YOLO-generated acceptance test file must be an executable node:test suite.",
+      },
       ...behaviorSpec.postConditions,
     ]),
     trace: {
@@ -2057,10 +2070,51 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
     atomicity: {
       expected_session: "single_session",
-      source: "synthetic_automated_acceptance",
+      source: "yolo_generated_acceptance_test",
     },
-    must_fix_before_ship: true,
+    must_fix_before_ship: false,
   };
+}
+
+function attachGeneratedAcceptanceToImplementationTasks(tasks = [], generatedTask = null, context = Object()) {
+  const generated = asArray(generatedTask.generated_acceptance_tests)[0];
+  const testFile = clean(generated?.file);
+  if (!testFile) return tasks;
+  const implementationTasks = tasks.filter((task) =>
+    task?.task_kind !== "greenfield_scaffold" && task?.id !== generatedTask.id && task?.status !== "completed"
+  );
+  if (implementationTasks.length === 0) return tasks;
+  const appendText = (value, line) => [clean(value), line].filter(Boolean).join(" ");
+  for (const task of implementationTasks) {
+    task.inputs = uniqueStrings([...asArray(task.inputs).map(clean), testFile]);
+    task.scope = { ...(task.scope || {}), readonly_files: uniqueStrings([...asArray(task.scope?.readonly_files).map(clean), testFile]) };
+    task.instructions = uniqueStrings([
+      ...asArray(task.instructions).map(clean),
+      `YOLO already generated ${testFile}; treat it as readonly acceptance input and make the business implementation satisfy it.`,
+    ]);
+    task.verification_hint = appendText(task.verification_hint, `Run npm test against yolo-generated ${testFile}.`);
+    if (task.handoff) {
+      task.handoff.read_first = uniqueStrings([...asArray(task.handoff.read_first).map(clean), testFile]);
+      task.handoff.acceptance_criteria = uniqueStrings([
+        ...asArray(task.handoff.acceptance_criteria).map(clean),
+        `npm test passes against yolo-generated ${testFile}.`,
+      ]);
+      task.handoff.verification_hint = appendText(task.handoff.verification_hint, `Do not edit ${testFile}; make business code satisfy it.`);
+    }
+    task.acceptance_contract = {
+      ...(task.acceptance_contract || {}),
+      schema: "yolo.demand.acceptance_contract.v1",
+      generated_acceptance_tests: [generated],
+      acceptance_coverage: generated.acceptance_coverage,
+    };
+  }
+  const finalImplementationTask = implementationTasks[implementationTasks.length - 1];
+  const generatedAcceptanceGate = testsPassCondition(finalImplementationTask.id, context, { requireTests: true });
+  finalImplementationTask.post_conditions = uniqueConditions([
+    ...asArray(finalImplementationTask.post_conditions).filter((condition) => condition?.id !== generatedAcceptanceGate.id),
+    generatedAcceptanceGate,
+  ]);
+  return tasks;
 }
 
 function behaviorCodeConditions(taskId, files = [], text = "", uiTask = false) {
@@ -2384,8 +2438,11 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
     }
   }
   if (automatedAcceptanceRequired) {
-    const syntheticTestTask = buildSyntheticAutomatedAcceptanceTask(session, tasks, buildContext);
-    if (syntheticTestTask) tasks.push(syntheticTestTask);
+    const generatedAcceptanceTask = buildSyntheticAutomatedAcceptanceTask(session, tasks, buildContext);
+    if (generatedAcceptanceTask) {
+      attachGeneratedAcceptanceToImplementationTasks(tasks, generatedAcceptanceTask, buildContext);
+      tasks.push(generatedAcceptanceTask);
+    }
   }
   addTaskDependencies(tasks);
   deriveFileDependencies(tasks);
@@ -2495,6 +2552,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
   const baseCommit = readBaseCommit(input, options);
   const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${asciiIdPart(session.id.replace(/^DEMAND-/, ""), "DEMAND")}`;
   const { tasks, compileErrors } = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
+  const generatedAcceptanceTests = generatedAcceptanceTestsFromTasks(tasks);
   if (compileErrors.length > 0) {
     const verifyOnly = compileErrors.every((err) => (err.code || "ILLEGAL_VERIFY_COMMAND") === "ILLEGAL_VERIFY_COMMAND");
     return {
@@ -2606,6 +2664,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       quality_score: quality.total_score,
       quality_report: quality,
       project_facts: structuredProjectFacts(session),
+      generated_acceptance_tests: generatedAcceptanceTests,
       scenario_matrix: {
         schema: session.scenario_matrix?.schema || null,
         scenario_count: asArray(session.scenario_matrix?.scenarios).length,
@@ -2699,6 +2758,25 @@ function groundingArtifact(value = Object()) {
   return artifact;
 }
 
+function generatedAcceptanceTestsFromTasks(tasks = []) {
+  const byFile = new Map();
+  for (const record of asArray(tasks).flatMap((task) => asArray(task?.generated_acceptance_tests))) {
+    const file = clean(record?.file);
+    if (file && !byFile.has(file)) byFile.set(file, record);
+  }
+  return [...byFile.values()];
+}
+
+function writeGeneratedAcceptanceTestArtifacts(projectRoot, prd = Object()) {
+  const artifacts = [];
+  for (const record of asArray(prd?.demand?.generated_acceptance_tests).filter((item) => clean(item?.file) && item?.acceptance_coverage)) {
+    const file = clean(record.file);
+    const cliPath = clean(record.cli_path || record.cliPath);
+    artifacts.push(writeText(resolvePath(projectRoot, file), generateAcceptanceTestFile(record.acceptance_coverage, { cliPath, testFile: file })));
+  }
+  return artifacts;
+}
+
 export function runDemandPrdRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
@@ -2761,6 +2839,9 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     prdPath = writeJson(outputFile, compiled.prd);
     artifacts.push(prdPath);
     outputs.push({ path: prdPath, type: "prd" });
+    const generatedAcceptanceArtifacts = writeGeneratedAcceptanceTestArtifacts(projectRoot, compiled.prd);
+    artifacts.push(...generatedAcceptanceArtifacts);
+    outputs.push(...generatedAcceptanceArtifacts.map((path) => ({ path, type: "generated_acceptance_test" })));
   }
   if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
     const demandSessionPath = writeJson(read.path, compiled.grounded_session);

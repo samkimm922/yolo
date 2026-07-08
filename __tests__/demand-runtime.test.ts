@@ -23,6 +23,8 @@ import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
+import { generateAcceptanceTestFile, normalizeAcceptanceCoverageForGeneration } from "../src/demand/acceptance-test-generator.js";
+import { validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 import {
   generateFindings,
   parseFindingsJsonOutput,
@@ -119,6 +121,10 @@ function writeProjectFile(root: string, file: string, content: string = defaultD
   writeFileSync(path, content, "utf8");
 }
 
+function cleanNodeTestEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("NODE_TEST"))) as NodeJS.ProcessEnv;
+}
+
 function seedDemandTargetFiles(root: string, files: string[]): void {
   for (const file of files) writeProjectFile(root, file);
 }
@@ -172,6 +178,20 @@ function r5ActualCliPathOrFixture(root: string): string {
   return cliPath;
 }
 
+function writeGitWeeklyCliFixture(root: string, drift = false): string {
+  const cliPath = join(root, "src", drift ? "cli-git-weekly-buggy.mjs" : "cli-git-weekly-fixed.mjs");
+  mkdirSync(dirname(cliPath), { recursive: true });
+  writeFileSync(cliPath, `import { writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const get = (flag) => { const index = args.indexOf(flag); return index < 0 ? '' : args[index + 1]; };
+if (!get('--repo') || get('--repo').includes('missing')) { console.error('bad repo'); process.exit(2); }
+const report = '# Git Weekly Report\\n\\n## Summary\\n\\n- **Total commits**: 2\\n- **Lines added**: 4\\n- **Lines deleted**: 1\\n\\n## Alice\\n- feat: add report data\\n\\n## Bob\\n- fix: revise report data\\n';
+const output = get('--output');
+if (output) writeFileSync(output, report, 'utf8'); else process.stdout.write(report${drift ? " + '\\n'" : ""});
+`, "utf8");
+  return cliPath;
+}
+
 function writeGeneratedR5AcceptanceTest(root: string, cliPath: string, criterionIds: string[]): string {
   const testFile = join(root, "test", "cli-git-weekly.test.js");
   const outputCriterion = criterionIds[0] || "AC-SCN-001", statsCriterion = criterionIds[1] || "AC-SCN-002";
@@ -206,6 +226,16 @@ function scaffoldInstructionText(task: DemandTask): string {
   const value = (task as DemandTask & { instructions?: unknown }).instructions;
   const values = Array.isArray(value) ? value : [value];
   return values.map((item) => String(item ?? "")).filter(Boolean).join("\n");
+}
+
+function taskInputsForAssertion(task: DemandTask): string[] {
+  return Array.isArray(task.inputs) ? task.inputs.map((input) => String(input)) : [];
+}
+
+function taskTargetTestFilesForAssertion(task: DemandTask): string[] {
+  return ((task.scope?.targets || []) as Array<{ file?: string }>)
+    .map((target) => target.file || "")
+    .filter((file) => /(^|\/)tests?\//.test(file) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file));
 }
 
 function assertNodeScaffoldToolchain(scaffold: DemandTask): void {
@@ -2105,18 +2135,15 @@ describe("demand runtime", () => {
         task.post_conditions.some((condition) => condition.type === "tests_pass" && condition.params?.require_tests === true)
       );
       assert.equal(machineTestGates.length > 0, true);
-      assert.equal(machineTestGates.every((condition) => condition.params?.require_tests === true), true, "automated acceptance test gates must reject empty test suites");
-      assert.equal(machineTestTasks.every((task) =>
-        task.scope.targets.some((target) => /(^|\/)tests?\//.test(target.file) || /\.test\./.test(target.file))
-      ), true, "require_tests gates must give the executor an in-scope test file to create or update");
-      assert.equal(machineTestTasks.every((task) => Number(task.scope.max_files || 0) >= task.scope.targets.length), true);
-      const testGeneration = (task) => task.test_generation as { mode?: string; allowed_test_files?: string[] } | undefined;
-      assert.equal(machineTestTasks.every((task) => testGeneration(task)?.mode === "add_minimal"), true);
-      assert.equal(machineTestTasks.every((task) =>
-        task.scope.targets.every((target) => testGeneration(task)?.allowed_test_files?.includes(target.file))
-      ), true, "synthetic acceptance test tasks must allowlist their target test file");
-      const syntheticAcceptance = machineTestTasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
-      assert.ok(syntheticAcceptance, "R2 dogfood PRD must include a synthetic acceptance task");
+      assert.equal(machineTestTasks.length > 0, true, "business tasks must run generated acceptance tests as a non-empty test gate");
+      assert.equal(machineTestTasks.some((task) => taskInputsForAssertion(task).includes("test/cli-git-weekly.test.ts")), true);
+      assert.equal(tasks.filter((task) =>
+        task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0
+      ).length, 0, "executor must not receive a pending task to write the generated acceptance test");
+      const syntheticAcceptance = tasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      assert.ok(syntheticAcceptance, "R2 dogfood PRD must include a yolo-generated acceptance artifact record");
+      assert.equal(syntheticAcceptance.status, "completed");
+      assert.equal(syntheticAcceptance.task_kind, "yolo_generated_acceptance_test");
       const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
       assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
       assert.equal(Array.isArray(coverage?.criteria), true, "synthetic acceptance must carry a machine-readable criterion checklist");
@@ -2132,6 +2159,7 @@ describe("demand runtime", () => {
       assert.match(syntheticAcceptanceText, /--repo/);
       assert.match(syntheticAcceptanceText, /--output/);
       assert.match(syntheticAcceptanceText, /bad repo/i);
+      assert.equal(((compiledPrd.demand as DemandRecord).generated_acceptance_tests as DemandRecord[])[0].file, "test/cli-git-weekly.test.ts");
       for (const requiredText of ["spawnSync", "--repo", "--since", "--until", "--output", "bad repo", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
         assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
           condition.type === "code_contains" &&
@@ -2177,16 +2205,24 @@ describe("demand runtime", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: demandDir,
-        writeArtifacts: false,
+        writeArtifacts: true,
+        writeLifecycle: false,
       });
 
       assert.equal(result.status, "success", JSON.stringify({ blockers: result.blockers, preflight: result.preflight }, null, 2));
       requirePrd(result);
-      const syntheticAcceptance = requirePrdTasks(result.prd).find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      const tasks = requirePrdTasks(result.prd);
+      const syntheticAcceptance = tasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
       assert.ok(syntheticAcceptance, "R5 copied demand must regenerate the synthetic acceptance task");
       const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
       assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
       assert.equal(coverage?.required_test_file, "test/cli-git-weekly.test.ts");
+      const generated = ((result.prd.demand as DemandRecord)?.generated_acceptance_tests || []) as DemandRecord[];
+      assert.equal(generated[0]?.generated_by, "yolo.demand.acceptance-test-generator");
+      assert.equal(existsSync(join(root, "test", "cli-git-weekly.test.ts")), true, "spec/prd stage must write the generated acceptance test file");
+      assert.ok(result.outputs?.some((output) => output.path === join(root, "test", "cli-git-weekly.test.ts") && output.type === "generated_acceptance_test"));
+      assert.equal(tasks.filter((task) => task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0).length, 0, "executor must not receive a pending task to write the generated acceptance test");
+      assert.ok(tasks.some((task) => task.status !== "completed" && taskInputsForAssertion(task).includes("test/cli-git-weekly.test.ts")), "business implementation tasks should receive the generated test as readonly input");
       const criteria = (coverage?.criteria || []) as DemandRecord[];
       assert.equal(criteria.length >= 2, true, JSON.stringify(coverage, null, 2));
       const ids = criteria.map((criterion) => String(criterion.criterion_id));
@@ -2221,13 +2257,29 @@ describe("demand runtime", () => {
 
       const acceptanceRoot = mkdtempSync(join(tmpdir(), "yolo-r5-generated-acceptance-"));
       try {
-        const testFile = writeGeneratedR5AcceptanceTest(acceptanceRoot, r5ActualCliPathOrFixture(acceptanceRoot), ids);
+        const normalized = normalizeAcceptanceCoverageForGeneration(coverage);
+        const testFile = join(acceptanceRoot, "test", "cli-git-weekly.test.ts");
+        mkdirSync(dirname(testFile), { recursive: true });
+        const fixedCli = writeGitWeeklyCliFixture(acceptanceRoot);
+        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: fixedCli, testFile: "test/cli-git-weekly.test.ts" }), "utf8");
         const generatedTest = readFileSync(testFile, "utf8");
         assert.match(generatedTest, /expectedStats = \{ totalCommits: 2, linesAdded: 4, linesDeleted: 1 \}/);
-        assert.doesNotMatch(generatedTest, /\bgit\s+log\b|--numstat/, "acceptance test must not recompute fixture stats with production-like git log logic");
-        const child = spawnSync(process.execPath, [testFile], { cwd: process.cwd(), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: { ...process.env } });
-        assert.notEqual(child.status, 0, `generated acceptance should fail against the R5 stdout/file drift\nstdout:\n${child.stdout}\nstderr:\n${child.stderr}`);
-        assert.match(`${child.stdout}\n${child.stderr}`, /stdout and --output file content must match byte-for-byte/);
+        assert.doesNotMatch(generatedTest, /\bgit\s+log\b|--numstat/, "generated acceptance must not recompute fixture stats");
+        const validator = validateTestGeneration({
+          scope: { allow_new_files: true, targets: [{ file: "test/cli-git-weekly.test.ts" }] },
+          post_conditions: [{ type: "tests_pass", params: { command: "node --test", require_tests: true } }],
+          test_generation: { mode: "add_minimal", reason: "yolo deterministic acceptance generator output", allowed_test_files: ["test/cli-git-weekly.test.ts"], max_new_test_files: 1, acceptance_coverage_required: true, acceptance_coverage: normalized.manifest },
+        }, { cwd: acceptanceRoot, changedFiles: [{ file: "test/cli-git-weekly.test.ts", status: "A", isNew: true }] });
+        assert.equal(validator.status, "pass", JSON.stringify(validator.failures, null, 2));
+
+        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: writeGitWeeklyCliFixture(acceptanceRoot, true), testFile: "test/cli-git-weekly.test.ts" }), "utf8");
+        const buggyRun = spawnSync(process.execPath, ["--test", testFile], { cwd: acceptanceRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: cleanNodeTestEnv() });
+        assert.notEqual(buggyRun.status, 0, `generated acceptance should fail against stdout/file drift\nstdout:\n${buggyRun.stdout}\nstderr:\n${buggyRun.stderr}`);
+        assert.match(`${buggyRun.stdout}\n${buggyRun.stderr}`, /stdout and --output file content must match byte-for-byte/);
+
+        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: fixedCli, testFile: "test/cli-git-weekly.test.ts" }), "utf8");
+        const fixedRun = spawnSync(process.execPath, ["--test", testFile], { cwd: acceptanceRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: cleanNodeTestEnv() });
+        assert.equal(fixedRun.status, 0, `generated acceptance should pass against fixed CLI\nstdout:\n${fixedRun.stdout}\nstderr:\n${fixedRun.stderr}`);
       } finally {
         rmSync(acceptanceRoot, { recursive: true, force: true });
       }
@@ -2303,18 +2355,20 @@ describe("demand runtime", () => {
         JSON.stringify(syntheticAcceptance.handoff || {}),
       ].join("\n");
       assert.match(syntheticAcceptanceText, /concrete proof values/);
+      const generated = ((result.prd.demand as DemandRecord).generated_acceptance_tests as DemandRecord[])[0];
+      const generatedTestText = generateAcceptanceTestFile(generated.acceptance_coverage, {
+        cliPath: String(generated.cli_path),
+        testFile: String(generated.file),
+      });
       for (const requiredText of ["Alice", "Bob", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
-        assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
-          condition.type === "code_contains" &&
-          condition.params?.text === requiredText
-        ), `synthetic acceptance task must gate test file on ${requiredText}`);
+        assert.match(generatedTestText, new RegExp(requiredText), `generated acceptance test must include ${requiredText}`);
       }
-      const totalCondition = syntheticAcceptance.post_conditions.find((condition) =>
-        condition.type === "code_matches" && String(condition.message || "").includes("Total commits: 2")
-      );
-      assert.ok(totalCondition, "synthetic acceptance task must gate exact commit total assertions");
-      const totalPattern = String(totalCondition.params?.pattern || totalCondition.params?.text || "");
-      assert.match("assert.match(stdout, /Total Commits:\\s*2/);", new RegExp(totalPattern));
+      assert.match(generatedTestText, /Total commits[\s\S]{0,200}expectedStats\.totalCommits/);
+      assert.ok(requirePrdTasks(result.prd).some((task) =>
+        task.status !== "completed" &&
+        taskInputsForAssertion(task).includes(String(generated.file)) &&
+        task.post_conditions.some((condition) => condition.type === "tests_pass" && condition.params?.require_tests === true)
+      ), "business implementation task must own the generated acceptance test gate");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
