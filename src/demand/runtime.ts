@@ -1717,15 +1717,31 @@ function acceptanceCoverageMarkerGuidance(criteria: Array<Record<string, unknown
   const guidance = [
     "Coverage marker checklist is fail-closed: the test source must contain the required marker strings/patterns; semantic paraphrases are not enough.",
   ];
+  const sourceMarkerLines: string[] = [];
   if (/fileMarkdown/.test(markerText) && /stdoutMarkdown/.test(markerText)) {
     guidance.push("Copy this parity assertion shape when stdout/--output parity is required: assert.equal(fileMarkdown, stdoutMarkdown).");
+    sourceMarkerLines.push("assert.equal(fileMarkdown, stdoutMarkdown);");
   }
   if (/expectedStats\\.totalCommits/.test(markerText) || /expectedStats/.test(markerText)) {
     guidance.push("When fixture statistics are required, define expectedStats with totalCommits, linesAdded, and linesDeleted, then assert report text with source markers like `Total commits ... expectedStats.totalCommits`, `Lines added ... expectedStats.linesAdded`, and `Lines deleted ... expectedStats.linesDeleted`.");
     guidance.push("Example statistic assertion shapes: assert.match(stdoutMarkdown, new RegExp(`Total commits[\\\\s\\\\S]{0,80}${expectedStats.totalCommits}`)); assert.match(stdoutMarkdown, new RegExp(`Lines added[\\\\s\\\\S]{0,80}${expectedStats.linesAdded}`)); assert.match(stdoutMarkdown, new RegExp(`Lines deleted[\\\\s\\\\S]{0,80}${expectedStats.linesDeleted}`)).");
+    sourceMarkerLines.push(
+      "const expectedStats = { totalCommits: 2, linesAdded: 1, linesDeleted: 1 };",
+      "assert.match(stdoutMarkdown, new RegExp(`Total commits[\\\\s\\\\S]{0,80}${expectedStats.totalCommits}`));",
+      "assert.match(stdoutMarkdown, new RegExp(`Lines added[\\\\s\\\\S]{0,80}${expectedStats.linesAdded}`));",
+      "assert.match(stdoutMarkdown, new RegExp(`Lines deleted[\\\\s\\\\S]{0,80}${expectedStats.linesDeleted}`));",
+    );
   }
   if (/bad\|invalid\|error|notEqual|notStrictEqual/.test(markerText)) {
     guidance.push("When invalid input is required, store the result in a bad/invalid/error-prefixed variable and assert non-zero exit exactly like: const badRun = runCli([...]); assert.notEqual(badRun.status, 0).");
+    sourceMarkerLines.push(
+      "const badRun = runCli([\"--repo\", badRepo]);",
+      "assert.notEqual(badRun.status, 0);",
+    );
+  }
+  if (sourceMarkerLines.length) {
+    guidance.push("Paste these source-marker assertion lines into the test source when applicable; keep the label text and expectedStats references in the same source line so the validator can match them.");
+    guidance.push(...Array.from(new Set(sourceMarkerLines)).map((line) => `Source marker line: ${line}`));
   }
   return guidance;
 }
@@ -1893,7 +1909,10 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     design_ids: designIds,
     source_finding_ids: requirementIds,
     source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
-    verification_hint: "Run npm test and verify node:test executes at least one acceptance test.",
+    verification_hint: [
+      "Run npm test and verify node:test executes at least one acceptance test.",
+      ...acceptanceCoverage.instructions,
+    ].join(" "),
     instructions: [
       `Create or update exactly ${testFile} with node:test acceptance coverage.`,
       "The file must contain at least one test(...) declaration that npm test executes.",

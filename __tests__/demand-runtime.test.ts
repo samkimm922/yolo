@@ -2203,6 +2203,9 @@ describe("demand runtime", () => {
         assert.match(syntheticAcceptanceText, new RegExp(id), `instructions must list criterion ${id}`);
       }
       assert.match(syntheticAcceptanceText, /Coverage marker checklist is fail-closed/);
+      assert.match(syntheticAcceptance.verification_hint || "", /Paste these source-marker assertion lines/);
+      assert.match(syntheticAcceptanceText, /Paste these source-marker assertion lines/);
+      assert.match(syntheticAcceptanceText, /assert\.match\(stdoutMarkdown, new RegExp\(`Total commits/);
       assert.match(syntheticAcceptanceText, /byte-for-byte/);
       assert.match(syntheticAcceptanceText, /expectedStats/);
       assert.match(syntheticAcceptanceText, /assert\.equal\(fileMarkdown, stdoutMarkdown\)/);
