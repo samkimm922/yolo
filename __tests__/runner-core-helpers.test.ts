@@ -59,6 +59,28 @@ describe("runner core helper execution", () => {
     }
   });
 
+  test("uses declared max_lines_per_file as a minimum budget for existing targets", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-existing-budget-"));
+    const srcDir = join(root, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "small.ts"), Array.from({ length: 65 }, (_, i) => `export const line${i} = ${i};`).join("\n"), "utf8");
+    try {
+      assert.equal(
+        computeTaskTimeout(
+          [{ file: "src/small.ts" }],
+          {
+            rootDir: root,
+            config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 120 } },
+            scope: { max_lines_per_file: 120 },
+          },
+        ),
+        300000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("scales timeout for greenfield targets from declared max_lines_per_file", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-greenfield-"));
     try {

@@ -100,7 +100,8 @@ export function computeTaskTimeout(targets, { rootDir, config = loadedConfig, sc
     try {
       const guarded = resolveWithinRoot(rootDir, target.file);
       if (guarded.ok && guarded.path) {
-        totalLines += readFileSync(guarded.path, "utf8").split("\n").length;
+        const currentLines = readFileSync(guarded.path, "utf8").split("\n").length;
+        totalLines += Math.max(currentLines, declaredLines ?? 0);
       } else {
         continue;
       }
