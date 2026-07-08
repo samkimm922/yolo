@@ -34,6 +34,10 @@ const PACKAGE_MANAGER_LOCKFILES = new Set([
   "bun.lock",
   "bun.lockb",
 ]);
+const LIFECYCLE_AUTHORIZATION_FILES = [
+  ".yolo/lifecycle/status.json",
+  ".yolo/lifecycle/check-report.json",
+];
 
 export function isFileInScopeTargets(filePath, targets = []) {
   return (targets || []).some((target) => {
@@ -85,6 +89,16 @@ function resolveMergeFilePaths({ wtPath, rootDir, filePath }) {
     throw new Error(`worktree merge target escapes project root: ${dst.detail || relativePath}`);
   }
   return { filePath: relativePath, srcPath: src.path, dstPath: dst.path };
+}
+
+function syncLifecycleAuthorizationFiles({ rootDir, wtPath, existsSync, readFileSync, mkdirSync, writeFileSync } = Object()) {
+  for (const relativePath of LIFECYCLE_AUTHORIZATION_FILES) {
+    const source = join(rootDir, relativePath);
+    if (!existsSync(source)) continue;
+    const destination = join(wtPath, relativePath);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, readFileSync(source, "utf8"), "utf8");
+  }
 }
 
 export function parseGitStatusEntries(output = "") {
@@ -883,6 +897,7 @@ export function createTaskWorktree({
     throw new Error(`createWorktree: git checkout -b failed: ${error.message}`);
   }
 
+  syncLifecycleAuthorizationFiles({ rootDir, wtPath, existsSync, readFileSync, mkdirSync, writeFileSync });
   provisionWorktreeNodeModules({ wtPath, rootDir, execFileSync, existsSync });
 
   writeWorktreeBaselines({

@@ -398,6 +398,43 @@ describe("worktree execution session helpers", () => {
     assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
   });
 
+  test("createTaskWorktree syncs lifecycle authorization files into git worktrees", () => {
+    const writes = new Map();
+    const mkdirs = [];
+    const statusPath = "/repo/.yolo/lifecycle/status.json";
+    const reportPath = "/repo/.yolo/lifecycle/check-report.json";
+    const statusJson = JSON.stringify({ current_stage: "run", stages: [{ id: "check", status: "completed" }] });
+    const reportJson = JSON.stringify({ stage: { id: "check" }, status: "completed" });
+    const execSync = (command) => {
+      if (String(command).includes("rev-parse --is-inside-work-tree")) return "true\n";
+      if (String(command).includes("rev-parse HEAD")) return "abc123\n";
+      return "";
+    };
+    const execFileSync = () => "";
+
+    createTaskWorktree({
+      taskId: "FIX-LIFECYCLE",
+      rootDir: "/repo",
+      worktreeRoot: "/repo/.yolo-worktrees",
+      config: { build: { type_check: "", lint: "" } },
+      now: () => 123,
+      execSync,
+      execFileSync,
+      existsSync: (path) => path === statusPath || path === reportPath,
+      readFileSync: (path) => {
+        if (path === statusPath) return statusJson;
+        if (path === reportPath) return reportJson;
+        return "";
+      },
+      mkdirSync: (path) => mkdirs.push(path),
+      writeFileSync: (path, content) => writes.set(path, content),
+    });
+
+    assert.ok(mkdirs.includes("/repo/.yolo-worktrees/FIX-LIFECYCLE/.yolo/lifecycle"));
+    assert.equal(writes.get("/repo/.yolo-worktrees/FIX-LIFECYCLE/.yolo/lifecycle/status.json"), statusJson);
+    assert.equal(writes.get("/repo/.yolo-worktrees/FIX-LIFECYCLE/.yolo/lifecycle/check-report.json"), reportJson);
+  });
+
   test("createTaskWorktree rejects unsafe task IDs before git or filesystem execution", () => {
     const calls = [];
 
