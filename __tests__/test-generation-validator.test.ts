@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { parseStatusLine, validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 
 const changed = (...files) => files.map((file) => ({ file, status: "A", isNew: true }));
@@ -75,6 +76,41 @@ describe("test generation validator", () => {
       assert.equal(result.status, "fail");
       assert.equal(result.blocks_execution, true);
       assert.equal(result.failures[0].code, "TEST_GENERATION_GIT_STATUS_UNAVAILABLE");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("git status inspection expands untracked directories to generated test files", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-generation-untracked-dir-"));
+    const task = {
+      scope: { allow_new_files: true, targets: [{ file: "test/acceptance.test.js" }] },
+      post_conditions: [{ type: "tests_pass", params: { command: "npm test", require_tests: true } }],
+      test_generation: {
+        mode: "add_minimal",
+        reason: "Synthetic acceptance coverage.",
+        allowed_test_files: ["test/acceptance.test.js"],
+        max_new_test_files: 1,
+      },
+    };
+    try {
+      execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+      mkdirSync(join(root, "test"), { recursive: true });
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        type: "module",
+        scripts: { test: "node --test" },
+      }), "utf8");
+      writeFileSync(join(root, "test", "acceptance.test.js"), [
+        "import test from 'node:test';",
+        "import assert from 'node:assert/strict';",
+        "test('generated acceptance', () => assert.equal(1, 1));",
+      ].join("\n"), "utf8");
+
+      const result = validateTestGeneration(task, { cwd: root });
+
+      assert.equal(result.status, "pass");
+      assert.deepEqual(result.changed_test_files, ["test/acceptance.test.js"]);
+      assert.deepEqual(result.new_test_files, ["test/acceptance.test.js"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

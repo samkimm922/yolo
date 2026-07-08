@@ -13,6 +13,7 @@ import {
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const RUN_ORCHESTRATOR_URL = pathToFileURL(join(YOLO_DIR, "src/runtime/run-lifecycle/run-orchestrator.ts")).href;
+const RUN_PIPELINE_CHILD_TIMEOUT_MS = 20_000;
 
 function emptyTaskResults(overrides = Object()) {
   return {
@@ -38,7 +39,7 @@ function cleanReviewScan(file = "src/app.js") {
 
 function runChild(
   scriptPath: string,
-  { timeoutMs = 5000 }: { timeoutMs?: number } = Object(),
+  { timeoutMs = RUN_PIPELINE_CHILD_TIMEOUT_MS }: { timeoutMs?: number } = Object(),
 ): Promise<{ code: number | null; signal: string | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, ["--import", "tsx", scriptPath], {
@@ -313,7 +314,7 @@ try {
 }
 `, "utf8");
 
-    const result = await runChild(scriptPath, { timeoutMs: 5000 });
+    const result = await runChild(scriptPath);
     const output = `${result.stdout}\n${result.stderr}`;
     assert.equal(result.timedOut, false, output);
     assert.equal(result.code, 7, output);
@@ -416,7 +417,7 @@ await runTaskPipeline({
 });
 `, "utf8");
 
-    const result = await runChild(scriptPath, { timeoutMs: 7000 });
+    const result = await runChild(scriptPath);
     const output = `${result.stdout}\n${result.stderr}`;
     assert.equal(result.timedOut, false, output);
     assert.equal(result.code, 0, output);

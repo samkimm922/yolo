@@ -214,7 +214,7 @@ function gitErrorDetail(error) {
 function inspectChangedFiles(cwd = process.cwd()) {
   let output = "";
   try {
-    output = execFileSync("git", ["-C", cwd, "status", "--porcelain"], {
+    output = execFileSync("git", ["-C", cwd, "status", "--porcelain=v1", "--untracked-files=all"], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,
