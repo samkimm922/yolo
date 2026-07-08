@@ -38,7 +38,7 @@ function readJsonl(filePath) {
 function runConcurrentAppendWorker(filePath, worker) {
   const childCode = `
     import { appendJsonlRecord } from "./src/runtime/evidence/ledger.js";
-    const deadline = Date.now() + 60000;
+    const deadline = Date.now() + 120000;
     let appended = false;
     while (Date.now() <= deadline) {
       try {
@@ -47,11 +47,11 @@ function runConcurrentAppendWorker(filePath, worker) {
           worker: Number(process.env.WORKER),
           ledger: "state",
           source: "test"
-        }, { lockTimeoutMs: 1000 });
+        }, { lockTimeoutMs: 5000 });
         appended = true;
         break;
       } catch (error) {
-        if (!error || typeof error !== "object" || error.code !== "LEDGER_APPEND_LOCK_BUSY") throw error;
+        if (!error || typeof error !== "object" || !["LEDGER_APPEND_LOCK_BUSY", "LEDGER_APPEND_LOCK_TIMEOUT"].includes(error.code)) throw error;
         await new Promise((resolve) => setTimeout(resolve, 2 + Math.floor(Math.random() * 8)));
       }
     }

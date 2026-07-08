@@ -2202,8 +2202,13 @@ describe("demand runtime", () => {
       for (const id of ids) {
         assert.match(syntheticAcceptanceText, new RegExp(id), `instructions must list criterion ${id}`);
       }
+      assert.match(syntheticAcceptanceText, /Coverage marker checklist is fail-closed/);
       assert.match(syntheticAcceptanceText, /byte-for-byte/);
       assert.match(syntheticAcceptanceText, /expectedStats/);
+      assert.match(syntheticAcceptanceText, /assert\.equal\(fileMarkdown, stdoutMarkdown\)/);
+      assert.match(syntheticAcceptanceText, /Total commits .* expectedStats\.totalCommits/);
+      assert.match(syntheticAcceptanceText, /Lines added .* expectedStats\.linesAdded/);
+      assert.match(syntheticAcceptanceText, /assert\.notEqual\(badRun\.status, 0\)/);
       assert.ok(criteria.some((criterion) =>
         ((criterion.required_markers || []) as DemandRecord[]).some((marker) =>
           String(marker.pattern || "").includes("fileMarkdown") &&

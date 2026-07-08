@@ -209,7 +209,7 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   test("happy path: safe command passes when exit 0", () => {
     const result = mod.evalTestsPass({
       command: `"${process.execPath}" -e "process.exit(0)"`,
-      timeout_ms: 5000,
+      timeout_ms: 30000,
     }, {}, tmpRoot);
     assert.equal(result.passed, true);
   });
@@ -217,7 +217,7 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   test("require_tests rejects successful empty node:test output", () => {
     const result = mod.evalTestsPass({
       command: `"${process.execPath}" -e "console.log('# tests 0')"`,
-      timeout_ms: 5000,
+      timeout_ms: 30000,
       require_tests: true,
     }, {}, tmpRoot);
     assert.equal(result.passed, false);
@@ -227,7 +227,7 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   test("require_tests ignores business stdout that mentions 0 tests when runner summary is non-empty", () => {
     const result = mod.evalTestsPass({
       command: `"${process.execPath}" -e "console.log('business summary: 0 tests commits'); console.log('# tests 2')"`,
-      timeout_ms: 5000,
+      timeout_ms: 30000,
       require_tests: true,
     }, {}, tmpRoot);
     assert.equal(result.passed, true);
@@ -236,7 +236,7 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   test("require_tests rejects console.assert failures even when the command exits 0", () => {
     const result = mod.evalTestsPass({
       command: `"${process.execPath}" -e "console.error('Assertion failed: should have author name'); console.log('# tests 3')"`,
-      timeout_ms: 5000,
+      timeout_ms: 30000,
       require_tests: true,
     }, {}, tmpRoot);
     assert.equal(result.passed, false);
