@@ -22,6 +22,8 @@ const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set(BEHAVIOR_VERIFICATION_COND
 const TARGET_COVERAGE_CONDITION_TYPES = new Set(TARGET_COVERAGE_CONDITION_TYPE_LIST);
 
 const STRICT_EXECUTION_MODES = new Set(["runner", "release"]);
+const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence"]);
+const POSITIVE_AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "must_fail_probe", "red_green_sequence"]);
 
 function asArray(value) {
   if (value == null) return [];
@@ -168,6 +170,156 @@ function isBehaviorVerificationGate(condition) {
   if (normalized.severity !== "FAIL" || !SUPPORTED_CONDITION_TYPES.has(normalized.type)) return false;
   if (BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(normalized.type)) return true;
   return conditionVerifyCommand(condition).length > 0;
+}
+
+function conditionRequiresNonEmptyTests(condition = Object()) {
+  const normalized = normalizeCondition(condition);
+  if (normalized.severity !== "FAIL" || normalized.type !== "tests_pass") return false;
+  const params = condition.params || Object();
+  return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
+}
+
+function taskTargetsTestFiles(task = Object()) {
+  return normalizeTaskTargets(task).some((target) =>
+    /(^|\/)(__tests__|tests?)\//i.test(target.file) || /\.(test|spec)\./i.test(target.file)
+  );
+}
+
+function taskRequiresAuthenticityContract(task = Object()) {
+  return Boolean(task?.test_generation || task?.testGeneration)
+    || taskTargetsTestFiles(task)
+    || asArray(task?.post_conditions).some(conditionRequiresNonEmptyTests);
+}
+
+function verificationContract(task = Object()) {
+  return task.verification_contract || task.verificationContract || task.test_generation?.verification_contract || task.testGeneration?.verificationContract || null;
+}
+
+function authenticityContract(task = Object()) {
+  const contract = verificationContract(task);
+  return contract?.authenticity || contract?.truthfulness || null;
+}
+
+function methodFiles(method = Object(), task = Object()) {
+  return [...new Set([
+    ...asArray(method.files || method.file || method.test_files || method.test_file),
+    ...normalizeTaskTargets(task).map((target) => target.file).filter((file) => /(^|\/)(__tests__|tests?)\//i.test(file) || /\.(test|spec)\./i.test(file)),
+  ].map(cleanString).filter(Boolean))];
+}
+
+function methodMarkers(method = Object()) {
+  return asArray(method.markers || method.marker || method.patterns || method.pattern || method.text)
+    .filter((marker) => cleanString(typeof marker === "string" ? marker : marker?.text || marker?.pattern).length > 0);
+}
+
+function findConditionById(conditions = [], id = "") {
+  const target = cleanString(id);
+  if (!target) return null;
+  return asArray(conditions).find((condition) => cleanString(condition?.id) === target) || null;
+}
+
+function conditionDeclaresExpectedFailure(condition = Object(), method = Object()) {
+  const expectedBefore = cleanString(method.expected_before || method.expectedBefore || method.expect_before || method.expectBefore).toLowerCase();
+  return condition?.invert === true || expectedBefore === "fail" || expectedBefore === "failure" || expectedBefore === "red";
+}
+
+function inspectAuthenticityContract(task = Object()) {
+  const failures = [];
+  if (!taskRequiresAuthenticityContract(task)) return failures;
+
+  const authenticity = authenticityContract(task);
+  if (!authenticity || typeof authenticity !== "object" || Array.isArray(authenticity)) {
+    failures.push({
+      code: "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_MISSING",
+      detail: "test-backed pending task must declare verification_contract.authenticity so the authenticity gate can reject fake-green tests",
+    });
+    return failures;
+  }
+  if (authenticity.required !== true) {
+    failures.push({
+      code: "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_NOT_REQUIRED",
+      detail: "verification_contract.authenticity.required must be true for test-backed pending tasks",
+    });
+  }
+
+  const methods = asArray(authenticity.methods || authenticity.proofs || authenticity.mechanisms);
+  if (methods.length === 0) {
+    failures.push({
+      code: "TASK_VERIFICATION_AUTHENTICITY_METHODS_MISSING",
+      detail: "verification_contract.authenticity.methods must declare at least one enforceable proof mechanism",
+    });
+    return failures;
+  }
+  if (!methods.some((method) => POSITIVE_AUTHENTICITY_METHOD_TYPES.has(cleanString(method?.type)))) {
+    failures.push({
+      code: "TASK_VERIFICATION_AUTHENTICITY_POSITIVE_METHOD_MISSING",
+      detail: "authenticity contract must include assertion_count, required_marker, must_fail_probe, or red_green_sequence; forbidden patterns alone only reject known bad shapes",
+    });
+  }
+
+  for (const [index, method] of methods.entries()) {
+    const type = cleanString(method?.type);
+    if (!AUTHENTICITY_METHOD_TYPES.has(type)) {
+      failures.push({
+        code: "TASK_VERIFICATION_AUTHENTICITY_METHOD_UNSUPPORTED",
+        detail: `unsupported authenticity method at index ${index}: ${type || "(missing)"}`,
+      });
+      continue;
+    }
+    if (["assertion_count", "required_marker", "forbidden_pattern"].includes(type) && methodFiles(method, task).length === 0) {
+      failures.push({
+        code: "TASK_VERIFICATION_AUTHENTICITY_FILES_MISSING",
+        detail: `${type} authenticity method must declare files or target a test file`,
+      });
+    }
+    if (type === "assertion_count") {
+      const minimum = Number(method.minimum ?? method.min ?? method.min_count);
+      if (!Number.isFinite(minimum) || minimum < 1) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_ASSERTION_MINIMUM_INVALID",
+          detail: "assertion_count authenticity method must declare a positive minimum",
+        });
+      }
+      if (methodMarkers(method).length === 0) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_ASSERTION_MARKERS_MISSING",
+          detail: "assertion_count authenticity method must declare framework/project-specific assertion markers",
+        });
+      }
+    }
+    if (["required_marker", "forbidden_pattern"].includes(type) && methodMarkers(method).length === 0) {
+      failures.push({
+        code: "TASK_VERIFICATION_AUTHENTICITY_MARKERS_MISSING",
+        detail: `${type} authenticity method must declare at least one text or regex marker`,
+      });
+    }
+    if (["must_fail_probe", "red_green_sequence"].includes(type)) {
+      const preId = cleanString(method.pre_condition_id || method.preConditionId || method.red_condition_id || method.redConditionId);
+      const pre = findConditionById(task.pre_conditions, preId);
+      if (!pre) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_RED_PROBE_MISSING",
+          detail: `${type} authenticity method must reference an existing pre_condition_id that proves the check is red before implementation`,
+        });
+      } else if (!conditionDeclaresExpectedFailure(pre, method)) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_RED_PROBE_NOT_FAILING",
+          detail: `${type} pre_condition ${preId} must declare invert=true or expected_before=fail/red`,
+        });
+      }
+      if (type === "red_green_sequence") {
+        const postId = cleanString(method.post_condition_id || method.postConditionId || method.green_condition_id || method.greenConditionId);
+        const post = findConditionById(task.post_conditions, postId);
+        if (!post || normalizeCondition(post).severity !== "FAIL" || post?.invert === true) {
+          failures.push({
+            code: "TASK_VERIFICATION_AUTHENTICITY_GREEN_GATE_MISSING",
+            detail: "red_green_sequence authenticity method must reference a non-inverted FAIL post_condition_id for the green check",
+          });
+        }
+      }
+    }
+  }
+  return failures;
 }
 
 function collectParamFiles(value, out = []) {
@@ -626,6 +778,19 @@ export function inspectPrdContract(prd, options = Object()) {
           },
         },
       );
+    }
+
+    if (task.status === "pending" && strictExecution) {
+      for (const authenticityFailure of inspectAuthenticityContract(task)) {
+        addFinding(
+          failures,
+          task,
+          null,
+          authenticityFailure.code,
+          authenticityFailure.detail,
+          { human_needed: true },
+        );
+      }
     }
 
     if (task.status === "pending" && targets.length > 0) {

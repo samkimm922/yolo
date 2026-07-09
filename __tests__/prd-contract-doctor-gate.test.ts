@@ -267,6 +267,101 @@ describe("prd contract doctor gate", () => {
     }
   });
 
+  test("blocks test-backed runner PRDs without a declared authenticity contract", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-TRUTH-CONTRACT-MISSING",
+          ...strictDemandFields("src/a.ts"),
+          tasks: [{
+            id: "FIX-GATE-TRUTH-001",
+            title: "Strict task with tests",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            scope: { targets: [{ file: "src/a.ts" }] },
+            acceptance_criteria: ["Behavior is covered by a real test."],
+            post_conditions: [
+              {
+                id: "POST-TARGET",
+                type: "target_file_modified",
+                severity: "FAIL",
+                params: { file: "src/a.ts" },
+              },
+              {
+                id: "POST-TESTS",
+                type: "tests_pass",
+                severity: "FAIL",
+                params: { command: "project test command", require_tests: true },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) =>
+        finding.code === "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_MISSING" &&
+        finding.task_id === "FIX-GATE-TRUTH-001"
+      ));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not treat specs directory documents as test targets", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-SPECS-DOC-NOT-TEST",
+          ...strictDemandFields("specs/tasks.md"),
+          tasks: [{
+            id: "TASK-SPECS-DOC-001",
+            title: "Update specs task document",
+            priority: "P3",
+            type: "feature",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            scope: { targets: [{ file: "specs/tasks.md" }] },
+            acceptance_criteria: ["Spec task document is updated and typecheck stays clean."],
+            post_conditions: [
+              {
+                id: "POST-SPECS-TARGET",
+                type: "target_file_modified",
+                severity: "FAIL",
+                params: { file: "specs/tasks.md" },
+              },
+              {
+                id: "POST-SPECS-TYPECHECK",
+                type: "no_new_type_errors",
+                severity: "FAIL",
+                params: { command: "project typecheck" },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "pass", JSON.stringify(result.doctor.failures, null, 2));
+      assert.equal(result.doctor.failures.some((finding) =>
+        finding.code === "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_MISSING"
+      ), false);
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("blocks investigate-first atomicity instead of returning a warning gate", () => {
     const paths = makePaths();
     try {

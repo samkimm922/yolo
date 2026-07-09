@@ -810,11 +810,13 @@ export function collectStoryAtomicityItemsFromDemand(session: DemandSession = Ob
     id: clean(scenario?.id) || `SCN-${index + 1}`,
     text: scenarioText(scenario),
   }));
-  const tasks = asArray<DemandTask>(options.tasks || session.tasks).map((task, index) => ({
-    kind: "task",
-    id: clean(task?.id) || `TASK-${index + 1}`,
-    text: taskText(task),
-  }));
+  const tasks = asArray<DemandTask>(options.tasks || session.tasks)
+    .filter((task) => clean(task?.task_kind) !== "executor_acceptance_test")
+    .map((task, index) => ({
+      kind: "task",
+      id: clean(task?.id) || `TASK-${index + 1}`,
+      text: taskText(task),
+    }));
   return [...requirements, ...scenarios, ...tasks];
 }
 
@@ -834,11 +836,13 @@ export function collectStoryAtomicityItemsFromPrd(prd: DemandPrdDocument = Objec
     id: clean(scenario?.id) || `SCN-${index + 1}`,
     text: scenarioText(scenario),
   }));
-  const tasks = asArray<DemandTask>(prd.tasks).map((task, index) => ({
-    kind: "task",
-    id: clean(task?.id) || `TASK-${index + 1}`,
-    text: taskText(task),
-  }));
+  const tasks = asArray<DemandTask>(prd.tasks)
+    .filter((task) => clean(task?.task_kind) !== "executor_acceptance_test")
+    .map((task, index) => ({
+      kind: "task",
+      id: clean(task?.id) || `TASK-${index + 1}`,
+      text: taskText(task),
+    }));
   return [...requirements, ...scenarios, ...tasks];
 }
 
