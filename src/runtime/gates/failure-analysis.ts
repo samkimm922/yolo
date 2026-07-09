@@ -80,13 +80,6 @@ export function analyzeFailureOutput(gateOutput, context = Object()) {
     ? failure
     : { ...failure, exit_code: Number(input.exitCode) }));
 
-  if (/no_new_lint_errors|eslint|@typescript-eslint|no-unused-vars|no-constant-condition/.test(cleanOutput)) {
-    const detail = (cleanOutput.match(/no_new_lint_errors[^)]*:\s*([^\n]+)/) || [])[1] ||
-      (cleanOutput.match(/新增 \d+ 个 eslint[^\n]+/) || [])[0] ||
-      "eslint 错误";
-    failures.push({ type: "eslint", detail: detail.slice(0, 200), rules: ["eslint"] });
-  }
-
   if (/code_not_contains.*仍包含|code_contains.*期望/.test(cleanOutput)) {
     failures.push({ type: "语义审查", detail: "code 模式匹配失败", rules: ["语义审查"] });
   }
@@ -128,12 +121,7 @@ export function buildFailureHint(rawError, targetFile) {
   const filtered = relevant.join("\n").slice(0, 2500);
 
   let specificHint = "";
-  if (errorText.includes("eslint") && errorText.includes("unused")) {
-    specificHint = `
-### eslint unused 根因分析：
-eslint 说某个变量"defined but never used"，说明你的上一次修改删掉了使用该变量的代码，但忘了删变量声明/import。
-修复方法：找到报错行号的变量声明或 import，删除它。`;
-  } else if (errorText.includes("改动范围") && errorText.includes("150")) {
+  if (errorText.includes("改动范围") && errorText.includes("150")) {
     specificHint = `
 ### 文件超 150 行根因分析：
 文件改动后超过 150 行限制。你不能只加代码，必须先拆分：

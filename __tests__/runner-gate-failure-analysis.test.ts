@@ -54,7 +54,25 @@ describe("runner gate failure analysis", () => {
       exit_code: 1,
     });
 
-    assert.equal(analyzeFailureOutput("no_new_lint_errors: no-unused-vars at src/a.ts").at(0).type, "eslint");
+    assert.deepEqual(analyzeFailureOutput("no_new_lint_errors: lint violation", {
+      exitCode: 1,
+      stderr: "no_new_lint_errors: lint violation",
+      config: {
+        build: {
+          failure_output_rules: [{
+            id: "lint-errors",
+            type: "lint",
+            contains: "no_new_lint_errors",
+          }],
+        },
+      },
+    }).at(0), {
+      id: "lint-errors",
+      type: "lint",
+      detail: "no_new_lint_errors: lint violation",
+      rules: ["lint-errors"],
+      exit_code: 1,
+    });
     assert.equal(analyzeFailureOutput("code_contains 期望找到 target text").at(0).type, "语义审查");
     assert.equal(analyzeFailureOutput("files_modified_max 文件数超过限制").at(0).type, "file_scope");
     assert.equal(analyzeFailureOutput("innerHTML unsafe sink").at(0).type, "dangerous");
@@ -96,6 +114,30 @@ describe("runner gate failure analysis", () => {
     });
   });
 
+  test("does not classify a declared non-ESLint lint output as eslint", () => {
+    const failures = analyzeFailureOutput("ruff: no-constant-condition", {
+      exitCode: 1,
+      stderr: "ruff: no-constant-condition",
+      config: {
+        build: {
+          failure_output_rules: [{
+            id: "ruff-lint",
+            type: "lint",
+            contains: "ruff:",
+          }],
+        },
+      },
+    });
+
+    assert.deepEqual(failures, [{
+      id: "ruff-lint",
+      type: "lint",
+      detail: "ruff: no-constant-condition",
+      rules: ["ruff-lint"],
+      exit_code: 1,
+    }]);
+  });
+
   test("builds scoped retry hints from relevant failure lines", () => {
     const hint = buildFailureHint([
       "unrelated/package.ts error",
@@ -104,7 +146,8 @@ describe("runner gate failure analysis", () => {
     ].join("\n"), "src/service/value.ts");
 
     assert.match(hint, /src\/service\/value\.ts:2/);
-    assert.match(hint, /eslint unused 根因分析/);
+    assert.match(hint, /命令失败根因分析/);
+    assert.doesNotMatch(hint, /eslint unused 根因分析/);
     assert.doesNotMatch(hint, /unrelated\/package\.ts error/);
   });
 
