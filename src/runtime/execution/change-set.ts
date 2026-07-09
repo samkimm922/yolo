@@ -97,20 +97,6 @@ export function businessGlobsFromConfig(config = Object()) {
   return configuredBusinessGlobs({ config });
 }
 
-export function isBusinessFileLegacyDirectoryOnly(filePath) {
-  if (!filePath) return false;
-  if (filePath.startsWith(".yolo/")) return false;
-  if (filePath.startsWith("scripts/yolo/")) return false;
-  if (filePath.startsWith("docs/")) return false;
-  if (!filePath.includes("/") && /\.md$/i.test(filePath)) return false;
-  if (filePath.startsWith("src/")) return true;
-  if (filePath.startsWith("cloudfunctions/")) return true;
-  if (filePath.startsWith("tests/")) return true;
-  if (filePath.startsWith("__tests__/")) return true;
-  if (filePath.includes("/__tests__/")) return true;
-  return false;
-}
-
 export function filterCommittableFiles(
   files = [],
   {
