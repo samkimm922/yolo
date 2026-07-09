@@ -119,8 +119,8 @@ export async function validateTestGenerationAfterSession({
   }
 }
 
-export function shouldRunAtomicTaskDoctor(task) {
-  return shouldInspectAtomicity(task, "run");
+export function shouldRunAtomicTaskDoctor(task, options = Object()) {
+  return shouldInspectAtomicity(task, "run", options);
 }
 
 function doctorCannotRemediateSplit(result = Object()) {
@@ -146,13 +146,16 @@ function downgradeUnremediatedMustSplit(result = Object()) {
 export function runAtomicTaskDoctorGate({
   task,
   prdPath,
+  config,
+  prd,
   yoloRoot,
   inspectAtomicTask = defaultInspectAtomicTask,
   logTaskBash = (..._args) => {},
 } = Object()) {
-  if (!shouldRunAtomicTaskDoctor(task)) return { ok: true, skipped: true };
+  const policyContext = { config, prd };
+  if (!shouldRunAtomicTaskDoctor(task, policyContext)) return { ok: true, skipped: true };
   try {
-    const result = downgradeUnremediatedMustSplit(inspectAtomicTask(task, { root: yoloRoot, prdPath, writeEvidence: true }));
+    const result = downgradeUnremediatedMustSplit(inspectAtomicTask(task, { root: yoloRoot, prdPath, ...policyContext, writeEvidence: true }));
     logTaskBash(task.id, "atomic-task-doctor", result.status === "fail" ? "fail" : "pass", JSON.stringify({
       mode: result.mode,
       score: result.score,

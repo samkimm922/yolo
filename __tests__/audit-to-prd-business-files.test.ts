@@ -14,10 +14,10 @@ function finding(files: string[]) {
 }
 
 describe("audit-to-prd business file classification", () => {
-  test("does not mark app/lib layout targets as zero-business by default", () => {
+  test("does not mark declared app/lib layout targets as zero-business", () => {
     const result = buildPrdFromFindings([
       finding(["app/page.tsx", "lib/store.ts"]),
-    ]);
+    ], { config: { project: { business_file_patterns: ["app/**", "lib/**"] } } });
 
     assert.equal(result.prd.tasks[0].scope.expected_zero_business_code, undefined);
   });

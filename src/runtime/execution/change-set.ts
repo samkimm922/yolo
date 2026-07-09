@@ -1,17 +1,15 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
+import {
+  declaredBusinessFilePatterns,
+  declaredConfigFilePatterns,
+  matchesAnyFilePattern,
+  normalizeRepoFilePath,
+} from "../project-file-policy.js";
 
 export const DEFAULT_COMMIT_EXCLUDE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 export const DEFAULT_FALLBACK_CHANGED_FILE_EXCLUDES = ["dist-h5/", ".gstack/", ".yolo-backup/"];
 export const DEFAULT_BINARY_FILE_PATTERN = /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot|mp4|webm|pdf|zip|gz|lock|jar)$/i;
-export const DEFAULT_BUSINESS_SOURCE_EXTENSIONS = [
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".go", ".rs", ".java", ".kt", ".kts", ".rb", ".php",
-  ".cs", ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".swift",
-  ".scala", ".dart", ".ex", ".exs", ".erl", ".hrl", ".clj", ".cljs",
-  ".fs", ".fsx", ".vb", ".r", ".lua", ".sh", ".bash", ".zsh", ".fish",
-  ".sql", ".graphql", ".gql", ".css", ".scss", ".sass", ".less",
-  ".html", ".vue", ".svelte", ".astro",
-];
+export const DEFAULT_BUSINESS_SOURCE_EXTENSIONS = [];
 
 const DEFAULT_BUSINESS_EXCLUDED_PREFIXES = [
   ".yolo/",
@@ -28,91 +26,29 @@ const DEFAULT_BUSINESS_EXCLUDED_PREFIXES = [
   "scripts/yolo/",
 ];
 
-const LOCKFILE_NAMES = new Set([
-  "package-lock.json",
-  "npm-shrinkwrap.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-  "bun.lock",
-  "bun.lockb",
-  "Cargo.lock",
-  "Gemfile.lock",
-  "composer.lock",
-  "poetry.lock",
-  "Pipfile.lock",
-]);
-
-const ROOT_CONFIG_FILE_PATTERN = /^(?:[^/]+\.config\.(?:cjs|cts|js|mjs|mts|ts)|(?:babel|eslint|jest|next|nuxt|playwright|postcss|prettier|rollup|svelte|tailwind|vite|vitest)\.config\.(?:cjs|cts|js|mjs|mts|ts))$/i;
-
 function splitGitFileList(output = "") {
   return String(output || "").trim().split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
-function normalizeRepoFilePath(filePath) {
-  return String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
-}
-
 function configuredBusinessGlobs(options = Object()) {
-  if (Array.isArray(options)) return options.map(String).map((glob) => glob.trim()).filter(Boolean);
-  const direct = options.businessGlobs || options.business_globs;
+  return declaredBusinessFilePatterns(options);
+}
+
+function usesLegacyBusinessGlobs(options = Object()) {
   const config = options.config || options;
-  const candidates = [
-    direct,
-    config?.build?.business_globs,
-    config?.build?.businessGlobs,
-    config?.project?.business_globs,
-    config?.project?.businessGlobs,
-  ];
-  const globs = candidates.find((value) => Array.isArray(value) && value.length > 0) ||
-    candidates.find((value) => Array.isArray(value));
-  return Array.isArray(globs) ? globs.map(String).map((glob) => glob.trim()).filter(Boolean) : [];
-}
-
-function escapeRegexChar(char) {
-  return /[\\^$+?.()|[\]{}]/.test(char) ? `\\${char}` : char;
-}
-
-function globToRegExp(glob) {
-  const normalized = normalizeRepoFilePath(glob).replace(/^\/+/, "");
-  const pattern = normalized.endsWith("/") ? `${normalized}**` : normalized;
-  let source = "^";
-  for (let i = 0; i < pattern.length;) {
-    if (pattern.slice(i, i + 3) === "**/") {
-      source += "(?:.*/)?";
-      i += 3;
-      continue;
-    }
-    if (pattern.slice(i, i + 2) === "**") {
-      source += ".*";
-      i += 2;
-      continue;
-    }
-    const char = pattern[i];
-    if (char === "*") source += "[^/]*";
-    else if (char === "?") source += "[^/]";
-    else source += escapeRegexChar(char);
-    i++;
-  }
-  return new RegExp(`${source}$`);
-}
-
-function matchesAnyGlob(filePath, globs = []) {
-  return globs.some((glob) => globToRegExp(glob).test(filePath));
-}
-
-function hasBusinessSourceExtension(filePath) {
-  const lower = filePath.toLowerCase();
-  return DEFAULT_BUSINESS_SOURCE_EXTENSIONS.some((extension) => lower.endsWith(extension));
+  return Array.isArray(options.businessGlobs)
+    || Array.isArray(options.business_globs)
+    || Array.isArray(config?.build?.business_globs)
+    || Array.isArray(config?.build?.businessGlobs)
+    || Array.isArray(config?.project?.business_globs)
+    || Array.isArray(config?.project?.businessGlobs);
 }
 
 function isAlwaysNonBusinessFile(filePath) {
   if (!filePath) return true;
   if (DEFAULT_BUSINESS_EXCLUDED_PREFIXES.some((prefix) => filePath.startsWith(prefix))) return true;
   if (filePath.split("/").some((part) => part === "node_modules" || part === ".git")) return true;
-  const basename = filePath.split("/").pop() || filePath;
-  if (LOCKFILE_NAMES.has(basename)) return true;
   if (!filePath.includes("/") && /\.md$/i.test(filePath)) return true;
-  if (!filePath.includes("/") && ROOT_CONFIG_FILE_PATTERN.test(filePath)) return true;
   return false;
 }
 
@@ -137,17 +73,24 @@ export function readTaskChangedFiles({
 }
 
 export function businessFilePolicyDescription(options = Object()) {
-  const globs = configuredBusinessGlobs(options);
-  if (globs.length > 0) return `business_globs: ${globs.join(", ")}`;
-  return `source extensions: ${DEFAULT_BUSINESS_SOURCE_EXTENSIONS.join(", ")}; excludes: ${DEFAULT_BUSINESS_EXCLUDED_PREFIXES.join(", ")}`;
+  const businessPatterns = configuredBusinessGlobs(options);
+  const configPatterns = declaredConfigFilePatterns(options);
+  const label = usesLegacyBusinessGlobs(options) ? "business_globs" : "business_file_patterns";
+  const prefix = businessPatterns.length > 0
+    ? `${label}: ${businessPatterns.join(", ")}`
+    : `${label}: <none declared; no business files inferred>`;
+  const configDetail = configPatterns.length > 0 ? `; config_file_patterns: ${configPatterns.join(", ")}` : "";
+  return `${prefix}${configDetail}; excludes: ${DEFAULT_BUSINESS_EXCLUDED_PREFIXES.join(", ")}`;
 }
 
 export function isBusinessFile(filePath, options = Object()) {
   const normalized = normalizeRepoFilePath(filePath);
   if (isAlwaysNonBusinessFile(normalized)) return false;
-  const businessGlobs = configuredBusinessGlobs(options);
-  if (businessGlobs.length > 0) return matchesAnyGlob(normalized, businessGlobs);
-  return hasBusinessSourceExtension(normalized);
+  const configPatterns = declaredConfigFilePatterns(options);
+  if (configPatterns.length > 0 && matchesAnyFilePattern(normalized, configPatterns)) return false;
+  const businessPatterns = configuredBusinessGlobs(options);
+  if (businessPatterns.length === 0) return false;
+  return matchesAnyFilePattern(normalized, businessPatterns);
 }
 
 export function businessGlobsFromConfig(config = Object()) {

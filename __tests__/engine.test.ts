@@ -62,6 +62,12 @@ let engine;
 const mockDir = resolve(import.meta.dirname, ".tmp-test");
 const fileA = join(mockDir, "a.ts");
 const fileB = join(mockDir, "b.ts");
+const testConfig = {
+  project: {
+    business_file_patterns: ["src/**/*.ts"],
+    config_file_patterns: ["package.json"],
+  },
+};
 
 before(async () => {
   engine = await import("../src/prd/contract.js");
@@ -84,7 +90,7 @@ function pre(conds) {
 // Helper: create a task with post_conditions and evaluate
 function post(task) {
   const t = { id: "T", scope: { check_dead_code: false }, post_conditions: [], ...task };
-  return engine.evaluatePostConditions(t, {});
+  return engine.evaluatePostConditions(t, {}, { config: testConfig });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -613,7 +619,7 @@ describe("auto-conditions structure", () => {
       id: "T",
       scope: { check_dead_code: false, targets: [{ file: "src/app.ts" }] },
       post_conditions: [],
-    }, {}, { changedFiles: [] });
+    }, {}, { changedFiles: [], config: testConfig });
     const biz = r.results.find(c => c.id === "AUTO-business_code_min");
     expect(biz).toBeDefined();
     expect(biz.passed).toBe(false);

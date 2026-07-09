@@ -712,10 +712,11 @@ function atomicityReadiness({ prd, projectRoot, strictExecution }) {
   const inspections = [];
   const blockers = [];
   const warnings = [];
+  const policyContext = { prd };
   for (const task of asArray(prd.tasks)) {
     if (!task?.id) continue;
-    if (!shouldInspectAtomicity(task, "check")) continue;
-    const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false });
+    if (!shouldInspectAtomicity(task, "check", policyContext)) continue;
+    const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false, ...policyContext });
     inspections.push(inspection);
     if (inspection.mode === "must_split") {
       blockers.push({ code: "ATOMICITY_MUST_SPLIT", task_id: task.id, message: "Task is too broad and must be split before execution.", score: inspection.score });

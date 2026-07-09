@@ -35,7 +35,7 @@ export function allowsMetadataOnlyCompletion(task = Object(), baseRecord = Objec
   const targets = taskTargetFiles(task);
   return reason === "pure_config"
     && targets.length > 0
-    && changed.every((file) => targets.includes(file) || isPureConfigTarget(file));
+    && changed.every((file) => targets.includes(file) || isPureConfigTarget(file, task));
 }
 
 export function buildPostCommitOutcome({
