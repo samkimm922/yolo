@@ -23,6 +23,24 @@ function assertNodeModulesExecOptions(options, timeout) {
   assert.equal(options.maxBuffer, 1024 * 1024);
 }
 
+const srcBusinessConfig = {
+  project: {
+    business_file_patterns: ["src/**/*.ts"],
+  },
+};
+
+const layoutBusinessConfig = {
+  project: {
+    business_file_patterns: [
+      "packages/**/*.ts",
+      "app/**/*.tsx",
+      "components/**/*.tsx",
+      "lib/**/*.ts",
+      "migrations/**/*.sql",
+    ],
+  },
+};
+
 describe("worktree execution session helpers", () => {
   test("scope helpers allow explicit targets and sibling new files only when requested", () => {
     const scope = { targets: [{ file: "src/a.ts" }], allow_new_files: true };
@@ -338,10 +356,10 @@ describe("worktree execution session helpers", () => {
       "lib/db.ts",
       "migrations/001.sql",
     ]) {
-      assert.equal(isBusinessLikeFile(filePath), true);
+      assert.equal(isBusinessLikeFile(filePath, { config: layoutBusinessConfig }), true);
     }
-    assert.equal(isBusinessLikeFile("docs/notes.md"), false);
-    assert.equal(isBusinessLikeFile("public/robots.txt"), false);
+    assert.equal(isBusinessLikeFile("docs/notes.md", { config: layoutBusinessConfig }), false);
+    assert.equal(isBusinessLikeFile("public/robots.txt", { config: layoutBusinessConfig }), false);
     assert.equal(isBusinessLikeFile("public/robots.txt", { config: { build: { business_globs: ["public/**"] } } }), true);
   });
 
@@ -592,6 +610,7 @@ describe("worktree execution session helpers", () => {
       rootDir: "/repo",
       mergeToMain: true,
       allowedScope: { targets: [{ file: "src/a.ts" }] },
+      config: srcBusinessConfig,
       execFileSync,
       execSync: (command) => {
         commands.push(command);
@@ -666,6 +685,7 @@ describe("worktree execution session helpers", () => {
       rootDir: "/repo",
       mergeToMain: true,
       allowedScope: { targets: [{ file: "src/a.ts" }] },
+      config: layoutBusinessConfig,
       execFileSync,
       execSync: () => "true\n",
       existsSync: (path) => path === "/wt/FIX-LOCK/src/a.ts",
@@ -706,6 +726,7 @@ describe("worktree execution session helpers", () => {
       rootDir: "/repo",
       mergeToMain: true,
       allowedScope: { targets: [{ file: "src/a.ts" }] },
+      config: layoutBusinessConfig,
       execFileSync,
       execSync: () => "true\n",
       existsSync: (path) => path === "/wt/FIX-PKG/src/a.ts",

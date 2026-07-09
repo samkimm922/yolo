@@ -294,7 +294,7 @@ describe("session validation helpers", () => {
       },
       {
         name: "pure config task",
-        task: { status: "pending", type: "cleanup", scope: { targets: [{ file: "package.json" }] } },
+        task: { status: "pending", type: "cleanup", scope: { targets: [{ file: "package.json" }], config_file_patterns: ["package.json"] } },
         expected: false,
       },
     ];

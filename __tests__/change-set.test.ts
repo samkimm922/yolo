@@ -10,6 +10,21 @@ import {
 } from "../src/runtime/execution/change-set.js";
 
 describe("execution change-set helpers", () => {
+  const tsProjectConfig = {
+    project: {
+      business_file_patterns: [
+        "app/**/*.ts",
+        "app/**/*.tsx",
+        "components/**/*.tsx",
+        "cloudfunctions/**/*.js",
+        "lib/**/*.ts",
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "__tests__/**/*.js",
+      ],
+    },
+  };
+
   test("readTaskChangedFiles uses explicit worktree file lists without fallback filtering", () => {
     const result = readTaskChangedFiles({
       rootDir: "/repo",
@@ -54,20 +69,42 @@ describe("execution change-set helpers", () => {
     ]);
   });
 
-  test("isBusinessFile default policy detects source files across layouts", () => {
-    assert.equal(isBusinessFile("components/board/top-bar.tsx"), true);
-    assert.equal(isBusinessFile("app/page.tsx"), true);
-    assert.equal(isBusinessFile("lib/store.ts"), true);
-    assert.equal(isBusinessFile("src/a.ts"), true);
-    assert.equal(isBusinessFile("cloudfunctions/f/index.js"), true);
-    assert.equal(isBusinessFile("__tests__/a.test.js"), true);
-    assert.equal(isBusinessFile(".yolo/state/x.json"), false);
-    assert.equal(isBusinessFile("docs/spec.md"), false);
-    assert.equal(isBusinessFile("node_modules/pkg/index.js"), false);
-    assert.equal(isBusinessFile("dist/server.js"), false);
-    assert.equal(isBusinessFile("scripts/yolo/runner.js"), false);
-    assert.equal(isBusinessFile("README.md"), false);
-    assert.equal(isBusinessFile("package-lock.json"), false);
+  test("isBusinessFile is conservative without declared project business patterns", () => {
+    assert.equal(isBusinessFile("src/a.ts"), false);
+    assert.equal(isBusinessFile("src/a.js"), false);
+    assert.equal(isBusinessFile("src/a.py"), false);
+  });
+
+  test("isBusinessFile uses declared project business_file_patterns instead of built-in language defaults", () => {
+    const config = {
+      project: {
+        language: "python",
+        business_file_patterns: ["app/**/*.py", "tests/**/*.py"],
+        config_file_patterns: ["pyproject.toml"],
+      },
+    };
+
+    assert.equal(isBusinessFile("app/orders/service.py", { config }), true);
+    assert.equal(isBusinessFile("tests/test_orders.py", { config }), true);
+    assert.equal(isBusinessFile("app/orders/service.ts", { config }), false);
+    assert.equal(isBusinessFile("pyproject.toml", { config }), false);
+    assert.equal(isBusinessFile("node_modules/pkg/index.py", { config }), false);
+  });
+
+  test("isBusinessFile declared policy detects source files across layouts", () => {
+    assert.equal(isBusinessFile("components/board/top-bar.tsx", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile("app/page.tsx", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile("lib/store.ts", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile("src/a.ts", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile("cloudfunctions/f/index.js", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile("__tests__/a.test.js", { config: tsProjectConfig }), true);
+    assert.equal(isBusinessFile(".yolo/state/x.json", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("docs/spec.md", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("node_modules/pkg/index.js", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("dist/server.js", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("scripts/yolo/runner.js", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("README.md", { config: tsProjectConfig }), false);
+    assert.equal(isBusinessFile("package-lock.json", { config: tsProjectConfig }), false);
   });
 
   test("isBusinessFile honors configured business_globs as an inclusion policy", () => {
@@ -84,7 +121,7 @@ describe("execution change-set helpers", () => {
       "app/page.tsx",
       "docs/spec.md",
       "package.json",
-    ]), {
+    ], { config: tsProjectConfig }), {
       business: ["components/board/top-bar.tsx", "app/page.tsx"],
       metadata: ["docs/spec.md", "package.json"],
     });
@@ -139,6 +176,7 @@ describe("execution change-set helpers", () => {
       task,
       execFileSync,
       isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+      config: tsProjectConfig,
     });
 
     assert.deepEqual(calls, [
@@ -172,6 +210,7 @@ describe("execution change-set helpers", () => {
       task: { scope: { targets: [{ file: "components/board/top-bar.tsx" }] } },
       worktreeFiles: ["components/board/top-bar.tsx", "README.md"],
       isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+      config: tsProjectConfig,
     });
 
     assert.deepEqual(context.businessFiles, ["components/board/top-bar.tsx"]);
@@ -197,6 +236,7 @@ describe("execution change-set helpers", () => {
       },
       worktreeFiles,
       isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+      config: tsProjectConfig,
     });
 
     assert.deepEqual(context.code, ["src/a.ts"]);

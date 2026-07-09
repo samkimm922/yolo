@@ -63,6 +63,8 @@ const DEFAULTS = {
     src: 'src',
     source_roots: ['src'],
     source_extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    business_file_patterns: [] as string[],
+    config_file_patterns: [] as string[],
     framework: 'generic',
     exclude: ['node_modules', 'dist', '.git'],
   },

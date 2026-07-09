@@ -668,10 +668,11 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    if (strictExecution && shouldInspectAtomicity(task, "contract")) {
+    if (strictExecution && shouldInspectAtomicity(task, "contract", { prd })) {
       const inspection = inspectAtomicTask(task, {
         root: projectRoot,
         projectRoot,
+        prd,
         writeEvidence: false,
       });
       if (inspection.mode === "must_split") {

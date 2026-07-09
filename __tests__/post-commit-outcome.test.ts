@@ -139,7 +139,7 @@ describe("post commit outcome helpers", () => {
     };
     assert.equal(allowsMetadataOnlyCompletion({
       id: "CFG-1",
-      scope: { targets: [{ file: "package.json" }] },
+      scope: { targets: [{ file: "package.json" }], config_file_patterns: ["package.json"] },
     }, metadata), true);
     assert.equal(allowsMetadataOnlyCompletion({
       id: "BUSINESS-1",

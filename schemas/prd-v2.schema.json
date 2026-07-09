@@ -179,6 +179,16 @@
         "type_checker": {
           "type": "string",
           "description": "Type checker command for no_new_type_errors condition, e.g. 'tsc --noEmit', 'mypy src/', 'cargo check'"
+        },
+        "business_file_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Repo-relative glob or extension patterns that declare which files count as business code for this project. No language defaults are inferred when omitted."
+        },
+        "config_file_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Repo-relative glob or extension patterns that declare pure config/toolchain files for this project."
         }
       }
     },

@@ -1,3 +1,8 @@
+import {
+  declaredConfigFilePatterns,
+  matchesAnyFilePattern,
+} from "../project-file-policy.js";
+
 export function clean(value) {
   return String(value ?? "").trim();
 }
@@ -19,48 +24,37 @@ export function taskFiles(task = Object()) {
   ].filter(Boolean);
 }
 
-export function isPureConfigTarget(file) {
+export function isPureConfigTarget(file, ...sources) {
   const normalized = normalizeFile(file);
-  return (
-    normalized === "package.json"
-    || normalized === "package-lock.json"
-    || normalized === "pnpm-lock.yaml"
-    || normalized === "yarn.lock"
-    || normalized === "bun.lockb"
-    || normalized === "tsconfig.json"
-    || normalized === "tsconfig.build.json"
-    || normalized === "jsconfig.json"
-    || normalized === ".npmrc"
-    || normalized === ".yolo/config.json"
-    || /(^|\/)(eslint|prettier|vitest|vite|jest|tsup|rollup|webpack|babel|postcss|tailwind)\.config\.[cm]?[jt]s$/.test(normalized)
-  );
+  const patterns = declaredConfigFilePatterns(...sources);
+  return patterns.length > 0 && matchesAnyFilePattern(normalized, patterns);
 }
 
 export function taskTargetFiles(task = Object()) {
   return taskFiles(task);
 }
 
-export function isPureConfigTask(task = Object()) {
+export function isPureConfigTask(task = Object(), options = Object()) {
   const files = taskTargetFiles(task);
-  return files.length > 0 && files.every(isPureConfigTarget);
+  return files.length > 0 && files.every((file) => isPureConfigTarget(file, task, options));
 }
 
-export function atomicityExemptionReason(task = Object()) {
+export function atomicityExemptionReason(task = Object(), options = Object()) {
   if (clean(task.task_kind) === "greenfield_scaffold") return "greenfield_scaffold";
   if (clean(task.task_kind) === "executor_acceptance_test") return "executor_acceptance_test";
-  if (isPureConfigTask(task)) return "pure_config";
+  if (isPureConfigTask(task, options)) return "pure_config";
   return "";
 }
 
-export function isAtomicityExempt(task = Object()) {
-  return Boolean(atomicityExemptionReason(task));
+export function isAtomicityExempt(task = Object(), options = Object()) {
+  return Boolean(atomicityExemptionReason(task, options));
 }
 
 export const ATOMICITY_INSPECTION_TASK_TYPES = new Set(["bugfix", "feature", "refactor", "cleanup", "security"]);
 
-export function shouldInspectAtomicity(task = Object(), phase = "check") {
+export function shouldInspectAtomicity(task = Object(), phase = "check", options = Object()) {
   if (!task) return false;
-  if (isAtomicityExempt(task)) return false;
+  if (isAtomicityExempt(task, options)) return false;
   if (clean(task.task_kind) === "dry_run_artifact") return false;
   if (task.atomic_task_doctor === false) return false;
   const status = clean(task.status);

@@ -11,6 +11,19 @@ project:
     - ".tsx"
     - ".js"
     - ".jsx"
+  # Explicit project policy for business-code detection. YOLO no longer
+  # infers business files from built-in language extension tables.
+  business_file_patterns:
+    - "src/**/*.ts"
+    - "src/**/*.tsx"
+    - "test/**/*.ts"
+    - "__tests__/**/*.ts"
+  # Explicit project policy for pure config/toolchain tasks.
+  config_file_patterns:
+    - "package.json"
+    - "tsconfig.json"
+    - "*.config.js"
+    - "*.config.ts"
   framework: "generic"
   exclude:
     - "node_modules"
@@ -18,8 +31,8 @@ project:
     - ".git"
 
 build:
-  # Optional inclusion globs for business code classification.
-  # Empty/default uses source file extensions plus metadata directory excludes.
+  # Backward-compatible alias for business file inclusion globs.
+  # Prefer project.business_file_patterns for new projects.
   business_globs: []
   # Optional command overrides. When omitted, YOLO detects package manager from
   # lockfiles (pnpm-lock.yaml -> pnpm, yarn.lock -> yarn, otherwise npm).

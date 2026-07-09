@@ -10,6 +10,26 @@ project:
   source_extensions:
     - ".ts"
     - ".tsx"
+  business_file_patterns:
+    - "*.ts"
+    - "bin/**/*.ts"
+    - "hooks/**/*.ts"
+    - "lib/**/*.ts"
+    - "scripts/**/*.ts"
+    - "skills/**/*.ts"
+    - "src/**/*.ts"
+    - "tools/**/*.ts"
+    - "fixtures/**/*.ts"
+    - "__tests__/**/*.ts"
+  config_file_patterns:
+    - "config.yaml"
+    - "config.example.yaml"
+    - "package.json"
+    - "package-lock.json"
+    - "tsconfig.json"
+    - "tsconfig.test.json"
+    - "schemas/**/*.json"
+    - ".yolo/config.json"
   framework: "generic"
   exclude:
     - "node_modules"

@@ -148,6 +148,7 @@ export async function handlePreSessionFlow({
   const atomicGate = atomicDoctorGate({
     task,
     prdPath,
+    config,
     yoloRoot,
     logTaskBash,
   });

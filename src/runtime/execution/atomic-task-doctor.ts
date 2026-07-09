@@ -83,9 +83,9 @@ function taskText(task) {
   ].filter(Boolean).join("\n").toLowerCase();
 }
 
-function fileLayer(file) {
+function fileLayer(file, ...policySources) {
   const f = normalizeFile(file);
-  if (isPureConfigTarget(f)) return "toolchain";
+  if (isPureConfigTarget(f, ...policySources)) return "toolchain";
   const parts = f.split("/").filter(Boolean).map((part) => part.toLowerCase());
   if (parts.includes("pages") || parts.includes("views") || parts.includes("screens") || parts.includes("routes") || parts.includes("features")) return "pages";
   if (parts.includes("services") || parts.includes("api") || parts.includes("controllers") || parts.includes("server") || parts.includes("domain")) return "services";
@@ -97,7 +97,7 @@ function fileLayer(file) {
   return f.split("/")[0] || "unknown";
 }
 
-function buildLayerMap(projectRoot) {
+function buildLayerMap(projectRoot, ...policySources) {
   const root = resolve(projectRoot);
   const layers = new Map(); // path → category
   const srcDir = resolve(root, "src");
@@ -153,14 +153,14 @@ function buildLayerMap(projectRoot) {
           if (candidate.startsWith(prefix)) return category;
         }
       }
-      return fileLayer(f);
+      return fileLayer(f, ...policySources);
     },
   };
 }
 
-function fileLayerWithMap(file, layerMap) {
+function fileLayerWithMap(file, layerMap, ...policySources) {
   if (layerMap) return layerMap.resolve(file);
-  return fileLayer(file);
+  return fileLayer(file, ...policySources);
 }
 
 // Coerce a task's condition list to an array. Malformed PRDs may carry a
@@ -276,14 +276,14 @@ export function inspectAtomicTask(task, options = Object()) {
 
   const projectRoot = resolve(options.projectRoot || options.project_root || options.root || PROJECT_ROOT);
   const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]).map(String);
-  const layerMap = buildLayerMap(projectRoot);
-  const classify = (file) => fileLayerWithMap(file, layerMap);
+  const layerMap = buildLayerMap(projectRoot, task, options);
+  const classify = (file) => fileLayerWithMap(file, layerMap, task, options);
   const targets = Array.isArray(task.scope?.targets) ? task.scope.targets : [];
   const files = unique(targets.map((target) => normalizeFile(target.file))).map(String);
   const readonlyFiles = unique(task.scope?.readonly_files || []).map(String);
   const layers = unique(files.map(classify)).map(String);
   const text = taskText(task);
-  const exemptionReason = atomicityExemptionReason(task);
+  const exemptionReason = atomicityExemptionReason(task, options);
   if (exemptionReason) {
     const mode = "direct_patch";
     const status = "pass";
@@ -336,7 +336,7 @@ export function inspectAtomicTask(task, options = Object()) {
   const behavioralFailPostconditions = countBehavioralFailPostconditions(task);
   const structuralSingleFileTask = isStructuralSingleFileTask(task, files, behavioralFailPostconditions);
   const uiOnlyTargets = files.length > 0 && files.every((file) => ["pages", "components", "hooks"].includes(classify(file)));
-  const toolchainOnlyTargets = files.length > 0 && files.every(isPureConfigTarget);
+  const toolchainOnlyTargets = files.length > 0 && files.every((file) => isPureConfigTarget(file, task, options));
   const dataTerms = uiOnlyTargets || toolchainOnlyTargets ? [] : DATA_TERMS.filter((term) => text.includes(term));
   const uiTerms = toolchainOnlyTargets ? [] : UI_TERMS.filter((term) => textHasUiTerm(text, term));
   const hookTerms = toolchainOnlyTargets ? [] : HOOK_TERMS.filter((term) => text.includes(term));

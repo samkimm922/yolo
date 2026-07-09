@@ -18,6 +18,24 @@ function fakeFailExec() {
   return () => ({ ok: false, out: "", err: "git unavailable" });
 }
 
+const srcBusinessConfig = {
+  project: {
+    business_file_patterns: ["src/**/*.ts", "src/**/*.js"],
+  },
+};
+
+const layoutBusinessConfig = {
+  project: {
+    business_file_patterns: [
+      "packages/**/*.ts",
+      "app/**/*.tsx",
+      "components/**/*.tsx",
+      "lib/**/*.ts",
+      "migrations/**/*.sql",
+    ],
+  },
+};
+
 describe("files_modified_max scope filtering", () => {
   test("counts all business diffs and reports target scope violations", () => {
     const result = evalFilesModifiedMax(
@@ -32,6 +50,7 @@ describe("files_modified_max scope filtering", () => {
         ].join("\n"),
         "git ls-files --others --exclude-standard": "docs/out-of-band.md",
       }),
+      { config: srcBusinessConfig },
     );
     assert.equal(result.passed, false);
     assert.equal(result.found, 2);
@@ -49,6 +68,7 @@ describe("files_modified_max scope filtering", () => {
         "git diff --name-only": "src/a.ts\nsrc/b.ts\n",
         "git ls-files --others --exclude-standard": "",
       }),
+      { config: srcBusinessConfig },
     );
     assert.equal(result.passed, true);
     assert.equal(result.found, 2);
@@ -65,6 +85,7 @@ describe("files_modified_max scope filtering", () => {
         "git diff --name-only": "app/page.tsx\nlib/db.ts\ncomponents/nav.tsx\ndocs/notes.md\n",
         "git ls-files --others --exclude-standard": "",
       }),
+      { config: layoutBusinessConfig },
     );
 
     assert.equal(result.passed, false);
@@ -435,6 +456,7 @@ describe("business_code_min scope classification", () => {
         "git diff --name-only HEAD": "src/runtime/progress/server.js\n",
         "git ls-files --others --exclude-standard": "",
       }),
+      { config: srcBusinessConfig },
     );
     assert.equal(result.passed, true);
     assert.equal(result.found, 1);
@@ -449,6 +471,7 @@ describe("business_code_min scope classification", () => {
         "git diff --name-only HEAD": "components/board/top-bar.tsx\n",
         "git ls-files --others --exclude-standard": "",
       }),
+      { config: layoutBusinessConfig },
     );
     assert.equal(result.passed, true);
     assert.equal(result.found, 1);
@@ -504,6 +527,7 @@ describe("business_code_min scope classification", () => {
           "git diff --name-only HEAD": "",
           "git ls-files --others --exclude-standard": "",
         }),
+        { config: srcBusinessConfig },
       );
       assert.equal(result.passed, true);
       assert.equal(result.found, 1);

@@ -99,7 +99,12 @@ describe("atomic task doctor", () => {
         post_conditions: [
           { id: "POST-PKG", type: "code_contains", severity: "FAIL", params: { file: "package.json", text: "\"test\"" } },
         ],
-      }, { root, projectRoot: root, writeEvidence: true });
+      }, {
+        root,
+        projectRoot: root,
+        config: { project: { config_file_patterns: ["package.json"] } },
+        writeEvidence: true,
+      });
 
       assert.equal(result.status, "pass");
       const evidence = JSON.parse(readFileSync(resolve(root, result.evidence_file), "utf8"));
@@ -370,7 +375,12 @@ describe("atomic task doctor", () => {
         post_conditions: [
           { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: {} },
         ],
-      }, { root, projectRoot: root, writeEvidence: false });
+      }, {
+        root,
+        projectRoot: root,
+        config: { project: { business_file_patterns: ["app/**/*.ts"] } },
+        writeEvidence: false,
+      });
 
       assert.ok(result.reasons.some((reason) => reason.id === "CREATES_NEW_FILE"));
     } finally {

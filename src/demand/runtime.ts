@@ -2173,15 +2173,17 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
 
 function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const policyContext = { prd: input.prd || input, config: input.config || options.config };
   const results = [];
   const blockers = [];
   const warnings = [];
   for (const task of tasks) {
-    if (!shouldInspectAtomicity(task, "demand")) continue;
+    if (!shouldInspectAtomicity(task, "demand", policyContext)) continue;
     try {
       const result = inspectAtomicTask(task, {
         projectRoot,
         root: options.yoloRoot || options.yolo_root || projectRoot,
+        ...policyContext,
         writeEvidence: false,
       });
       results.push(result);
