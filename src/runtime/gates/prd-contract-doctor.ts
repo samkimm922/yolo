@@ -223,6 +223,52 @@ function conditionDeclaresExpectedFailure(condition = Object(), method = Object(
   return condition?.invert === true || expectedBefore === "fail" || expectedBefore === "failure" || expectedBefore === "red";
 }
 
+function collectParamFiles(value, out = []) {
+  if (!value) return out;
+  if (typeof value === "string") {
+    out.push(normalizeTargetPath(value));
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectParamFiles(item, out);
+    return out;
+  }
+  if (typeof value === "object") {
+    for (const key of ["file", "path", "target", "target_file", "file_path"]) {
+      if (value[key]) collectParamFiles(value[key], out);
+    }
+  }
+  return out;
+}
+
+function conditionCoveredTargets(condition, targets = []) {
+  const normalized = normalizeCondition(condition);
+  if (!isExecutableFailGate(condition) || !TARGET_COVERAGE_CONDITION_TYPES.has(normalized.type)) {
+    return new Set();
+  }
+
+  const params = normalized.params || {};
+  const files = [
+    ...collectParamFiles(params.file),
+    ...collectParamFiles(params.path),
+    ...collectParamFiles(params.target),
+    ...collectParamFiles(params.target_file),
+    ...collectParamFiles(params.file_path),
+    ...collectParamFiles(params.files),
+    ...collectParamFiles(params.paths),
+    ...collectParamFiles(params.targets),
+    ...collectParamFiles(condition.file),
+    ...collectParamFiles(condition.path),
+    ...collectParamFiles(condition.target_file),
+  ].filter(Boolean);
+
+  if (normalized.type === "target_file_modified" && files.length === 0 && targets[0]?.file) {
+    files.push(normalizeTargetPath(targets[0].file));
+  }
+
+  return new Set(files);
+}
+
 function inspectAuthenticityContract(task = Object()) {
   const failures = [];
   if (!taskRequiresAuthenticityContract(task)) return failures;
@@ -320,52 +366,6 @@ function inspectAuthenticityContract(task = Object()) {
     }
   }
   return failures;
-}
-
-function collectParamFiles(value, out = []) {
-  if (!value) return out;
-  if (typeof value === "string") {
-    out.push(normalizeTargetPath(value));
-    return out;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectParamFiles(item, out);
-    return out;
-  }
-  if (typeof value === "object") {
-    for (const key of ["file", "path", "target", "target_file", "file_path"]) {
-      if (value[key]) collectParamFiles(value[key], out);
-    }
-  }
-  return out;
-}
-
-function conditionCoveredTargets(condition, targets = []) {
-  const normalized = normalizeCondition(condition);
-  if (!isExecutableFailGate(condition) || !TARGET_COVERAGE_CONDITION_TYPES.has(normalized.type)) {
-    return new Set();
-  }
-
-  const params = normalized.params || {};
-  const files = [
-    ...collectParamFiles(params.file),
-    ...collectParamFiles(params.path),
-    ...collectParamFiles(params.target),
-    ...collectParamFiles(params.target_file),
-    ...collectParamFiles(params.file_path),
-    ...collectParamFiles(params.files),
-    ...collectParamFiles(params.paths),
-    ...collectParamFiles(params.targets),
-    ...collectParamFiles(condition.file),
-    ...collectParamFiles(condition.path),
-    ...collectParamFiles(condition.target_file),
-  ].filter(Boolean);
-
-  if (normalized.type === "target_file_modified" && files.length === 0 && targets[0]?.file) {
-    files.push(normalizeTargetPath(targets[0].file));
-  }
-
-  return new Set(files);
 }
 
 function suggestionForUnsupported(condition) {

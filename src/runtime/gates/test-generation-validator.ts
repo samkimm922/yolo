@@ -137,10 +137,71 @@ function methodMarkers(method = Object()) {
     .filter((marker) => clean(isRecord(marker) ? marker.text || marker.pattern : marker).length > 0);
 }
 
+function addAcceptanceFailure(failures, code, detail) {
+  failures.push({ code, detail });
+}
+
+function validateAcceptanceCoverage(task, cwd, failures) {
+  if (task?.test_generation?.acceptance_coverage_required !== true && task?.atomicity?.source !== "synthetic_automated_acceptance") return;
+  const manifest = task?.test_generation?.acceptance_coverage || task?.acceptance_coverage || null;
+  const criteria = asArray(manifest?.criteria || manifest?.checklist);
+  if (!isRecord(manifest) || criteria.length === 0) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_MANIFEST_MISSING", "合成验收测试任务必须声明 test_generation.acceptance_coverage 覆盖清单。");
+    return;
+  }
+
+  const targetFile = normalizePath(manifest.required_test_file || asArray(manifest.required_test_files)[0] || taskTargetTestFiles(task)[0]);
+  if (!targetFile) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", "acceptance_coverage 必须声明 required_test_file 或在 scope.targets 中声明测试文件。");
+    return;
+  }
+  const abs = resolve(cwd, targetFile);
+  if (!existsSync(abs)) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", `acceptance_coverage 指向的测试文件不存在: ${targetFile}`);
+    return;
+  }
+
+  const content = readFileSync(abs, "utf8");
+  const testNames = declaredTestNames(content);
+  for (const criterion of criteria) {
+    const criterionId = clean(criterion?.criterion_id || criterion?.id);
+    if (!criterionId) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_ID_MISSING", "acceptance_coverage.criteria 中存在缺少 criterion_id 的条目。");
+      continue;
+    }
+    const rules = asArray(criterion?.rules || criterion?.rule).map(clean).filter(Boolean);
+    const unknownRules = rules.filter((rule) => !DETERMINISTIC_ACCEPTANCE_RULES.has(rule));
+    if (unknownRules.length > 0) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_UNKNOWN_RULE", `成功标准 ${criterionId} 包含未知确定性规则: ${unknownRules.join(", ")}。`);
+    }
+    if (criterion?.requires_manual_test === true) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_REQUIRES_MANUAL_TEST", `成功标准 ${criterionId} 需要人工测试；确定性生成器不能静默跳过。`);
+    }
+    const requiredName = clean(criterion.required_test_name || criterion.test_name);
+    const hasNamedTest = content.includes(criterionId)
+      || (requiredName && content.includes(requiredName))
+      || testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
+    if (!hasNamedTest) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_TEST_MISSING", `缺少覆盖成功标准 ${criterionId} 的测试源标记。测试源必须包含 criterion_id 或 required_test_name。`);
+    }
+
+    for (const marker of asArray(criterion.required_markers || criterion.required_marker)) {
+      if (!markerMatches(content, marker)) {
+        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_MARKER_MISSING", `成功标准 ${criterionId} 缺少要求的测试标记/断言: ${markerLabel(marker)}`);
+      }
+    }
+
+    for (const marker of asArray(criterion.forbidden_patterns || criterion.forbidden_markers)) {
+      if (markerMatches(content, marker, true)) {
+        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_FORBIDDEN_PATTERN", `成功标准 ${criterionId} 出现禁止的测试复算/替代模式: ${markerLabel(marker)}`);
+      }
+    }
+  }
+}
+
 function validateAuthenticityContract(task, cwd, changedTests, failures) {
   const auth = authenticityContract(task);
   if (!auth || typeof auth !== "object" || Array.isArray(auth)) return;
-
   if (auth.required !== true) {
     failures.push({
       code: "AUTHENTICITY_CONTRACT_NOT_REQUIRED",
@@ -156,7 +217,6 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
     });
     return;
   }
-
   for (const [index, method] of methods.entries()) {
     const type = clean(method?.type);
     if (!AUTHENTICITY_METHOD_TYPES.has(type)) {
@@ -247,68 +307,6 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
             });
           }
         }
-      }
-    }
-  }
-}
-
-function addAcceptanceFailure(failures, code, detail) {
-  failures.push({ code, detail });
-}
-
-function validateAcceptanceCoverage(task, cwd, failures) {
-  if (task?.test_generation?.acceptance_coverage_required !== true && task?.atomicity?.source !== "synthetic_automated_acceptance") return;
-  const manifest = task?.test_generation?.acceptance_coverage || task?.acceptance_coverage || null;
-  const criteria = asArray(manifest?.criteria || manifest?.checklist);
-  if (!isRecord(manifest) || criteria.length === 0) {
-    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_MANIFEST_MISSING", "合成验收测试任务必须声明 test_generation.acceptance_coverage 覆盖清单。");
-    return;
-  }
-
-  const targetFile = normalizePath(manifest.required_test_file || asArray(manifest.required_test_files)[0] || taskTargetTestFiles(task)[0]);
-  if (!targetFile) {
-    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", "acceptance_coverage 必须声明 required_test_file 或在 scope.targets 中声明测试文件。");
-    return;
-  }
-  const abs = resolve(cwd, targetFile);
-  if (!existsSync(abs)) {
-    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", `acceptance_coverage 指向的测试文件不存在: ${targetFile}`);
-    return;
-  }
-
-  const content = readFileSync(abs, "utf8");
-  const testNames = declaredTestNames(content);
-  for (const criterion of criteria) {
-    const criterionId = clean(criterion?.criterion_id || criterion?.id);
-    if (!criterionId) {
-      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_ID_MISSING", "acceptance_coverage.criteria 中存在缺少 criterion_id 的条目。");
-      continue;
-    }
-    const rules = asArray(criterion?.rules || criterion?.rule).map(clean).filter(Boolean);
-    const unknownRules = rules.filter((rule) => !DETERMINISTIC_ACCEPTANCE_RULES.has(rule));
-    if (unknownRules.length > 0) {
-      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_UNKNOWN_RULE", `成功标准 ${criterionId} 包含未知确定性规则: ${unknownRules.join(", ")}。`);
-    }
-    if (criterion?.requires_manual_test === true) {
-      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_REQUIRES_MANUAL_TEST", `成功标准 ${criterionId} 需要人工测试；确定性生成器不能静默跳过。`);
-    }
-    const requiredName = clean(criterion.required_test_name || criterion.test_name);
-    const hasNamedTest = content.includes(criterionId)
-      || (requiredName && content.includes(requiredName))
-      || testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
-    if (!hasNamedTest) {
-      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_TEST_MISSING", `缺少覆盖成功标准 ${criterionId} 的测试源标记。测试源必须包含 criterion_id 或 required_test_name。`);
-    }
-
-    for (const marker of asArray(criterion.required_markers || criterion.required_marker)) {
-      if (!markerMatches(content, marker)) {
-        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_MARKER_MISSING", `成功标准 ${criterionId} 缺少要求的测试标记/断言: ${markerLabel(marker)}`);
-      }
-    }
-
-    for (const marker of asArray(criterion.forbidden_patterns || criterion.forbidden_markers)) {
-      if (markerMatches(content, marker, true)) {
-        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_FORBIDDEN_PATTERN", `成功标准 ${criterionId} 出现禁止的测试复算/替代模式: ${markerLabel(marker)}`);
       }
     }
   }
