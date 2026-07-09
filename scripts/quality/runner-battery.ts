@@ -350,14 +350,14 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
-    id: "done-pretty-tsc-baseline-error",
+    id: "done-declared-output-baseline",
     expect: "done",
     description:
-      "TypeScript pretty-format errors that already exist in tsc-baseline.json are not new type errors; no_new_type_errors must pass instead of reporting a false not_done.",
+      "A declared command's existing output line is stored in the generic snapshot baseline; no_new_type_errors must pass without parsing a tool-specific error schema.",
     baseFiles: {
       "src/feature.ts": "export const v = 1;\n",
       "src/legacy.ts": "export const legacy: string = 1;\n",
-      "scripts/yolo/state/runtime/tsc-baseline.json": "{\n  \"keys\": [\n    \"src/legacy.ts:1:TS2322\"\n  ]\n}\n",
+      "scripts/yolo/state/runtime/tsc-baseline.json": "{\n  \"keys\": [\n    \"line:src/legacy.ts:1:14 - error TS2322: Type number is not assignable to type string.\"\n  ]\n}\n",
       "tsc.js":
         "console.log('src/legacy.ts:1:14 - error TS2322: Type number is not assignable to type string.');\nprocess.exit(1);\n",
     },
@@ -375,16 +375,15 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
-    id: "done-absolute-tsc-baseline-error",
+    id: "done-arbitrary-output-baseline",
     expect: "done",
     description:
-      "A TypeScript error reported with an absolute in-repo path can still match a relative tsc-baseline.json key; otherwise no_new_type_errors reports a false not_done for an existing error.",
+      "An arbitrary declared type-check output line already present in the generic snapshot baseline must not be reported as a new error.",
     baseFiles: {
       "src/feature.ts": "export const v = 1;\n",
       "src/legacy.ts": "export const legacy: string = 1;\n",
-      "scripts/yolo/state/runtime/tsc-baseline.json": "{\n  \"keys\": [\n    \"src/legacy.ts:1:TS2322\"\n  ]\n}\n",
-      "tsc.js":
-        "console.log(process.cwd() + '/src/legacy.ts(1,14): error TS2322: Type number is not assignable to type string.');\nprocess.exit(1);\n",
+      "scripts/yolo/state/runtime/tsc-baseline.json": "{\n  \"keys\": [\n    \"line:legacy.ts:1: existing diagnostic\"\n  ]\n}\n",
+      "check.js": "console.log('legacy.ts:1: existing diagnostic');\nprocess.exit(1);\n",
     },
     editFiles: {
       "src/feature.ts": "export const v = 2;\n",
@@ -395,7 +394,7 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       scope: { targets: [{ file: "src/feature.ts" }] },
       post_conditions: [
         { id: "POST-TARGET", type: "target_file_modified", severity: "FAIL", params: { file: "src/feature.ts" } },
-        { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node tsc.js" } },
+        { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node check.js" } },
       ],
     },
   },

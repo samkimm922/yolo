@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {
   explicitCodePostconditionsPass,
   inspectPostPrecheckSkip,
-  parseTscErrorFiles,
-  targetFilesHaveTscErrors,
+  commandOutputLines,
+  targetFilesHaveCommandOutput,
   taskForValidSkipPostconditions,
 } from "../src/runtime/execution/post-precheck.js";
 
@@ -78,22 +78,21 @@ describe("post-precheck helpers", () => {
     }), { passed: false, reason: "no_post_conditions" });
   });
 
-  test("parseTscErrorFiles and targetFilesHaveTscErrors preserve runner matching rules", () => {
-    const parsed = parseTscErrorFiles([
-      "src/a.ts(1,2): error TS2322: bad",
-      "packages/app/src/b.tsx(3,4): error TS7006: bad",
-      "README.md(1,1): error TS9999: ignored",
-    ].join("\n"));
+  test("commandOutputLines and targetFilesHaveCommandOutput support arbitrary type-check output", () => {
+    const output = [
+      "src/a.py:1: error: bad",
+      "packages/app/src/b.py:3: error: bad",
+      "README.md:1: warning: ignored",
+    ].join("\n");
 
-    assert.deepEqual(parsed.errorLines, [
-      "src/a.ts(1,2): error TS2322: bad",
-      "packages/app/src/b.tsx(3,4): error TS7006: bad",
-      "README.md(1,1): error TS9999: ignored",
+    assert.deepEqual(commandOutputLines(output), [
+      "src/a.py:1: error: bad",
+      "packages/app/src/b.py:3: error: bad",
+      "README.md:1: warning: ignored",
     ]);
-    assert.deepEqual([...parsed.files].sort(), ["packages/app/src/b.tsx", "src/a.ts"]);
-    assert.equal(targetFilesHaveTscErrors(["./src/a.ts"], parsed.files), true);
-    assert.equal(targetFilesHaveTscErrors(["src/b.tsx"], parsed.files), true);
-    assert.equal(targetFilesHaveTscErrors(["src/c.ts"], parsed.files), false);
+    assert.equal(targetFilesHaveCommandOutput(["./src/a.py"], output), true);
+    assert.equal(targetFilesHaveCommandOutput(["src/b.py"], output), true);
+    assert.equal(targetFilesHaveCommandOutput(["src/c.py"], output), false);
   });
 
   test("inspectPostPrecheckSkip returns a valid skip transition when explicit checks and typecheck pass", () => {
@@ -124,16 +123,16 @@ describe("post-precheck helpers", () => {
     assert.equal(outcome.transition.prd_update.scope.expected_zero_business_code, true);
   });
 
-  test("inspectPostPrecheckSkip blocks skip when TSC output still touches scoped target files", () => {
+  test("inspectPostPrecheckSkip blocks skip when type_check output still touches scoped target files", () => {
     const readers = createFileReaders({
       "/repo/src/a.ts": "export const fixed = true;\n",
     });
     const error = new Error("typecheck failed") as Error & { stdout: string };
-    error.stdout = "src/a.ts(1,2): error TS2322: bad\nsrc/other.ts(1,1): error TS7006: bad";
+    error.stdout = "src/a.py:1: error: bad\nsrc/other.py:1: error: bad";
     const outcome = inspectPostPrecheckSkip({
       task: {
         id: "FIX-3",
-        scope: { targets: [{ file: "src/a.ts" }] },
+        scope: { targets: [{ file: "src/a.py" }] },
         post_conditions: [
           { type: "code_contains", params: { file: "src/a.ts", text: "fixed = true" } },
         ],
@@ -147,16 +146,16 @@ describe("post-precheck helpers", () => {
     });
 
     assert.equal(outcome.shouldSkip, false);
-    assert.equal(outcome.reason, "target_tsc_errors");
-    assert.match(outcome.logMessage, /TSC 编译错误仍涉及目标文件/);
+    assert.equal(outcome.reason, "target_type_check_errors");
+    assert.match(outcome.logMessage, /type_check 输出仍涉及目标文件/);
   });
 
-  test("inspectPostPrecheckSkip ignores unrelated TSC failures", () => {
+  test("inspectPostPrecheckSkip ignores unrelated type_check failures", () => {
     const readers = createFileReaders({
       "/repo/src/a.ts": "export const fixed = true;\n",
     });
     const error = new Error("typecheck failed") as Error & { stderr: string };
-    error.stderr = "src/other.ts(1,1): error TS7006: bad";
+    error.stderr = "src/other.py:1: error: bad";
     const outcome = inspectPostPrecheckSkip({
       task: {
         id: "FIX-4",

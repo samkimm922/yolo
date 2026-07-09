@@ -1,13 +1,14 @@
 // evaluators/quality-check.js — evalNoForbiddenPatterns / evalNoNewTypeErrors / evalNoNewLintErrors / evalNoNewDeadCode
 
-import { readFileSync, existsSync, realpathSync } from "node:fs";
-import { resolve, join, relative } from "node:path";
-import { isWithin } from "../security/path-guard.js";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { isWithin, resolveWithinRoot } from "../security/path-guard.js";
 import { execCommand } from "../security/safe-exec.js";
 import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
 import { config } from "../config.js";
 import type { EvalParams, EvalResult, ExecFn, ForbiddenPattern, TaskScope } from "./types.js";
 import { commandUnavailableDetail, resolveBuildCommand, resolveGateTimeout } from "../toolchain.js";
+import { commandOutputSnapshotKeys, matchDeclaredErrorOutput } from "../../runtime/gates/error-output-policy.js";
 
 type BuildCommandKey = "type_check" | "lint" | "dead_code";
 
@@ -18,51 +19,8 @@ type ForbiddenPatternViolation = {
   description: string;
 };
 
-type EslintIssue = {
-  filePath?: string;
-  messages?: Array<{
-    ruleId?: string;
-    severity?: number;
-    line?: number;
-  }>;
-};
-
-type KnipIssue = {
-  file: string;
-  exports?: Array<{ name: string }>;
-  types?: Array<{ name: string }>;
-};
-
 function configuredCommand(params: EvalParams = {}, key: BuildCommandKey, ROOT: string): string {
   return String(params.command || resolveBuildCommand(key, config, ROOT));
-}
-
-function normalizeDiagnosticFilePath(filePath: unknown, ROOT: string): string {
-  const raw = String(filePath || "").trim().replace(/^\.\//, "");
-  if (!raw) return raw;
-
-  const repoRoot = resolve(ROOT);
-  const absolute = resolve(repoRoot, raw);
-  if (isWithin(absolute, repoRoot)) {
-    return relative(repoRoot, absolute).replace(/\\/g, "/");
-  }
-
-  try {
-    const realRoot = realpathSync(repoRoot);
-    const realAbsolute = existsSync(absolute) ? realpathSync(absolute) : absolute;
-    if (isWithin(realAbsolute, realRoot)) {
-      return relative(realRoot, realAbsolute).replace(/\\/g, "/");
-    }
-  } catch {}
-
-  return raw.replace(/\\/g, "/");
-}
-
-function normalizeTypeErrorKey(key: unknown, ROOT: string): string {
-  const raw = String(key || "");
-  const match = raw.match(/^(.*):(\d+):(TS\d+)$/);
-  if (!match) return raw;
-  return `${normalizeDiagnosticFilePath(match[1], ROOT)}:${match[2]}:${match[3]}`;
 }
 
 function targetFilesFromScope(taskScope: TaskScope): string[] {
@@ -216,87 +174,95 @@ export function evalNoForbiddenPatterns(params: EvalParams, taskScope: TaskScope
   return { passed: true, detail: "安全扫描通过，无禁用模式", violations: [] };
 }
 
-export function evalNoNewTypeErrors(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
-  const FATAL_CODES = new Set([
-    "TS2304", "TS2305", "TS2307", "TS2322", "TS2345", "TS2554", "TS2741",
-  ]);
+type OutputGateKind = "type_check" | "lint" | "dead_code";
 
-  const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "tsc-baseline.json");
-  let baselineKeys: string[] = [];
-  if (existsSync(baselinePath)) {
-    try {
-      const json = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
-      if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map((key) => normalizeTypeErrorKey(key, ROOT));
-    } catch {}
+function baselinePathFor(params: EvalParams, kind: OutputGateKind, ROOT: string): string | null {
+  const explicit = params.baseline_path || params.baselinePath;
+  const filename = kind === "type_check"
+    ? "tsc-baseline.json"
+    : kind === "lint"
+      ? "eslint-baseline.json"
+      : "knip-baseline.json";
+  const candidate = explicit || join(ROOT, "scripts", "yolo", "state", "runtime", filename);
+  const guarded = resolveWithinRoot(ROOT, String(candidate));
+  return guarded.ok ? guarded.path || null : null;
+}
+
+function readBaselineKeys(params: EvalParams, kind: OutputGateKind, ROOT: string): { keys: string[]; error?: string } {
+  const baselinePath = baselinePathFor(params, kind, ROOT);
+  if (!baselinePath || !isWithin(baselinePath, ROOT)) {
+    return { keys: [], error: "baseline 路径必须位于项目根目录内" };
+  }
+  if (!existsSync(baselinePath)) return { keys: [] };
+  try {
+    const parsed = JSON.parse(readFileSync(baselinePath, "utf8")) as unknown;
+    const keys = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object"
+        ? (parsed as { keys?: unknown[]; snapshot?: unknown[]; output_snapshot?: unknown[] }).keys ||
+          (parsed as { snapshot?: unknown[] }).snapshot ||
+          (parsed as { output_snapshot?: unknown[] }).output_snapshot
+        : null;
+    if (!Array.isArray(keys)) return { keys: [], error: "baseline 缺少通用 keys 快照" };
+    return { keys: keys.map(String) };
+  } catch {
+    return { keys: [], error: "baseline JSON 无法解析" };
+  }
+}
+
+function outputFailureDetail(kind: OutputGateKind, result: { exitCode?: number | null; out?: string; err?: string }): string {
+  const code = result.exitCode != null ? `(code ${result.exitCode})` : "";
+  return `${kind} 命令异常退出${code}，无法确认零新增输出`;
+}
+
+function evaluateOutputDiff(
+  kind: OutputGateKind,
+  conditionType: string,
+  params: EvalParams,
+  ROOT: string,
+  result: { ok: boolean; out?: string; err?: string; exitCode?: number | null; commandNotFound?: boolean },
+): EvalResult {
+  const baseline = readBaselineKeys(params, kind, ROOT);
+  if (baseline.error) {
+    return { passed: false, detail: baseline.error, code: "BASELINE_CORRUPT", type: conditionType };
+  }
+  if (result.commandNotFound) {
+    return { passed: false, detail: commandUnavailableDetail(kind, configuredCommand(params, kind, ROOT), ROOT), type: conditionType };
   }
 
-  const command = configuredCommand(params, "type_check", ROOT);
-  if (!command) {
-    return { passed: false, detail: "未配置 type_check 命令，无法验证 no_new_type_errors", type: "no_new_type_errors" };
-  }
-  const tsc = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("type_check", config) });
-  if (tsc.commandNotFound) {
-    return { passed: false, detail: commandUnavailableDetail("type_check", command, ROOT), type: "no_new_type_errors" };
-  }
-  const tscOut = tsc.ok ? tsc.out : (tsc.out || "") + (tsc.err || "");
-
-  const currentKeys = new Set<string>();
-  for (const line of tscOut.split("\n")) {
-    const m = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/) ||
-      line.match(/^(.+?):(\d+):\d+\s+-\s+error\s+(TS\d+)/);
-    if (m) {
-      const normalizedFile = normalizeDiagnosticFilePath(m[1] || "", ROOT);
-      currentKeys.add(`${normalizedFile}:${m[2] || ""}:${m[3] || ""}`);
-    }
+  const output = result.ok ? "" : `${result.out || ""}${result.err || ""}`;
+  const currentKeys = result.ok ? [] : commandOutputSnapshotKeys(output, params, config);
+  if (!result.ok && currentKeys.length === 0) {
+    return { passed: false, detail: outputFailureDetail(kind, result), type: conditionType };
   }
 
-  if (!tsc.ok && currentKeys.size === 0) {
-    const code = tsc.exitCode != null ? `(code ${tsc.exitCode})` : "";
+  const baselineSet = new Set(baseline.keys);
+  const newIssues = currentKeys.filter((key) => !baselineSet.has(key));
+  if (newIssues.length > 0) {
+    const declared = matchDeclaredErrorOutput(output, params, config);
+    const ruleHint = declared.length > 0 ? `（声明规则: ${declared.map((item) => item.id).join(", ")}）` : "";
     return {
       passed: false,
-      detail: `typecheck 命令异常退出${code}，无法确认零错误`,
-      type: "no_new_type_errors",
-    };
-  }
-
-  const baseSet = new Set(baselineKeys);
-
-  const allNewIssues = [...currentKeys].filter((k) => !baseSet.has(k));
-
-  const newIssues = allNewIssues;
-
-  const newFatalIssues = newIssues.filter((k) => {
-    const code = String(k).split(":").pop() || "";
-    return FATAL_CODES.has(code);
-  });
-
-  const otherNewIssues = newIssues.filter((k) => {
-    const code = String(k).split(":").pop() || "";
-    return !FATAL_CODES.has(code);
-  });
-
-  if (newFatalIssues.length > 0) {
-    return {
-      passed: false,
-      detail: `新增致命 tsc 错误 ${newFatalIssues.length} 个: ${newFatalIssues.slice(0, 5).join(", ")}`,
+      detail: `新增 ${newIssues.length} 个 ${kind} 输出${ruleHint}: ${newIssues.slice(0, 3).join(", ")}`,
       newIssues,
-    };
-  }
-
-  if (otherNewIssues.length > 0) {
-    return {
-      passed: false,
-      detail: `新增 ${otherNewIssues.length} 个 tsc 错误: ${otherNewIssues.slice(0, 3).join(", ")}`,
-      newIssues,
+      type: conditionType,
     };
   }
 
   return {
     passed: true,
-    detail: baselineKeys.length > 0
-      ? `(预存 ${baselineKeys.length} 个 tsc 错误，无新增)`
-      : "tsc 零错误",
+    detail: baseline.keys.length > 0 ? `(预存 ${baseline.keys.length} 个 ${kind} 输出，无新增)` : `${kind} 无新增输出`,
+    type: conditionType,
   };
+}
+
+export function evalNoNewTypeErrors(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
+  const command = configuredCommand(params, "type_check", ROOT);
+  if (!command) {
+    return { passed: false, detail: "未配置 type_check 命令，无法验证 no_new_type_errors", type: "no_new_type_errors" };
+  }
+  const result = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("type_check", config) });
+  return evaluateOutputDiff("type_check", "no_new_type_errors", params, ROOT, result);
 }
 
 export function evalTypeErrorsContain(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
@@ -339,144 +305,45 @@ export function evalTypeErrorsContain(params: EvalParams = {}, _taskScope: TaskS
 }
 
 export function evalNoNewLintErrors(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
-  const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "eslint-baseline.json");
-  let baselineKeys: string[] = [];
-  if (existsSync(baselinePath)) {
-    let raw: string;
-    try {
-      raw = readFileSync(baselinePath, "utf8");
-    } catch {
-      return { passed: false, detail: "eslint baseline 不可读，lint 检查无法执行", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
-    }
-    try {
-      const json = JSON.parse(raw) as { keys?: unknown[] };
-      if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map(String);
-      else return { passed: false, detail: "eslint baseline 格式损坏，无法进行新增 lint 错误比对", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
-    } catch {
-      return { passed: false, detail: "eslint baseline JSON 无法解析，无法进行新增 lint 错误比对", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
-    }
-  }
-
   const command = configuredCommand(params, "lint", ROOT);
   if (!command) {
     return { passed: false, detail: "未配置 lint 命令，无法验证 no_new_lint_errors", type: "no_new_lint_errors" };
   }
-  const eslint = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("lint", config) });
-  if (eslint.commandNotFound) {
-    return { passed: false, detail: commandUnavailableDetail("lint", command, ROOT), type: "no_new_lint_errors" };
-  }
-  let issues: EslintIssue[] = [];
-  try {
-    const jsonStart = eslint.out.indexOf("[");
-    if (jsonStart >= 0) {
-      issues = JSON.parse(eslint.out.slice(jsonStart)) as EslintIssue[];
-    } else {
-      return { passed: false, detail: "eslint 输出格式异常：未找到 JSON 数组", type: "no_new_lint_errors" };
-    }
-  } catch {
-    return { passed: false, detail: "eslint 输出无法解析为 JSON", type: "no_new_lint_errors" };
-  }
-
-  const currentKeys = new Set<string>();
-  for (const issue of issues) {
-    const file = issue.filePath?.replace(ROOT + "/", "") || "";
-    for (const msg of issue.messages || []) {
-      // ESLint JSON severity: 1 = warning, 2 = error. Only errors should block
-      // the lint gate; warnings do not cause eslint to exit non-zero by default.
-      // Counting warnings produced false not_done when the toolchain reported
-      // only warnings (e.g., no-console as a warning).
-      if (msg.ruleId && msg.severity === 2) currentKeys.add(`${file}:${msg.line}:${msg.ruleId}`);
-    }
-  }
-
-  if (!eslint.ok && currentKeys.size === 0) {
-    const code = eslint.exitCode != null ? `(code ${eslint.exitCode})` : "";
-    return {
-      passed: false,
-      detail: `eslint 命令异常退出${code}，无法确认零错误`,
-      type: "no_new_lint_errors",
-    };
-  }
-
-  const baseSet = new Set(baselineKeys);
-  const newIssues = [...currentKeys].filter((k) => !baseSet.has(k));
-
-  if (newIssues.length > 0) {
-    return {
-      passed: false,
-      detail: `新增 ${newIssues.length} 个 eslint 问题: ${newIssues.slice(0, 3).join(", ")}`,
-      newIssues,
-    };
-  }
-
-  return {
-    passed: true,
-    detail: baselineKeys.length > 0
-      ? `(预存 ${baselineKeys.length} 个 eslint 问题，无新增)`
-      : "eslint 零错误",
-  };
+  const result = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("lint", config) });
+  return evaluateOutputDiff("lint", "no_new_lint_errors", params, ROOT, result);
 }
 
 export function evalNoNewDeadCode(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
-  const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "knip-baseline.json");
-  let baselineKeys: string[] = [];
-  if (existsSync(baselinePath)) {
-    let raw: string;
-    try {
-      raw = readFileSync(baselinePath, "utf8");
-    } catch {
-      return { passed: false, detail: "dead_code baseline 不可读，死代码检测不可用", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
+  const command = configuredCommand(params, "dead_code", ROOT);
+  if (!command) {
+    const baselinePath = baselinePathFor(params, "dead_code", ROOT);
+    const baseline = readBaselineKeys(params, "dead_code", ROOT);
+    if (baseline.error) {
+      return { passed: false, detail: baseline.error, code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
     }
-    try {
-      const parsed = JSON.parse(raw) as { keys?: unknown[] };
-      if (!parsed || !Array.isArray(parsed.keys)) {
-        return { passed: false, detail: "dead_code baseline 格式损坏，无法进行新增死代码比对", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
-      }
-      baselineKeys = (parsed.keys || []).map(String);
-    } catch {
-      return { passed: false, detail: "dead_code baseline JSON 无法解析，无法进行新增死代码比对", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
-    }
+    return existsSync(baselinePath)
+      ? { passed: false, detail: "dead_code 命令不可用但 baseline 存在，无法验证新增输出", type: "no_new_dead_code" }
+      : { passed: false, status: "indeterminate", detail: "dead_code 不可用且无 baseline，无法验证新增输出", type: "no_new_dead_code" };
   }
-  try {
-    const command = configuredCommand(params, "dead_code", ROOT);
-    if (!command) {
-      return { passed: false, detail: "未配置 dead_code 命令，无法验证 no_new_dead_code", type: "no_new_dead_code" };
-    }
-    const knipResult = execCommand(command, {
-      cwd: ROOT, timeout: params.timeout_ms || (config.gate?.timeout?.dead_code as number | undefined) || 30000,
-    });
-    if (knipResult.rejected) {
-      return { passed: false, detail: `dead_code 命令被拒绝: ${knipResult.reject_detail}`, type: "no_new_dead_code" };
-    }
-    if (!knipResult.ok) {
-      throw new Error(knipResult.stderr || knipResult.error || `dead_code command exited ${knipResult.exit_code}`);
-    }
-    const knipOut = knipResult.stdout;
-    const knipData = JSON.parse(knipOut.trim()) as { issues?: KnipIssue[] };
-    const currentKeys: string[] = [];
-    const excludeDirs = ["node_modules", "dist", "__tests__"];
-    for (const issue of knipData.issues || []) {
-      if (excludeDirs.some((d) => issue.file.startsWith(d))) continue;
-      for (const exp of issue.exports || []) currentKeys.push(issue.file + ":export:" + exp.name);
-      for (const typ of issue.types || []) currentKeys.push(issue.file + ":type:" + typ.name);
-    }
-    const baselineSet = new Set(baselineKeys);
-    const newDead = currentKeys.filter((k) => !baselineSet.has(k));
-    if (newDead.length > 0) {
-      return { passed: false, detail: "新增 " + newDead.length + " 个死代码: " + newDead.slice(0, 5).join(", ") + (newDead.length > 5 ? "..." : ""), found: newDead.length };
-    }
-    return { passed: true, detail: baselineKeys.length ? "(预存 " + baselineKeys.length + " 个，无新增)" : "无死代码" };
-  } catch {
-    const knipBaselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "knip-baseline.json");
-    const hasBaseline = existsSync(knipBaselinePath);
-    if (hasBaseline) {
-      return { passed: false, detail: "knip 执行失败但 baseline 存在，死代码检测不可用", type: "no_new_dead_code" };
-    }
+  const result = execCommand(command, {
+    cwd: ROOT, timeout: params.timeout_ms || (config.gate?.timeout?.dead_code as number | undefined) || 30000,
+  });
+  if (result.rejected) {
+    return { passed: false, detail: `dead_code 命令被拒绝: ${result.reject_detail}`, type: "no_new_dead_code" };
+  }
+  if (!result.ok && !String(result.stdout || result.stderr || "").trim() && !existsSync(baselinePathFor(params, "dead_code", ROOT))) {
     return {
       passed: false,
       status: "indeterminate",
-      detail: "knip 不可用且无 baseline，无法验证死代码",
+      detail: "dead_code 命令失败且无 baseline，无法验证死代码新增输出",
       type: "no_new_dead_code",
     };
   }
+  return evaluateOutputDiff("dead_code", "no_new_dead_code", params, ROOT, {
+    ok: result.ok,
+    out: result.stdout,
+    err: result.stderr,
+    exitCode: result.exit_code,
+    commandNotFound: result.command_not_found,
+  });
 }

@@ -12,6 +12,7 @@ import {
   resolveBuildCommand,
   resolveGateTimeout,
 } from "./toolchain.js";
+import { commandOutputSnapshotKeys } from "../runtime/gates/error-output-policy.js";
 
 // ══════════════════════════════════════════════════════════════════════
 // 内部类型
@@ -62,7 +63,7 @@ interface ApplyFixesResult {
   escalated?: AutoFixFinding[];
 }
 
-// tsc/eslint 错误条目（parseTscErrors/flattenEslintErrors/diffNewErrors 共用）。
+// 通用命令输出条目（用于自动修复后的 baseline diff）。
 interface LintError {
   file: string;
   line: number;
@@ -106,42 +107,14 @@ function parseCollectionsMap(collectionsSrc: string): Map<string, string> {
   return map;
 }
 
-/**
- * 解析 TSC 错误输出，格式: relative/path.ts(line,col): error TSxxxx: message
- */
-function parseTscErrors(stdout: string, rootDir: string): LintError[] {
-  const errors: LintError[] = [];
-  const lines = stdout.split("\n");
-  for (const line of lines) {
-    const m = line.match(/^(.+?)\((\d+),\d+\):\s*(error|warning)\s+(TS\d+):\s*(.+)$/);
-    if (m) {
-      errors.push({
-        file: m[1],
-        line: parseInt(m[2], 10),
-        code: m[4],
-        message: m[5].trim(),
-      });
-    }
-  }
-  return errors;
-}
-
-/** 展平 ESLint JSON 结果为文件级错误列表 */
-function flattenEslintErrors(eslintResult: unknown, rootDir: string): LintError[] {
-  const errors: LintError[] = [];
-  if (!Array.isArray(eslintResult)) return errors;
-  for (const r of eslintResult as Array<{ filePath?: string; messages?: Array<{ line?: number; ruleId?: string; message?: string }> }>) {
-    const file = r.filePath ? relative(rootDir, r.filePath) : "";
-    for (const msg of r.messages || []) {
-      errors.push({
-        file,
-        line: msg.line || 0,
-        code: msg.ruleId || "unknown",
-        message: msg.message || "",
-      });
-    }
-  }
-  return errors;
+function snapshotCommandErrors(output: string, source: string, config: AutoFixConfig): LintError[] {
+  return commandOutputSnapshotKeys(output, config).map((key) => ({
+    file: "",
+    line: 0,
+    code: key,
+    message: key,
+    source,
+  }));
 }
 
 /**
@@ -154,7 +127,7 @@ function diffNewErrors(baselineErrors: LintError[], currentErrors: LintError[], 
   );
   const fileSet = new Set(modifiedFiles);
   return currentErrors.filter((e) => {
-    if (!fileSet.has(e.file)) return false;
+    if (e.file && !fileSet.has(e.file)) return false;
     return !baselineSet.has(`${e.file}:${e.line}:${e.code}`);
   });
 }
@@ -561,7 +534,7 @@ function applyFixesToFile(filePath: string, findings: AutoFixFinding[], rootDir:
  * @param files - 相对路径数组
  * @param rootDir - 项目根目录绝对路径
  * @param _efSync - 可注入的 execFileSync
- * @returns {passed, errors} errors 为新增的 tsc/eslint 错误（带 source）
+ * @returns {passed, errors} errors 为新增的声明命令输出（带 source）
  */
 async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecFileSyncLike, config: AutoFixConfig = Object()): Promise<{ passed: boolean; errors: LintError[] }> {
   const efs = _efSync || execFileSync;
@@ -569,8 +542,8 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
   const relFiles = files.map((f) => f.replace(/\\/g, "/"));
   const lintCommand = resolveBuildCommand("lint", config, rootDir);
 
-  let baselineTscErrors: LintError[] = [];
-  let baselineEslintErrors: LintError[] = [];
+  let baselineTypeCheck: LintError[] = [];
+  let baselineLint: LintError[] = [];
 
   // 1. stash 当前修改（仅针对目标文件），取基线
   try {
@@ -579,22 +552,22 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    // 基线 TSC
+    // 基线 type_check
     try {
       execConfiguredBuildCommand(efs, "type_check", config, rootDir, [], resolveGateTimeout("type_check", config));
     } catch (e) {
-      baselineTscErrors = parseTscErrors((e as { stdout?: string }).stdout || "", rootDir);
+      const error = e as { stdout?: string; stderr?: string; message?: string };
+      baselineTypeCheck = snapshotCommandErrors(`${error.stdout || ""}${error.stderr || ""}${error.message || ""}`, "type_check", config);
     }
 
-    // 基线 ESLint
+    // 基线 lint
     if (lintCommand) {
       try {
-        const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
-        baselineEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
+        const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, relFiles, resolveGateTimeout("lint", config)));
+        baselineLint = [];
       } catch (e) {
-        try {
-          baselineEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
-        } catch { /* eslint JSON parse failed — assume no baseline errors */ }
+        const error = e as { stdout?: string; stderr?: string; message?: string };
+        baselineLint = snapshotCommandErrors(`${error.stdout || ""}${error.stderr || ""}${error.message || ""}`, "lint", config);
       }
     }
 
@@ -613,75 +586,56 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
     } catch { /* no stash to pop */ }
   }
 
-  // 2. 当前状态 TSC
-  let currentTscErrors: LintError[] = [];
+  // 2. 当前状态 type_check
+  let currentTypeCheck: LintError[] = [];
+  let commandFailures: LintError[] = [];
   try {
     execConfiguredBuildCommand(efs, "type_check", config, rootDir, [], resolveGateTimeout("type_check", config));
   } catch (e) {
-    const error = e as { status?: number; stdout?: string; stderr?: string; message?: string };
-    if (error.status === 127) {
-      currentTscErrors = [{
+    const error = e as { stdout?: string; stderr?: string; message?: string };
+    currentTypeCheck = snapshotCommandErrors(`${error.stdout || ""}${error.stderr || ""}${error.message || ""}`, "type_check", config);
+    if (currentTypeCheck.length === 0) {
+      commandFailures.push({
         file: "",
         line: 0,
-        code: "COMMAND_UNAVAILABLE",
-        message: String(error.stderr || error.message || "typecheck command unavailable"),
-      }];
-    } else {
-      currentTscErrors = parseTscErrors(error.stdout || "", rootDir);
+        code: "type_check:command-failed",
+        message: String(error.stderr || error.message || "type_check command failed"),
+        source: "type_check",
+      });
     }
   }
 
-  // 3. 当前状态 ESLint
-  let currentEslintErrors: LintError[] = [];
+  // 3. 当前状态 lint
+  let currentLint: LintError[] = [];
   if (lintCommand) {
     try {
-      const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
-      currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
+      execConfiguredBuildCommand(efs, "lint", config, rootDir, relFiles, resolveGateTimeout("lint", config));
     } catch (e) {
-      // H12: eslint output must be parseable. A parse failure on non-empty output
-      // is fail-open if swallowed ("assume clean"); instead hard-block validation.
-      const rawOut = (e as { stdout?: string }).stdout?.trim() || "";
-      const commandError = e as { status?: number; stderr?: string; message?: string };
-      if (commandError.status === 127) {
-        return {
-          passed: false,
-          errors: [{
-            file: "",
-            line: 0,
-            code: "COMMAND_UNAVAILABLE",
-            message: String(commandError.stderr || commandError.message || "lint command unavailable"),
-            source: "eslint",
-          }],
-        };
-      }
-      try {
-        if (rawOut) {
-          currentEslintErrors = flattenEslintErrors(JSON.parse(rawOut), rootDir);
-        }
-      } catch {
-        return {
-          passed: false,
-          errors: [{
-            file: "",
-            line: 0,
-            code: "OUTPUT_UNPARSEABLE",
-            message: "eslint 输出无法解析为 JSON，无法确认是否引入新错误",
-            source: "eslint",
-          }],
-        };
+      const error = e as { stdout?: string; stderr?: string; message?: string };
+      currentLint = snapshotCommandErrors(`${error.stdout || ""}${error.stderr || ""}${error.message || ""}`, "lint", config);
+      if (currentLint.length === 0) {
+        commandFailures.push({
+          file: "",
+          line: 0,
+          code: "lint:command-failed",
+          message: String(error.stderr || error.message || "lint command failed"),
+          source: "lint",
+        });
       }
     }
   }
 
-  // 4. 对比: 仅关注 modified files 中的新增错误
-  const newTsc = diffNewErrors(baselineTscErrors, currentTscErrors, relFiles);
-  const newEslint = diffNewErrors(baselineEslintErrors, currentEslintErrors, relFiles);
+  if (commandFailures.length > 0) return { passed: false, errors: commandFailures };
+
+  // 4. 对比：输出无法映射到文件时比较整条稳定快照，避免误认为“没有可解析错误”。
+  const newTypeCheck = diffNewErrors(baselineTypeCheck, currentTypeCheck, relFiles);
+  const newLint = diffNewErrors(baselineLint, currentLint, relFiles);
 
   return {
-    passed: newTsc.length === 0 && newEslint.length === 0,
+    passed: newTypeCheck.length === 0 && newLint.length === 0,
     errors: [
-      ...newTsc.map((e) => ({ ...e, source: "tsc" })),
-      ...newEslint.map((e) => ({ ...e, source: "eslint" })),
+      ...newTypeCheck.map((e) => ({ ...e, source: "type_check" })),
+      ...newLint.map((e) => ({ ...e, source: "lint" })),
     ],
   };
 }

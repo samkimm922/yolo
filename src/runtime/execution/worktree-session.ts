@@ -20,9 +20,9 @@ import { safeExecFileSync as defaultExecFileSync, safeExecSync as defaultExecSyn
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 import {
+  baselineFileName,
   buildBaselineArtifact,
-  parseEslintBaselineKeys,
-  parseTscBaselineKeys,
+  snapshotCommandOutput,
 } from "./baselines.js";
 import { isBusinessFile } from "./change-set.js";
 
@@ -768,9 +768,9 @@ function writeWorktreeBaselines({
   try {
     const command = resolveBuildCommand("type_check", config, wtPath);
     const result = run(command, resolveGateTimeout("type_check", config));
-    const keys = parseTscBaselineKeys(result.output);
-    writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify(buildBaselineArtifact({
-      tool: "tsc",
+    const keys = result.output.trim() ? snapshotCommandOutput(result.output, config) : [];
+    writeFileSync(join(wtBaselineDir, baselineFileName("type_check")), JSON.stringify(buildBaselineArtifact({
+      tool: "type_check",
       keys,
       command,
       exitCode: result.exitCode,
@@ -784,10 +784,10 @@ function writeWorktreeBaselines({
   try {
     const command = resolveBuildCommand("lint", config, wtPath);
     const result = run(command, resolveGateTimeout("lint", config));
-    writeFileSync(join(wtBaselineDir, "eslint-baseline.json"), JSON.stringify({
+    writeFileSync(join(wtBaselineDir, baselineFileName("lint")), JSON.stringify({
       ...buildBaselineArtifact({
-        tool: "eslint",
-        keys: parseEslintBaselineKeys(result.output, wtPath),
+        tool: "lint",
+        keys: result.output.trim() ? snapshotCommandOutput(result.output, config) : [],
         command,
         exitCode: result.exitCode,
         stdout: result.output,

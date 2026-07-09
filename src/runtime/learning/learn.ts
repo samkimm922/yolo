@@ -218,7 +218,6 @@ function record(args: LearnArgs, paths: LearnPaths): void {
 // 从失败信息提炼规则关键词
 function extractRule(gate: string, message: string): { source: string; rule: string } {
   const clean = message.replace(/\x1b\[[0-9;]*m/g, '').slice(0, 200);
-  if (clean.includes('TS') || clean.includes('tsc')) return { source: 'tsc', rule: `类型错误: ${clean.slice(0, 80)}` };
   const gateRules = { '文件范围': '改动文件数或行数超标', '断言密度': '测试断言密度不足', '危险模式': '代码包含危险模式' };
   for (const [gateName, ruleText] of Object.entries(gateRules)) {
     if (clean.includes(gateName)) return { source: gateName, rule: ruleText };

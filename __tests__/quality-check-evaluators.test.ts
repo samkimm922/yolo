@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evalNoNewTypeErrors, evalNoNewLintErrors, evalNoForbiddenPatterns, evalTypeErrorsContain } from "../src/lib/evaluators/quality-check.js";
@@ -10,13 +10,13 @@ function emptyRoot() {
 }
 
 describe("evalNoNewTypeErrors fail-closed on tool failure (P7.H1)", () => {
-  test("non-zero exit with no parseable errors → FAIL, not pass", () => {
+  test("non-zero exit with empty output → FAIL, not pass", () => {
     const root = emptyRoot();
     try {
       const exec = () => ({
         ok: false,
         out: "",
-        err: "some crash",
+        err: "",
         commandNotFound: false,
         exitCode: 2,
       });
@@ -65,7 +65,7 @@ describe("evalNoNewLintErrors fail-closed on tool failure (P7.H2)", () => {
     try {
       const exec = () => ({
         ok: false,
-        out: "[]",
+        out: "",
         err: "",
         commandNotFound: false,
         exitCode: 2,
@@ -90,13 +90,54 @@ describe("evalNoNewLintErrors fail-closed on tool failure (P7.H2)", () => {
     }
   });
 
-  test("eslint output not parseable as JSON → FAIL", () => {
+  test("arbitrary lint output is compared as a generic snapshot", () => {
     const root = emptyRoot();
     try {
       assert.ok(!existsSync(join(root, "scripts", "yolo", "state", "runtime", "eslint-baseline.json")));
-      const exec = () => ({ ok: true, out: "not json garbage", commandNotFound: false, exitCode: 0 });
-      const result = evalNoNewLintErrors({ command: "eslint --format json ." }, Object(), root, exec);
+      const exec = () => ({ ok: false, out: "src/a.py:1:2: F401 imported but unused", err: "", commandNotFound: false, exitCode: 1 });
+      const result = evalNoNewLintErrors({ command: "ruff check ." }, Object(), root, exec);
       assert.equal(result.passed, false);
+      assert.match(result.detail, /新增/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("declaration-driven type/lint snapshots", () => {
+  test("mypy output passes when the same output is present in the generic baseline", () => {
+    const root = emptyRoot();
+    try {
+      mkdirSync(join(root, "scripts/yolo/state/runtime"), { recursive: true });
+      writeFileSync(join(root, "scripts/yolo/state/runtime/tsc-baseline.json"), JSON.stringify({
+        keys: ["line:src/a.py:1: error: existing"],
+      }), "utf8");
+      const result = evalNoNewTypeErrors(
+        { command: "mypy" },
+        Object(),
+        root,
+        () => ({ ok: false, out: "src/a.py:1: error: existing", err: "", commandNotFound: false, exitCode: 1 }),
+      );
+      assert.equal(result.passed, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("ruff output uses declared rule IDs without an ESLint schema", () => {
+    const root = emptyRoot();
+    try {
+      const result = evalNoNewLintErrors(
+        {
+          command: "ruff check .",
+          failure_output_rules: [{ id: "python-lint", contains: "F401" }],
+        },
+        Object(),
+        root,
+        () => ({ ok: false, out: "src/a.py:1:2: F401 imported but unused", err: "", commandNotFound: false, exitCode: 1 }),
+      );
+      assert.equal(result.passed, false);
+      assert.match(result.detail, /python-lint/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
