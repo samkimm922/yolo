@@ -27,6 +27,7 @@ export function handleGateFailureFlow({
   runtimeDir,
   yoloRoot,
   projectRoot,
+  config,
   analyzeFromGateLog = analyzeFailureFromGateLog,
   analyzeOutput = analyzeFailureOutput,
   summarizeFailures = summarizeGateFailures,
@@ -47,10 +48,13 @@ export function handleGateFailureFlow({
   startedAtMs = nowMs(),
 } = Object()) {
   const gateExitCode = gate.exitCode;
+  const gateStdout = String(gate.stdout || "");
+  const gateStderr = String(gate.stderr || "");
+  const gateOutput = [gateStdout, gateStderr].filter(Boolean).join("\n");
   logEvent("gate_fail", redactDeep({
     task: task.id,
     exitCode: gateExitCode,
-    reason: (gate.stdout || "").slice(0, 200),
+    reason: gateOutput.slice(0, 200),
   }));
 
   // M3: analyzeFromGateLog now returns { failures, unreadable }. Unwrap the
@@ -58,11 +62,16 @@ export function handleGateFailureFlow({
   // analysis (the historical signal is unavailable, not "no failures").
   const gateLogAnalysis = analyzeFromGateLog(task.id, runtimeDir);
   const failures = gateLogAnalysis.failures ||
-    analyzeOutput((gate.stdout || "").slice(0, 500));
+    analyzeOutput(gateOutput.slice(0, 500), {
+      exitCode: gateExitCode,
+      stdout: gateStdout,
+      stderr: gateStderr,
+      config,
+    });
   const gateFailure = summarizeFailures({
     failures,
     gateExitCode,
-    gateOutput: gate.stdout || "",
+    gateOutput,
   });
   const gateLearning = applyLearningEffects({
     taskId: task.id,

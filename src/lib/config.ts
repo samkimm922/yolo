@@ -75,6 +75,7 @@ const DEFAULTS = {
     lint: '',
     test: '',
     build: '',
+    failure_output_rules: [] as unknown[],
   },
 
   executor: {

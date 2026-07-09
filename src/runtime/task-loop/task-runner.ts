@@ -230,6 +230,7 @@ export async function runTaskWithRuntime({
         runtimeDir,
         yoloRoot: stateRoot,
         projectRoot,
+        config,
         cleanupWorktree,
         recordTaskTransition,
         execNode,

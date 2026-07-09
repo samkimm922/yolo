@@ -133,7 +133,7 @@ describe("review-loop execution helpers", () => {
     }
   });
 
-  test("scanProject blocks unavailable type_check tools instead of self-greenlighting", () => {
+  test("scanProject blocks unavailable validation commands instead of self-greenlighting", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-review-scan-missing-typecheck-"));
     try {
       mkdirSync(join(root, "src"), { recursive: true });
@@ -150,10 +150,35 @@ describe("review-loop execution helpers", () => {
       });
 
       assert.ok(
-        result.findings.some((finding) => finding.scanner_id === "typecheck-tool-unavailable"),
-        `expected TYPECHECK_TOOL_UNAVAILABLE finding: ${JSON.stringify(result.findings)}`,
+        result.findings.some((finding) => finding.scanner_id === "command-failed"),
+        `expected COMMAND_FAILED finding: ${JSON.stringify(result.findings)}`,
       );
       assert.equal(result.total_findings > 0, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reports a custom command failure without assuming TypeScript output", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-review-custom-check-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/app.ts"), "export const value = 1;\n", "utf8");
+
+      const result = scanProject({
+        root,
+        files: ["src/app.ts"],
+        includeExternalChecks: true,
+        config: {
+          project: { source_roots: ["src"], src: "src", source_extensions: [".ts"], exclude: ["node_modules", "dist", ".git"] },
+          build: { type_check: "custom-check-tool-does-not-exist --check", lint: "" },
+          gate: { max_lines_per_file: 150, timeout: { type_check: 1000, lint: 1000 } },
+        },
+      });
+
+      const finding = result.findings.find((item) => item.scanner_id === "command-failed");
+      assert.ok(finding);
+      assert.doesNotMatch(finding.description, /TypeScript/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
