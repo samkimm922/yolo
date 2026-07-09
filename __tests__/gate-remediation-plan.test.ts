@@ -26,6 +26,17 @@ describe("gate remediation plan", () => {
     assert.equal(plan.items[0].task_id, "FIX-1");
   });
 
+  test("routes an undeclared toolchain failure by non-zero gate status", () => {
+    const plan = buildGateRemediationPlan({
+      source: "runner-gate",
+      gateExitCode: 2,
+      failures: [{ type: "cargo", detail: "unresolved import" }],
+    });
+
+    assert.equal(plan.action, GATE_REMEDIATION_ACTIONS.RETRY_WITH_CONTEXT);
+    assert.equal(plan.automation_can_continue, true);
+  });
+
   test("routes exhausted retries to review fix instead of weakening the gate", () => {
     const plan = buildGateRemediationPlan({
       source: "runner-gate",

@@ -95,12 +95,12 @@ export function runReviewBattery(): ReviewBatteryResult[] {
         gate: { max_lines_per_file: 150, timeout: { type_check: 1000, lint: 1000 } },
       },
     }) as { findings?: Array<Record<string, unknown>> };
-    const hasToolUnavailableFinding = result.findings?.some(
-      (finding) => finding.scanner_id === "typecheck-tool-unavailable",
+    const hasCommandFailureFinding = result.findings?.some(
+      (finding) => finding.scanner_id === "command-failed",
     ) === true;
-    const status = hasToolUnavailableFinding ? "blocked" : "pass";
+    const status = hasCommandFailureFinding ? "blocked" : "pass";
     coverageResults.push({
-      id: "typecheck_tool_unavailable_blocks_review_greenlight",
+      id: "validation_command_failure_blocks_review_greenlight",
       category: "review_tool_robustness",
       expect: "blocked",
       actualExit: status === "blocked" ? 1 : 0,

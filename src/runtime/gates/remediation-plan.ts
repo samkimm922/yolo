@@ -44,18 +44,6 @@ const AUTO_REMEDIATE_CODES = new Set([
   "MISSING_TERMINAL_EVIDENCE",
 ]);
 
-const RETRYABLE_FAILURE_TYPES = new Set([
-  "eslint",
-  "tsc",
-  "vitest",
-  "test",
-  "tests",
-  "file_scope",
-  "postcondition",
-  "code_safety",
-  "代码安全",
-]);
-
 function clean(value) {
   return String(value ?? "").trim();
 }
@@ -109,11 +97,13 @@ function isAutoRemediableIssue(issue = Object()) {
     /acceptance.*missing|post.?condition.*missing|state matrix|evidence plan|must split|atomicity/.test(text);
 }
 
-function isRetryableFailure(issue = Object()) {
-  const type = clean(issue.type || issue.gate || issue.source);
+function isRetryableFailure(issue = Object(), context = Object()) {
   const text = issueText(issue);
-  return RETRYABLE_FAILURE_TYPES.has(type) ||
-    /eslint|tsc|typescript|test.*fail|vitest|postcondition|file scope|file_scope|lint/.test(text);
+  if (issue.retryable === false) return false;
+  if (issue.retryable === true) return true;
+  const exitCode = Number(context.gateExitCode);
+  return (Number.isInteger(exitCode) && exitCode !== 0) ||
+    /postcondition|file scope|file_scope|lint/.test(text);
 }
 
 function actionForIssue(issue = Object(), context = Object()) {
@@ -121,10 +111,10 @@ function actionForIssue(issue = Object(), context = Object()) {
   if (isUnsafeIssue(issue)) return GATE_REMEDIATION_ACTIONS.STOP_UNSAFE;
   if (decisionAction === "contract_suspect") return GATE_REMEDIATION_ACTIONS.ASK_HUMAN;
   if (decisionAction === "stuck" || decisionAction === "max_retry") return GATE_REMEDIATION_ACTIONS.REROUTE_REVIEW_FIX;
-  if (decisionAction === "retry" && isRetryableFailure(issue)) return GATE_REMEDIATION_ACTIONS.RETRY_WITH_CONTEXT;
+  if (decisionAction === "retry" && isRetryableFailure(issue, context)) return GATE_REMEDIATION_ACTIONS.RETRY_WITH_CONTEXT;
   if (isAutoRemediableIssue(issue)) return GATE_REMEDIATION_ACTIONS.AUTO_REMEDIATE;
   if (isHumanRequiredIssue(issue)) return GATE_REMEDIATION_ACTIONS.ASK_HUMAN;
-  if (isRetryableFailure(issue)) return GATE_REMEDIATION_ACTIONS.RETRY_WITH_CONTEXT;
+  if (isRetryableFailure(issue, context)) return GATE_REMEDIATION_ACTIONS.RETRY_WITH_CONTEXT;
   return GATE_REMEDIATION_ACTIONS.REROUTE_REVIEW_FIX;
 }
 

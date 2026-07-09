@@ -43,10 +43,15 @@ describe("runner gate failure analysis", () => {
   });
 
   test("classifies text gate output into retry categories", () => {
-    assert.deepEqual(analyzeFailureOutput("error TS2322: Type 'string' is not assignable").at(0), {
-      type: "tsc",
+    assert.deepEqual(analyzeFailureOutput("error TS2322: Type 'string' is not assignable", {
+      exitCode: 1,
+      stderr: "error TS2322: Type 'string' is not assignable",
+    }).at(0), {
+      id: "command-failed",
+      type: "command",
       detail: "error TS2322: Type 'string' is not assignable",
-      rules: ["tsc"],
+      rules: ["non_zero_exit"],
+      exit_code: 1,
     });
 
     assert.equal(analyzeFailureOutput("no_new_lint_errors: no-unused-vars at src/a.ts").at(0).type, "eslint");
@@ -54,6 +59,41 @@ describe("runner gate failure analysis", () => {
     assert.equal(analyzeFailureOutput("files_modified_max 文件数超过限制").at(0).type, "file_scope");
     assert.equal(analyzeFailureOutput("innerHTML unsafe sink").at(0).type, "dangerous");
     assert.equal(analyzeFailureOutput("opaque issue").at(0).type, "unknown");
+  });
+
+  test("classifies a non-TypeScript command from exit status and stderr", () => {
+    assert.deepEqual(analyzeFailureOutput("cargo check: unresolved import", {
+      exitCode: 1,
+      stderr: "cargo check: unresolved import",
+    }).at(0), {
+      id: "command-failed",
+      type: "command",
+      detail: "cargo check: unresolved import",
+      rules: ["non_zero_exit"],
+      exit_code: 1,
+    });
+  });
+
+  test("uses project-declared literal output rules when they match", () => {
+    assert.deepEqual(analyzeFailureOutput("cargo check: unresolved import", {
+      exitCode: 1,
+      stderr: "cargo check: unresolved import",
+      config: {
+        build: {
+          failure_output_rules: [{
+            id: "dependency-check",
+            type: "dependency",
+            contains: "unresolved import",
+          }],
+        },
+      },
+    }).at(0), {
+      id: "dependency-check",
+      type: "dependency",
+      detail: "cargo check: unresolved import",
+      rules: ["dependency-check"],
+      exit_code: 1,
+    });
   });
 
   test("builds scoped retry hints from relevant failure lines", () => {

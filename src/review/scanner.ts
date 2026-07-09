@@ -13,6 +13,7 @@ import { redact } from "../lib/security/redact.js";
 import { execCommand } from "../lib/security/safe-exec.js";
 import type { ExecCommandResult } from "../lib/security/safe-exec.js";
 import { resolveGateTimeout } from "../lib/toolchain.js";
+import { commandFailureIssues } from "../runtime/gates/error-output-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -33,6 +34,7 @@ type ScannerConfig = {
   build: {
     type_check?: string;
     lint?: string;
+    failure_output_rules?: unknown[];
   };
   gate: {
     max_lines_per_file?: number;
@@ -446,24 +448,36 @@ function buildCoverageArtifact({ settings, files }: { settings: ScannerSettings;
   };
 }
 
-function typecheckToolUnavailableFinding(result: ExecCommandResult, output: string): ScannerRawFinding {
+function commandFailureFinding(
+  result: ExecCommandResult,
+  output: string,
+  settings: ScannerSettings,
+): ScannerRawFinding {
+  const failure = commandFailureIssues({
+    ...result,
+    output,
+    config: settings.config,
+  })[0] || {
+    detail: output || "configured command failed",
+  };
   const reason = result.rejected
     ? `command rejected: ${result.reject_detail || result.reject_reason || "unsafe command"}`
     : result.command_not_found
       ? "command not found"
       : result.timed_out
-        ? "type_check timed out"
-        : `type_check exited ${result.exit_code ?? "unknown"} without parseable TypeScript errors`;
+        ? "configured command timed out"
+        : `configured command exited ${result.exit_code ?? "unknown"}`;
+  const detail = String(failure.detail || reason).slice(0, 300);
   return {
-    scanner_id: "typecheck-tool-unavailable",
+    scanner_id: "command-failed",
     dimension: "code",
     severity: "HIGH",
     file: null,
     line: 0,
     fix_type: "MANUAL_REVIEW",
-    match: reason,
-    description: `Type check tool unavailable or unverifiable: ${reason}`,
-    context: redact(String(output || result.error || "").trim().slice(0, 120)),
+    match: detail,
+    description: `Configured validation command failed: ${detail}`,
+    context: redact(String(output || result.error || reason).trim().slice(0, 120)),
   };
 }
 
@@ -931,42 +945,15 @@ export function scanProject(options: ScannerOptions = Object()): ReviewScannerRe
     allFindings.push(...scanFile(file, settings));
   }
 
-  // ── TSC 编译错误扫描 ──
+  // ── Configured validation command ──
   if (settings.includeExternalChecks && settings.config.build.type_check) {
     // P12.I1: route config-supplied type_check through safe-exec.
-    const tscResult: ExecCommandResult = execCommand(settings.config.build.type_check, {
+    const commandResult: ExecCommandResult = execCommand(settings.config.build.type_check, {
       cwd: settings.root, timeout: resolveGateTimeout("type_check", settings.config),
     });
-    if (!tscResult.ok) {
-      const tscOutput = `${tscResult.stdout || ""}${tscResult.stderr || ""}`;
-      const tscLines = tscOutput.split('\n').filter((line) => /error TS\d+:/.test(line));
-      const seenFiles = new Set<string>();
-      let parsedTypeErrors = 0;
-      for (const line of tscLines) {
-        const m = line.match(/^(.+?)\((\d+),\d+\):\s*error\s+(TS\d+):\s*(.+)$/);
-        if (!m) continue;
-        const [, rawFile, lineNum, code, message] = m;
-        const file = rawFile.replace(/^\.\//, "");
-        if (!isSourceFile(file, settings)) continue;
-        const dedupKey = `${file}:${code}`;
-        if (seenFiles.has(dedupKey)) continue;
-        seenFiles.add(dedupKey);
-        parsedTypeErrors += 1;
-        allFindings.push({
-          scanner_id: `tsc-${code.toLowerCase()}`,
-          dimension: "code",
-          severity: code === 'TS2307' || code === 'TS2305' ? 'HIGH' : 'MEDIUM',
-          file,
-          line: parseInt(lineNum, 10),
-          fix_type: "CLAUDE_FIX",
-          match: `${code}: ${message.slice(0, 80)}`,
-          description: `TypeScript 编译错误 ${code}: ${message}`,
-          context: line.trim().slice(0, 120),
-        });
-      }
-      if (parsedTypeErrors === 0) {
-        allFindings.push(typecheckToolUnavailableFinding(tscResult, tscOutput));
-      }
+    if (!commandResult.ok) {
+      const commandOutput = `${commandResult.stdout || ""}\n${commandResult.stderr || ""}`;
+      allFindings.push(commandFailureFinding(commandResult, commandOutput, settings));
     }
   }
 

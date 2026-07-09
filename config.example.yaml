@@ -41,6 +41,9 @@ build:
   dead_code: ""
   test: "npm test"
   build: "npm run build"
+  # Optional literal output markers. Matching failures are typed by this
+  # project declaration; unmatched non-zero commands fall back to stderr.
+  failure_output_rules: []
 
 executor:
   # Default executor/provider invocation timeout. Override for slower agents.
