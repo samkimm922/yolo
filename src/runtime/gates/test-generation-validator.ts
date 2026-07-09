@@ -13,6 +13,7 @@ const DETERMINISTIC_ACCEPTANCE_RULES = new Set([
   "fixture_ground_truth_statistics",
   "error_input_nonzero_exit",
 ]);
+const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence"]);
 
 function asArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -96,6 +97,46 @@ function markerMatches(content, marker, forbidden = false) {
   return Boolean((text || pattern) && textMatched && patternMatched);
 }
 
+function markerCount(content, marker) {
+  if (!isRecord(marker)) {
+    const text = clean(marker);
+    if (!text) return 0;
+    return content.split(text).length - 1;
+  }
+  const text = clean(marker.text), pattern = clean(marker.pattern);
+  let total = 0;
+  if (text) total += content.split(text).length - 1;
+  if (pattern) {
+    const regex = safeRegExp(pattern, "g");
+    if (!regex) return total;
+    total += [...content.matchAll(regex)].length;
+  }
+  return total;
+}
+
+function verificationContract(task = Object()) {
+  return task.verification_contract || task.verificationContract || task.test_generation?.verification_contract || task.testGeneration?.verificationContract || null;
+}
+
+function authenticityContract(task = Object()) {
+  const contract = verificationContract(task);
+  return contract?.authenticity || contract?.truthfulness || null;
+}
+
+function methodFiles(method = Object(), auth = Object(), task = Object(), changedTests = []) {
+  return [...new Set([
+    ...asArray(method.files || method.file || method.test_files || method.test_file),
+    ...asArray(auth.files || auth.file || auth.test_files || auth.test_file),
+    ...taskTargetTestFiles(task),
+    ...changedTests.map((item) => item.file),
+  ].map(normalizePath).filter(Boolean))];
+}
+
+function methodMarkers(method = Object()) {
+  return asArray(method.markers || method.marker || method.patterns || method.pattern || method.text)
+    .filter((marker) => clean(isRecord(marker) ? marker.text || marker.pattern : marker).length > 0);
+}
+
 function addAcceptanceFailure(failures, code, detail) {
   failures.push({ code, detail });
 }
@@ -137,9 +178,11 @@ function validateAcceptanceCoverage(task, cwd, failures) {
       addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_REQUIRES_MANUAL_TEST", `成功标准 ${criterionId} 需要人工测试；确定性生成器不能静默跳过。`);
     }
     const requiredName = clean(criterion.required_test_name || criterion.test_name);
-    const hasNamedTest = testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
+    const hasNamedTest = content.includes(criterionId)
+      || (requiredName && content.includes(requiredName))
+      || testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
     if (!hasNamedTest) {
-      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_TEST_MISSING", `缺少覆盖成功标准 ${criterionId} 的命名 test()/it()。测试名必须包含 criterion_id 或 required_test_name。`);
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_TEST_MISSING", `缺少覆盖成功标准 ${criterionId} 的测试源标记。测试源必须包含 criterion_id 或 required_test_name。`);
     }
 
     for (const marker of asArray(criterion.required_markers || criterion.required_marker)) {
@@ -151,6 +194,119 @@ function validateAcceptanceCoverage(task, cwd, failures) {
     for (const marker of asArray(criterion.forbidden_patterns || criterion.forbidden_markers)) {
       if (markerMatches(content, marker, true)) {
         addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_FORBIDDEN_PATTERN", `成功标准 ${criterionId} 出现禁止的测试复算/替代模式: ${markerLabel(marker)}`);
+      }
+    }
+  }
+}
+
+function validateAuthenticityContract(task, cwd, changedTests, failures) {
+  const auth = authenticityContract(task);
+  if (!auth || typeof auth !== "object" || Array.isArray(auth)) return;
+  if (auth.required !== true) {
+    failures.push({
+      code: "AUTHENTICITY_CONTRACT_NOT_REQUIRED",
+      detail: "verification_contract.authenticity.required must be true when an authenticity contract is declared.",
+    });
+  }
+
+  const methods = asArray(auth.methods || auth.proofs || auth.mechanisms);
+  if (methods.length === 0) {
+    failures.push({
+      code: "AUTHENTICITY_METHODS_MISSING",
+      detail: "verification_contract.authenticity.methods must declare at least one proof mechanism.",
+    });
+    return;
+  }
+  for (const [index, method] of methods.entries()) {
+    const type = clean(method?.type);
+    if (!AUTHENTICITY_METHOD_TYPES.has(type)) {
+      failures.push({
+        code: "AUTHENTICITY_METHOD_UNSUPPORTED",
+        detail: `Unsupported authenticity method at index ${index}: ${type || "(missing)"}.`,
+      });
+      continue;
+    }
+    if (["must_fail_probe", "red_green_sequence"].includes(type)) {
+      // PRD contract doctor validates condition references. This runtime gate only
+      // checks source/evidence artifacts that exist after the executor session.
+      continue;
+    }
+
+    const files = methodFiles(method, auth, task, changedTests);
+    if (files.length === 0) {
+      failures.push({
+        code: "AUTHENTICITY_FILES_MISSING",
+        detail: `${type} authenticity method must declare files or target a test file.`,
+      });
+      continue;
+    }
+    const readable = [];
+    for (const file of files) {
+      const abs = resolve(cwd, file);
+      if (!existsSync(abs)) {
+        failures.push({
+          code: "AUTHENTICITY_FILE_MISSING",
+          detail: `Authenticity contract target file does not exist: ${file}`,
+        });
+        continue;
+      }
+      readable.push({ file, content: readFileSync(abs, "utf8") });
+    }
+    if (readable.length === 0) continue;
+
+    const markers = methodMarkers(method);
+    if (markers.length === 0) {
+      failures.push({
+        code: "AUTHENTICITY_MARKERS_MISSING",
+        detail: `${type} authenticity method must declare text or regex markers.`,
+      });
+      continue;
+    }
+
+    if (type === "assertion_count") {
+      const minimum = Number(method.minimum ?? method.min ?? method.min_count);
+      if (!Number.isFinite(minimum) || minimum < 1) {
+        failures.push({
+          code: "AUTHENTICITY_ASSERTION_MINIMUM_INVALID",
+          detail: "assertion_count authenticity method must declare a positive minimum.",
+        });
+        continue;
+      }
+      const count = readable.reduce((sum, item) =>
+        sum + markers.reduce((markerSum, marker) => markerSum + markerCount(item.content, marker), 0), 0);
+      if (count < minimum) {
+        failures.push({
+          code: "AUTHENTICITY_ASSERTION_COUNT_BELOW_MINIMUM",
+          detail: `Authenticity contract requires at least ${minimum} declared assertion marker(s), found ${count}.`,
+          minimum,
+          found: count,
+        });
+      }
+      continue;
+    }
+
+    if (type === "required_marker") {
+      for (const marker of markers) {
+        if (!readable.some((item) => markerMatches(item.content, marker))) {
+          failures.push({
+            code: "AUTHENTICITY_REQUIRED_MARKER_MISSING",
+            detail: `Authenticity contract required marker is missing: ${markerLabel(marker)}`,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (type === "forbidden_pattern") {
+      for (const marker of markers) {
+        for (const item of readable) {
+          if (markerMatches(item.content, marker, true)) {
+            failures.push({
+              code: "AUTHENTICITY_FORBIDDEN_PATTERN",
+              detail: `Authenticity contract forbidden pattern appears in ${item.file}: ${markerLabel(marker)}`,
+            });
+          }
+        }
       }
     }
   }
@@ -352,6 +508,7 @@ export function validateTestGeneration(task, options = Object()) {
     }
   }
   validateAcceptanceCoverage(task, cwd, failures);
+  validateAuthenticityContract(task, cwd, changedTests, failures);
 
   if (!["none", "reuse_existing", "add_minimal", "forbid"].includes(mode)) {
     failures.push({ code: "INVALID_TEST_GENERATION_MODE", detail: `未知 test_generation.mode: ${mode}` });

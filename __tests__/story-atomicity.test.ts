@@ -162,4 +162,56 @@ describe("story atomicity gate", () => {
     assert.equal(result.blockers[0].requirement_id, "REQ-BOARD-CREATE");
     assert.equal(result.inspected.find((item) => item.id === "TASK-BOARD-FIRST-OPEN").status, "pass");
   });
+
+  test("exempts executor acceptance test contract tasks but still blocks broad business tasks", () => {
+    const result = inspectStoryAtomicityFromPrd({
+      requirements: [{
+        id: "REQ-BOARD-FIRST-OPEN",
+        text: "首次打开工作区时显示三列。",
+      }],
+      tasks: [
+        {
+          id: "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001",
+          title: "Executor-owned acceptance coverage",
+          description: "Write tests for create, update, and delete acceptance criteria.",
+          task_kind: "executor_acceptance_test",
+          type: "cleanup",
+        },
+        {
+          id: "TASK-BOARD-BROAD",
+          title: "Board lifecycle",
+          description: "用户可以新增分组 + 新增条目。",
+          task_kind: "demand_atomic_task",
+          type: "feature",
+        },
+      ],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.inspected.some((item) => item.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001"), false);
+    assert.equal(result.blockers[0].item_id, "TASK-BOARD-BROAD");
+  });
+
+  test("exempts executor acceptance test tasks in demand quality task scans", () => {
+    const result = inspectStoryAtomicityFromDemand({
+      scenario_matrix: {
+        scenarios: [{
+          id: "SCN-FIRST-OPEN",
+          desired_behavior: "首次打开工作区时显示三列。",
+        }],
+      },
+    }, {
+      includeRequirements: false,
+      tasks: [{
+        id: "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001",
+        title: "Executor-owned acceptance coverage",
+        description: "Write tests for create, update, and delete acceptance criteria.",
+        task_kind: "executor_acceptance_test",
+        type: "cleanup",
+      }],
+    });
+
+    assert.equal(result.status, "pass");
+    assert.equal(result.inspected.some((item) => item.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001"), false);
+  });
 });

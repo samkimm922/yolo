@@ -23,7 +23,6 @@ import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
-import { generateAcceptanceTestFile, normalizeAcceptanceCoverageForGeneration } from "../src/demand/acceptance-test-generator.js";
 import { validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 import {
   generateFindings,
@@ -67,6 +66,15 @@ function requirePrdTasks(prd: DemandPrdDocument): DemandTask[] {
     throw new Error("expected demand PRD tasks");
   }
   return prd.tasks;
+}
+
+function authenticityForAssertion(task: DemandTask): DemandRecord {
+  const contract = task.verification_contract as DemandRecord | undefined;
+  const authenticity = contract?.authenticity as DemandRecord | undefined;
+  if (!authenticity) {
+    throw new Error(`expected authenticity contract for ${task.id || "task"}`);
+  }
+  return authenticity;
 }
 
 function assertTaskSessionPlan(task: DemandTask, demandId: string): DemandTaskSessionPlan {
@@ -771,7 +779,7 @@ describe("demand runtime", () => {
 
       const prd = spec.prd;
       const tasks = requirePrdTasks(prd);
-      assert.equal(tasks[0].task_kind, "greenfield_scaffold");
+      assert.equal(tasks.some((candidate) => candidate.task_kind === "greenfield_scaffold"), false);
       const task = tasks.find((candidate) =>
         candidate.scope?.targets?.some((target) => target.file === "src/taskcli.ts")
       );
@@ -998,8 +1006,8 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
       requirePrd(prd);
       assert.deepEqual(duplicateTaskKeys(prd.prd.tasks), []);
-      assert.equal(prd.prd.tasks[0].task_kind, "greenfield_scaffold");
-      const businessTasks = prd.prd.tasks.filter((task) => task.task_kind !== "greenfield_scaffold");
+      assert.equal(prd.prd.tasks.some((task) => task.task_kind === "greenfield_scaffold"), false);
+      const businessTasks = prd.prd.tasks;
       assert.equal(businessTasks.filter((task) => task.scope.targets.some((target) => target.file === "src/taskcli.ts")).length, 1);
       assert.equal(businessTasks.filter((task) => task.scope.targets.some((target) => target.file === "__tests__/taskcli.test.ts")).length, 1);
       assert.equal(businessTasks.length, 2);
@@ -2033,8 +2041,8 @@ describe("demand runtime", () => {
       assert.equal(check.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
       const compiledPrd = prd.prd;
       assert.equal(compiledPrd.tasks.length >= 3, true);
-      assert.equal(compiledPrd.tasks[0].task_kind, "greenfield_scaffold");
-      const businessTasks = compiledPrd.tasks.filter((task) => task.task_kind !== "greenfield_scaffold");
+      assert.equal(compiledPrd.tasks.some((task) => task.task_kind === "greenfield_scaffold"), false);
+      const businessTasks = compiledPrd.tasks;
       assert.equal(businessTasks.every((task) => task.task_kind === "demand_atomic_task"), true);
       assert.equal(businessTasks.every((task) => task.scope.max_files <= 2), true);
       assert.equal(businessTasks.every((task) => Boolean(task.handoff.proof)), true);
@@ -2078,7 +2086,7 @@ describe("demand runtime", () => {
     }
   });
 
-  test("R2 dogfood demand generates machine-verifiable gates and a greenfield scaffold first task", () => {
+  test("R2 dogfood demand emits executor-owned acceptance tests and authenticity contracts", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-r2-gitweekly-"));
     try {
       const demandDir = seedDogfoodGitweeklyR2Fixture(root);
@@ -2094,57 +2102,39 @@ describe("demand runtime", () => {
       assert.equal(nakedManualAcceptancePostConditions(compiledPrd).length, 0, "auto-verifiable R2 demand must not emit naked prose acceptance_criteria post_conditions");
       assert.equal(prdTraceEvidenceCount(compiledPrd) > 0, true, "R2 PRD should retain demand evidence trace");
 
-      const scaffold = tasks[0];
-      const scaffoldExpectedOutput = Array.isArray(scaffold.expected_output) ? scaffold.expected_output : [];
-      assert.equal(scaffold.task_kind, "greenfield_scaffold");
-      assertNodeScaffoldToolchain(scaffold);
-      assert.equal(scaffold.scope?.targets?.some((target) => target.file === "package.json"), true);
-      assert.equal(scaffold.scope?.targets?.some((target) => target.file === ".npmrc"), true);
-      assert.ok((scaffold.scope?.targets?.length || 0) <= 2);
-      assert.ok(scaffoldExpectedOutput.includes(".npmrc"));
-      assert.match(scaffoldInstructionText(scaffold), /@types\/node/);
-      assert.match(scaffoldInstructionText(scaffold), /package-lock=false/);
-      assert.doesNotMatch(scaffoldInstructionText(scaffold), /src\/\*\*\/\*\.ts/);
-      assert.match(scaffoldInstructionText(scaffold), /src\/\*\.ts/);
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "file_exists" && condition.params?.file === "package.json"
-      ));
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "code_contains" && condition.params?.file === ".npmrc" && condition.params?.text === "package-lock=false"
-      ));
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "code_contains" && condition.params?.file === "package.json" && condition.params?.text === "\"@types/node\""
-      ));
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "file_not_exists" && condition.params?.file === "package-lock.json"
-      ));
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "file_not_exists" && condition.params?.file === "tsconfig.json"
-      ));
-      assert.ok(scaffold.post_conditions.some((condition) =>
-        condition.type === "tests_pass" && condition.severity === "FAIL"
-      ));
+      assert.equal(tasks.some((task) => task.task_kind === "greenfield_scaffold"), false);
+      assert.equal("generated_acceptance_tests" in (compiledPrd.demand as DemandRecord), false);
 
-      const downstreamTypeOrTestTasks = tasks.slice(1).filter((task) =>
+      const acceptanceTask = tasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      assert.ok(acceptanceTask, "R2 dogfood PRD must include an executor-owned acceptance task");
+      assert.equal(acceptanceTask.status, "pending");
+      assert.equal(acceptanceTask.task_kind, "executor_acceptance_test");
+      assert.equal(taskTargetTestFilesForAssertion(acceptanceTask).includes("test/cli-git-weekly.test.ts"), true);
+      assert.equal((acceptanceTask.test_generation as DemandRecord)?.mode, "add_minimal");
+      assert.equal((acceptanceTask.test_generation as DemandRecord)?.acceptance_coverage_required, true);
+      assert.equal(authenticityForAssertion(acceptanceTask).required, true);
+      assert.ok((authenticityForAssertion(acceptanceTask).methods as DemandRecord[]).some((method) =>
+        method.type === "forbidden_pattern" &&
+        JSON.stringify(method).includes("tests.length > 0")
+      ));
+      assert.ok(acceptanceTask.post_conditions.some((condition) =>
+        condition.type === "tests_pass" && condition.invert === true
+      ), "acceptance task must require a red test before implementation");
+
+      const downstreamTypeOrTestTasks = tasks.filter((task) => task.id !== acceptanceTask.id).filter((task) =>
         task.post_conditions.some((condition) => ["no_new_type_errors", "tests_pass", "test_file_passes"].includes(String(condition.type)))
       );
-      const machineTestGates = tasks.slice(1).flatMap((task) =>
+      const machineTestGates = tasks.filter((task) => task.id !== acceptanceTask.id).flatMap((task) =>
         task.post_conditions.filter((condition) => condition.type === "tests_pass")
       );
-      const machineTestTasks = tasks.slice(1).filter((task) =>
-        task.post_conditions.some((condition) => condition.type === "tests_pass" && condition.params?.require_tests === true)
+      const machineTestTasks = tasks.filter((task) => task.id !== acceptanceTask.id).filter((task) =>
+        task.post_conditions.some((condition) => condition.type === "tests_pass")
       );
       assert.equal(machineTestGates.length > 0, true);
-      assert.equal(machineTestTasks.length > 0, true, "business tasks must run generated acceptance tests as a non-empty test gate");
+      assert.equal(machineTestTasks.length > 0, true, "business tasks must run executor-owned acceptance tests");
       assert.equal(machineTestTasks.some((task) => taskInputsForAssertion(task).includes("test/cli-git-weekly.test.ts")), true);
-      assert.equal(tasks.filter((task) =>
-        task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0
-      ).length, 0, "executor must not receive a pending task to write the generated acceptance test");
-      const syntheticAcceptance = tasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
-      assert.ok(syntheticAcceptance, "R2 dogfood PRD must include a yolo-generated acceptance artifact record");
-      assert.equal(syntheticAcceptance.status, "completed");
-      assert.equal(syntheticAcceptance.task_kind, "yolo_generated_acceptance_test");
-      const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
+      assert.equal(tasks.filter((task) => task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0).length, 1);
+      const coverage = (acceptanceTask as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
       assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
       assert.equal(Array.isArray(coverage?.criteria), true, "synthetic acceptance must carry a machine-readable criterion checklist");
       assert.equal((coverage?.criteria as DemandRecord[]).length > 0, true);
@@ -2153,50 +2143,15 @@ describe("demand runtime", () => {
       ), true);
       const runtimeSource = readFileSync(join(process.cwd(), "src/demand/runtime.ts"), "utf8");
       assert.doesNotMatch(runtimeSource, /git[-_\s]?weekly/i, "demand runtime must compile generic criterion patterns, not fixture-specific git-weekly logic");
-      const syntheticAcceptanceText = [scaffoldInstructionText(syntheticAcceptance), JSON.stringify(syntheticAcceptance.handoff || {})].join("\n");
-      assert.match(syntheticAcceptanceText, /spawnSync/);
-      assert.match(syntheticAcceptanceText, /git init/);
-      assert.match(syntheticAcceptanceText, /--repo/);
-      assert.match(syntheticAcceptanceText, /--output/);
-      assert.match(syntheticAcceptanceText, /bad repo/i);
-      assert.equal(((compiledPrd.demand as DemandRecord).generated_acceptance_tests as DemandRecord[])[0].file, "test/cli-git-weekly.test.ts");
-      for (const requiredText of ["spawnSync", "--repo", "--since", "--until", "--output", "bad repo", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
-        assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
-          condition.type === "code_contains" &&
-          condition.params?.file === "test/cli-git-weekly.test.ts" &&
-          condition.params?.text === requiredText
-        ), `synthetic acceptance task must gate test file on ${requiredText}`);
-      }
-      const gitInitCondition = syntheticAcceptance.post_conditions.find((condition) =>
-        condition.type === "code_matches" &&
-        condition.params?.file === "test/cli-git-weekly.test.ts" &&
-        String(condition.params?.pattern || condition.params?.text || "").includes("init")
-      );
-      assert.ok(gitInitCondition, "synthetic acceptance task must gate argv-style git init calls");
-      const gitInitPattern = String(gitInitCondition.params?.pattern || gitInitCondition.params?.text || "");
-      assert.match('spawnSync("git", ["init"], { cwd: repo });', new RegExp(gitInitPattern));
-      const addedStatsCondition = syntheticAcceptance.post_conditions.find((condition) =>
-        condition.type === "code_matches" && String(condition.message || "").includes("numeric added lines")
-      );
-      const deletedStatsCondition = syntheticAcceptance.post_conditions.find((condition) =>
-        condition.type === "code_matches" && String(condition.message || "").includes("numeric deleted lines")
-      );
-      assert.ok(addedStatsCondition, "synthetic acceptance task must gate concrete added-line assertions");
-      assert.ok(deletedStatsCondition, "synthetic acceptance task must gate concrete deleted-line assertions");
-      const addedStatsPattern = String(addedStatsCondition.params?.pattern || addedStatsCondition.params?.text || "");
-      const deletedStatsPattern = String(deletedStatsCondition.params?.pattern || deletedStatsCondition.params?.text || "");
-      assert.doesNotMatch("assert.ok(result.stdout.includes('Lines Added:'));", new RegExp(addedStatsPattern));
-      assert.doesNotMatch("assert.ok(result.stdout.includes('Lines Deleted:'));", new RegExp(deletedStatsPattern));
-      assert.match("assert.match(stdout, /Lines Added:\\s*[1-9]/);", new RegExp(addedStatsPattern));
-      assert.match("assert.match(stdout, /Lines Deleted:\\s*[1-9]/);", new RegExp(deletedStatsPattern));
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
-      assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
+      assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(acceptanceTask.id)), true);
+      assert.equal(downstreamTypeOrTestTasks.every((task) => Boolean(authenticityForAssertion(task))), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("R5 copied demand compiles criteria coverage and generated acceptance catches stdout/file newline drift", () => {
+  test("R5 copied demand compiles criteria coverage without yolo writing acceptance tests", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-r5-parity-"));
     try {
       const demandDir = seedDogfoodGitweeklyR5SessionCopy(root);
@@ -2213,16 +2168,17 @@ describe("demand runtime", () => {
       requirePrd(result);
       const tasks = requirePrdTasks(result.prd);
       const syntheticAcceptance = tasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
-      assert.ok(syntheticAcceptance, "R5 copied demand must regenerate the synthetic acceptance task");
+      assert.ok(syntheticAcceptance, "R5 copied demand must include executor-owned acceptance task");
+      assert.equal(syntheticAcceptance.status, "pending");
+      assert.equal(syntheticAcceptance.task_kind, "executor_acceptance_test");
       const coverage = (syntheticAcceptance as DemandTask & { test_generation?: DemandRecord }).test_generation?.acceptance_coverage as DemandRecord | undefined;
       assert.equal(coverage?.schema, "yolo.test_generation.acceptance_coverage.v1");
       assert.equal(coverage?.required_test_file, "test/cli-git-weekly.test.ts");
-      const generated = ((result.prd.demand as DemandRecord)?.generated_acceptance_tests || []) as DemandRecord[];
-      assert.equal(generated[0]?.generated_by, "yolo.demand.acceptance-test-generator");
-      assert.equal(existsSync(join(root, "test", "cli-git-weekly.test.ts")), true, "spec/prd stage must write the generated acceptance test file");
-      assert.ok(result.outputs?.some((output) => output.path === join(root, "test", "cli-git-weekly.test.ts") && output.type === "generated_acceptance_test"));
-      assert.equal(tasks.filter((task) => task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0).length, 0, "executor must not receive a pending task to write the generated acceptance test");
-      assert.ok(tasks.some((task) => task.status !== "completed" && taskInputsForAssertion(task).includes("test/cli-git-weekly.test.ts")), "business implementation tasks should receive the generated test as readonly input");
+      assert.equal("generated_acceptance_tests" in (result.prd.demand as DemandRecord), false);
+      assert.equal(existsSync(join(root, "test", "cli-git-weekly.test.ts")), false, "spec/prd stage must not write executor-owned tests");
+      assert.equal(result.outputs?.some((output) => output.type === "generated_acceptance_test"), false);
+      assert.equal(tasks.filter((task) => task.status !== "completed" && taskTargetTestFilesForAssertion(task).length > 0).length, 1, "executor receives exactly one pending test-writing task");
+      assert.ok(tasks.some((task) => task.status !== "completed" && taskInputsForAssertion(task).includes("test/cli-git-weekly.test.ts")), "business implementation tasks should receive executor-owned test as readonly input");
       const criteria = (coverage?.criteria || []) as DemandRecord[];
       assert.equal(criteria.length >= 2, true, JSON.stringify(coverage, null, 2));
       const ids = criteria.map((criterion) => String(criterion.criterion_id));
@@ -2254,41 +2210,16 @@ describe("demand runtime", () => {
           String(marker.pattern || "").includes("stdoutMarkdown")
         )
       ), "output parity must be a machine-readable manifest marker, not prose only");
-
-      const acceptanceRoot = mkdtempSync(join(tmpdir(), "yolo-r5-generated-acceptance-"));
-      try {
-        const normalized = normalizeAcceptanceCoverageForGeneration(coverage);
-        const testFile = join(acceptanceRoot, "test", "cli-git-weekly.test.ts");
-        mkdirSync(dirname(testFile), { recursive: true });
-        const fixedCli = writeGitWeeklyCliFixture(acceptanceRoot);
-        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: fixedCli, testFile: "test/cli-git-weekly.test.ts" }), "utf8");
-        const generatedTest = readFileSync(testFile, "utf8");
-        assert.match(generatedTest, /expectedStats = \{ totalCommits: 2, linesAdded: 4, linesDeleted: 1 \}/);
-        assert.doesNotMatch(generatedTest, /\bgit\s+log\b|--numstat/, "generated acceptance must not recompute fixture stats");
-        const validator = validateTestGeneration({
-          scope: { allow_new_files: true, targets: [{ file: "test/cli-git-weekly.test.ts" }] },
-          post_conditions: [{ type: "tests_pass", params: { command: "node --test", require_tests: true } }],
-          test_generation: { mode: "add_minimal", reason: "yolo deterministic acceptance generator output", allowed_test_files: ["test/cli-git-weekly.test.ts"], max_new_test_files: 1, acceptance_coverage_required: true, acceptance_coverage: normalized.manifest },
-        }, { cwd: acceptanceRoot, changedFiles: [{ file: "test/cli-git-weekly.test.ts", status: "A", isNew: true }] });
-        assert.equal(validator.status, "pass", JSON.stringify(validator.failures, null, 2));
-
-        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: writeGitWeeklyCliFixture(acceptanceRoot, true), testFile: "test/cli-git-weekly.test.ts" }), "utf8");
-        const buggyRun = spawnSync(process.execPath, ["--test", testFile], { cwd: acceptanceRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: cleanNodeTestEnv() });
-        assert.notEqual(buggyRun.status, 0, `generated acceptance should fail against stdout/file drift\nstdout:\n${buggyRun.stdout}\nstderr:\n${buggyRun.stderr}`);
-        assert.match(`${buggyRun.stdout}\n${buggyRun.stderr}`, /stdout and --output file content must match byte-for-byte/);
-
-        writeFileSync(testFile, generateAcceptanceTestFile(normalized.manifest, { cliPath: fixedCli, testFile: "test/cli-git-weekly.test.ts" }), "utf8");
-        const fixedRun = spawnSync(process.execPath, ["--test", testFile], { cwd: acceptanceRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, env: cleanNodeTestEnv() });
-        assert.equal(fixedRun.status, 0, `generated acceptance should pass against fixed CLI\nstdout:\n${fixedRun.stdout}\nstderr:\n${fixedRun.stderr}`);
-      } finally {
-        rmSync(acceptanceRoot, { recursive: true, force: true });
-      }
+      assert.equal(authenticityForAssertion(syntheticAcceptance).required, true);
+      assert.ok((authenticityForAssertion(syntheticAcceptance).methods as DemandRecord[]).some((method) =>
+        method.type === "forbidden_pattern" && JSON.stringify(method).includes("tests.length > 0")
+      ));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("R4-shaped git-weekly demand regenerates a self-consistent zero-dependency scaffold", () => {
+  test("R4-shaped git-weekly demand does not regenerate a yolo-owned scaffold", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-r4-gitweekly-"));
     try {
       const discuss = runDemandDiscussRuntime({
@@ -2312,15 +2243,18 @@ describe("demand runtime", () => {
 
       assert.equal(result.status, "success", JSON.stringify(result.blockers, null, 2));
       requirePrd(result);
-      const scaffold = requirePrdTasks(result.prd)[0];
-      assert.equal(scaffold.task_kind, "greenfield_scaffold");
-      assertNodeScaffoldToolchain(scaffold);
+      const tasks = requirePrdTasks(result.prd);
+      assert.equal(tasks.some((task) => task.task_kind === "greenfield_scaffold"), false);
+      assert.ok(tasks.some((task) => task.task_kind === "executor_acceptance_test"));
+      assert.ok(tasks
+        .filter((task) => task.post_conditions.some((condition) => condition.type === "tests_pass"))
+        .every((task) => Boolean(authenticityForAssertion(task))));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("git-weekly exact proof is carried into synthetic acceptance gates", () => {
+  test("git-weekly exact proof is carried into executor acceptance contract", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-gitweekly-exact-proof-"));
     try {
       const discuss = runDemandDiscussRuntime({
@@ -2354,21 +2288,18 @@ describe("demand runtime", () => {
         scaffoldInstructionText(syntheticAcceptance),
         JSON.stringify(syntheticAcceptance.handoff || {}),
       ].join("\n");
-      assert.match(syntheticAcceptanceText, /concrete proof values/);
-      const generated = ((result.prd.demand as DemandRecord).generated_acceptance_tests as DemandRecord[])[0];
-      const generatedTestText = generateAcceptanceTestFile(generated.acceptance_coverage, {
-        cliPath: String(generated.cli_path),
-        testFile: String(generated.file),
-      });
-      for (const requiredText of ["Alice", "Bob", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
-        assert.match(generatedTestText, new RegExp(requiredText), `generated acceptance test must include ${requiredText}`);
-      }
-      assert.match(generatedTestText, /Total commits[\s\S]{0,200}expectedStats\.totalCommits/);
+      assert.match(syntheticAcceptanceText, /AC-/);
+      const coverage = (syntheticAcceptance.test_generation as DemandRecord).acceptance_coverage as DemandRecord;
+      assert.ok(((coverage.criteria || []) as DemandRecord[]).some((criterion) =>
+        String(criterion.text || "").includes("Alice") &&
+        String(criterion.text || "").includes("Bob")
+      ));
+      assert.equal(authenticityForAssertion(syntheticAcceptance).required, true);
       assert.ok(requirePrdTasks(result.prd).some((task) =>
         task.status !== "completed" &&
-        taskInputsForAssertion(task).includes(String(generated.file)) &&
-        task.post_conditions.some((condition) => condition.type === "tests_pass" && condition.params?.require_tests === true)
-      ), "business implementation task must own the generated acceptance test gate");
+        taskInputsForAssertion(task).includes(String(coverage.required_test_file)) &&
+        task.post_conditions.some((condition) => condition.type === "tests_pass")
+      ), "business implementation task must own the executor acceptance test gate");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -2540,7 +2471,7 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success");
       requirePrd(prd);
       assert.match(prd.prd.id, /^[A-Z]+-[0-9]+-[A-Z0-9-]+$/);
-      const businessTask = prd.prd.tasks.find((task) => task.task_kind !== "greenfield_scaffold");
+      const businessTask = prd.prd.tasks.find((task) => task.task_kind !== "executor_acceptance_test");
       assert.ok(businessTask);
       assert.equal(businessTask.handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
       assert.ok(prd.prd.execution_readiness.session_handoff.state_paths[0].includes("库存预警"));

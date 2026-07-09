@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseStatusLine, validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
-import { normalizeAcceptanceCoverageForGeneration } from "../src/demand/acceptance-test-generator.js";
 
 const changed = (...files) => files.map((file) => ({ file, status: "A", isNew: true }));
 
@@ -156,6 +155,72 @@ describe("test generation validator", () => {
     });
     assert.equal(result.blocks_execution, true);
     assert.equal(result.failures[0].code, "TEST_FAILURE_LOOP_BLOCKED");
+  });
+
+  test("authenticity contract blocks fake-green tests and enforces declared assertion floor", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-authenticity-"));
+    const task = {
+      scope: { allow_new_files: true, targets: [{ file: "tests/acceptance.test.js" }] },
+      post_conditions: [{ type: "tests_pass", params: { command: "project test command", require_tests: true } }],
+      test_generation: {
+        mode: "add_minimal",
+        reason: "Executor owns tests; yolo validates declared authenticity.",
+        allowed_test_files: ["tests/acceptance.test.js"],
+        max_new_test_files: 1,
+      },
+      verification_contract: {
+        authenticity: {
+          required: true,
+          methods: [
+            {
+              type: "assertion_count",
+              files: ["tests/acceptance.test.js"],
+              minimum: 2,
+              markers: [{ pattern: "\\bassert\\." }, { pattern: "\\bexpect\\s*\\(" }],
+            },
+            {
+              type: "forbidden_pattern",
+              files: ["tests/acceptance.test.js"],
+              patterns: [{ text: "tests.length > 0" }],
+            },
+          ],
+        },
+      },
+    };
+    try {
+      mkdirSync(join(root, "tests"), { recursive: true });
+      writeFileSync(join(root, "tests", "acceptance.test.js"), [
+        "test('fake green', () => {",
+        "  const tests = ['case'];",
+        "  assert.equal(tests.length > 0, true);",
+        "});",
+      ].join("\n"), "utf8");
+
+      let result = validateTestGeneration(task, {
+        cwd: root,
+        changedFiles: changed("tests/acceptance.test.js"),
+      });
+
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "AUTHENTICITY_ASSERTION_COUNT_BELOW_MINIMUM"));
+      assert.ok(result.failures.some((failure) => failure.code === "AUTHENTICITY_FORBIDDEN_PATTERN"));
+
+      writeFileSync(join(root, "tests", "acceptance.test.js"), [
+        "test('real contract', () => {",
+        "  assert.equal(renderReport().title, 'Weekly');",
+        "  assert.match(renderReport().body, /Total commits/);",
+        "});",
+      ].join("\n"), "utf8");
+
+      result = validateTestGeneration(task, {
+        cwd: root,
+        changedFiles: changed("tests/acceptance.test.js"),
+      });
+
+      assert.equal(result.status, "pass", JSON.stringify(result.failures, null, 2));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("add_minimal blocks new test files outside allowed_test_files", () => {
@@ -371,16 +436,19 @@ describe("test generation validator", () => {
     }
   });
 
-  test("unknown deterministic acceptance rules become requires_manual_test and validator blocks", () => {
+  test("requires_manual_test acceptance criteria block validator pass-through", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-manual-rule-"));
     try {
-      const coverage = normalizeAcceptanceCoverageForGeneration({
+      const coverage = {
         schema: "yolo.test_generation.acceptance_coverage.v1",
         required_test_file: "test/acceptance.test.js",
-        criteria: [{ criterion_id: "AC-FUTURE", required_test_name: "[AC-FUTURE] future rule", rules: ["future_ai_oracle_rule"] }],
-      });
-      assert.equal(coverage.unsupported_criteria.length, 1);
-      assert.equal((coverage.manifest.criteria as Array<Record<string, unknown>>)[0].requires_manual_test, true);
+        criteria: [{
+          criterion_id: "AC-FUTURE",
+          required_test_name: "[AC-FUTURE] future rule",
+          requires_manual_test: true,
+          rules: ["future_ai_oracle_rule"],
+        }],
+      };
 
       mkdirSync(join(root, "test"), { recursive: true });
       writeFileSync(join(root, "test", "acceptance.test.js"), "import test from 'node:test';\ntest('[AC-FUTURE] future rule', () => {});\n", "utf8");
@@ -388,7 +456,7 @@ describe("test generation validator", () => {
       const result = validateTestGeneration({
         scope: { allow_new_files: true, targets: [{ file: "test/acceptance.test.js" }] },
         post_conditions: [{ type: "tests_pass", params: { command: "node --test", require_tests: true } }],
-        test_generation: { mode: "add_minimal", reason: "manual fallback must block", acceptance_coverage_required: true, acceptance_coverage: coverage.manifest },
+        test_generation: { mode: "add_minimal", reason: "manual fallback must block", acceptance_coverage_required: true, acceptance_coverage: coverage },
       }, { cwd: root, changedFiles: changed("test/acceptance.test.js") });
 
       assert.equal(result.status, "fail");

@@ -288,6 +288,11 @@ describe("session validation helpers", () => {
         expected: false,
       },
       {
+        name: "executor acceptance test",
+        task: { status: "pending", task_kind: "executor_acceptance_test", type: "feature" },
+        expected: false,
+      },
+      {
         name: "pure config task",
         task: { status: "pending", type: "cleanup", scope: { targets: [{ file: "package.json" }] } },
         expected: false,

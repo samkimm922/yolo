@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import {
   formatSpecGovernanceBlockers,
   inspectSpecGovernanceGate,
@@ -91,5 +92,14 @@ describe("spec governance gate", () => {
     assert.equal(summary.split("\n").length, 3);
     assert.match(summary, /BLOCK_0 task=FIX-0: message 0/);
     assert.doesNotMatch(summary, /BLOCK_3/);
+  });
+
+  test("PR-R1 removes yolo-owned acceptance generation and demand scaffold entrypoints", () => {
+    assert.equal(existsSync("src/demand/acceptance-test-generator.ts"), false);
+
+    const runtimeSource = readFileSync("src/demand/runtime.ts", "utf8");
+    assert.doesNotMatch(runtimeSource, /acceptance-test-generator/);
+    assert.doesNotMatch(runtimeSource, /generateAcceptanceTestFile|buildGeneratedAcceptanceTestRecord/);
+    assert.doesNotMatch(runtimeSource, /buildGreenfieldScaffoldTask|addScaffoldDependency/);
   });
 });

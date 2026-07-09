@@ -13,7 +13,6 @@ import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { loadProjectToolchainConfig, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
-import { buildGeneratedAcceptanceTestRecord, generateAcceptanceTestFile } from "./acceptance-test-generator.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -1132,7 +1131,7 @@ function hasVerifyCommand(condition = Object()) {
 function machineAcceptanceConditions(taskId, scenario = Object(), context = Object()) {
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
   if (verifyCommand) return [acceptanceCondition(taskId, 0, scenario)];
-  return [testsPassCondition(taskId, context, { requireTests: true })];
+  return [testsPassCondition(taskId, context)];
 }
 
 function buildConfigValue(config = Object(), key = "") {
@@ -1150,16 +1149,6 @@ function taskToolchainKinds(task = Object()) {
     if (condition?.type === "build_pass") kinds.add("build");
   }
   return kinds;
-}
-
-function requiresGreenfieldScaffold(tasks = [], context = Object()) {
-  const kinds = new Set<string>(tasks.flatMap((task) => [...taskToolchainKinds(task)].map(String)));
-  if (kinds.size === 0) return false;
-  const projectRoot = context.projectRoot || process.cwd();
-  const hasPackageJson = existsSync(join(projectRoot, "package.json"));
-  if (!hasPackageJson) return true;
-  const config = context.config || Object();
-  return [...kinds].some((kind) => !buildConfigValue(config, kind === "type_check" ? "type_check" : kind));
 }
 
 const INSTRUCTION_TOOL_PACKAGE_NAMES = new Map([["jest", "jest"], ["tsc", "typescript"], ["typescript", "typescript"], ["vitest", "vitest"]]);
@@ -1257,271 +1246,6 @@ export function assertGeneratedTaskInstructionsSelfConsistent(tasks = []) {
     );
     throw error;
   }
-}
-
-function scaffoldInstructions(needsTypecheck = false) {
-  const steps = [
-    "Create package.json for a minimal Node.js project using built-in Node tooling.",
-    "Set scripts.test to \"node --test\" so the test command uses the node:test runner with zero test-framework dependencies.",
-  ];
-  if (needsTypecheck) {
-    steps.push(
-      "Create .npmrc with package-lock=false before installing dependencies so npm install does not create package-lock.json.",
-      "Run npm install --save-dev typescript @types/node so node_modules/.bin/tsc exists and Node built-ins typecheck.",
-      "Set scripts.typecheck to \"tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node src/*.ts\".",
-      "Do not create tsconfig.json; keep compiler settings in the typecheck script so this scaffold stays within two files.",
-    );
-  }
-  steps.push("Do not add extra test framework dependencies or create package-lock.json for this scaffold task.");
-  return steps;
-}
-
-function scaffoldOutputFiles(needsTypecheck = false) {
-  return needsTypecheck ? ["package.json", ".npmrc"] : ["package.json"];
-}
-
-function scaffoldTargetDescription(file = "") {
-  if (file === "package.json") return "Minimal greenfield toolchain package scripts and dev dependencies";
-  if (file === ".npmrc") return "npm setting that prevents package-lock.json churn in downstream task worktrees";
-  return "Greenfield toolchain scaffold file";
-}
-
-function scaffoldScopeTargets(needsTypecheck = false) {
-  return scaffoldOutputFiles(needsTypecheck).map((file) => ({
-    file,
-    description: scaffoldTargetDescription(file),
-  }));
-}
-
-function buildCommandAvailableCondition(taskId, kind, command) {
-  return {
-    id: `POST-${taskId}-${kind === "type_check" ? "TYPECHECK" : kind.toUpperCase()}-COMMAND-AVAILABLE`,
-    type: "build_command_available",
-    severity: "FAIL",
-    params: { kind, command },
-    message: `Configured ${kind} command must be available before downstream gates run.`,
-  };
-}
-
-function scaffoldPostConditions(taskId, context = Object(), needsTypecheck = false) {
-  const conditions: Array<Record<string, unknown>> = [
-    {
-      id: `POST-${taskId}-PACKAGE`,
-      type: "file_exists",
-      severity: "FAIL",
-      params: { file: "package.json" },
-      message: "Greenfield scaffold must create package.json before toolchain gates run.",
-    },
-    {
-      id: `POST-${taskId}-TEST-SCRIPT`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "\"test\"" },
-      message: "package.json must expose a test script for config.build.test.",
-    },
-    {
-      id: `POST-${taskId}-NODE-TEST-SCRIPT`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "node --test" },
-      message: "package.json test script must use the built-in node:test runner.",
-    },
-    buildCommandAvailableCondition(taskId, "test", "node --test"),
-    testsPassCondition(taskId, context),
-  ];
-  if (needsTypecheck) {
-    conditions.splice(3, 0, {
-      id: `POST-${taskId}-TYPECHECK-SCRIPT`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "\"typecheck\"" },
-      message: "package.json must expose a typecheck script before type gates run.",
-    }, {
-      id: `POST-${taskId}-TYPECHECK-COMMAND`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "tsc --noEmit" },
-      message: "package.json typecheck script must invoke the TypeScript compiler.",
-    }, {
-      id: `POST-${taskId}-TYPESCRIPT-DEVDEP`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "\"typescript\"" },
-      message: "package.json must record TypeScript as a dev dependency before type gates run.",
-    }, {
-      id: `POST-${taskId}-NODE-TYPES-DEVDEP`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: "package.json", text: "\"@types/node\"" },
-      message: "package.json must record Node types before Node built-ins can typecheck.",
-    }, {
-      id: `POST-${taskId}-NPMRC-PACKAGE-LOCK-FALSE`,
-      type: "code_contains",
-      severity: "FAIL",
-      params: { file: ".npmrc", text: "package-lock=false" },
-      message: ".npmrc must prevent package-lock.json churn in downstream task worktrees.",
-    }, {
-      id: `POST-${taskId}-NO-PACKAGE-LOCK`,
-      type: "file_not_exists",
-      severity: "FAIL",
-      params: { file: "package-lock.json" },
-      message: "Greenfield scaffold should not create package-lock.json when package-lock=false is configured.",
-    }, {
-      id: `POST-${taskId}-NO-TSCONFIG`,
-      type: "file_not_exists",
-      severity: "FAIL",
-      params: { file: "tsconfig.json" },
-      message: "Greenfield scaffold keeps TypeScript options in package.json to stay within two files.",
-    });
-    conditions.push(buildCommandAvailableCondition(taskId, "type_check", "tsc --noEmit"));
-  }
-  return conditions;
-}
-
-function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = Object()) {
-  if (!requiresGreenfieldScaffold(tasks, context)) return null;
-  const requirements = asArray(session.requirements?.active || session.requirements);
-  const firstRequirement = requirements[0] || {};
-  const requirementId = firstRequirement.id || tasks[0]?.requirement_ids?.[0] || "REQ-GREENFIELD-SCAFFOLD";
-  const designId = `DES-${requirementId}`;
-  const taskId = "DEMAND-GREENFIELD-SCAFFOLD-001";
-  const needsTypecheck = tasks.some((task) => taskToolchainKinds(task).has("type_check"));
-  const outputFiles = scaffoldOutputFiles(needsTypecheck);
-  const scopeTargets = scaffoldScopeTargets(needsTypecheck);
-  const sourceQuestions = uniqueStrings(tasks.flatMap((task) => asArray(task.source_question_ids)));
-  const sessionPlan = buildTaskSessionPlan({
-    demandId: session.id,
-    taskId,
-    requirementId,
-    scenarioId: "SCN-GREENFIELD-SCAFFOLD",
-    surfaceId: "SFC-GREENFIELD-SCAFFOLD",
-  });
-  return {
-    id: taskId,
-    title: "Scaffold greenfield Node toolchain",
-    description: "Create package.json with the project toolchain scripts.",
-    priority: "P0",
-    type: "feature",
-    status: "pending",
-    task_kind: "greenfield_scaffold",
-    requirement_ids: [requirementId].filter(Boolean),
-    design_ids: [designId],
-    source_finding_ids: [requirementId].filter(Boolean),
-    source_question_ids: sourceQuestions,
-    verification_hint: "Run the configured test command after package.json is created.",
-    instructions: scaffoldInstructions(needsTypecheck),
-    inputs: [".yolo/config.json"],
-    expected_output: outputFiles,
-    depends_on: [],
-    handoff: {
-      type: "agent_brief",
-      category: "scaffold",
-      session: sessionPlan,
-      plain_language_goal: "Create package.json with the project toolchain scripts.",
-      user_story: "As the automation runner, I need package.json scripts before downstream tasks run.",
-      source_question_ids: sourceQuestions,
-      current_behavior: "The greenfield target has no package.json, so toolchain gates fail before implementation.",
-      desired_behavior: "package.json contains executable project toolchain scripts.",
-      touchpoint: "project scaffold",
-      trigger: "before any generated task with type/test post_conditions runs",
-      scenario: {
-        id: "SCN-GREENFIELD-SCAFFOLD",
-        actor: "automation runner",
-        touchpoint: "project scaffold",
-        trigger: "toolchain gate setup",
-        current_behavior: "package.json is missing",
-        desired_behavior: "package.json toolchain scripts are available",
-        proof: "The configured test command executes successfully.",
-      },
-      requirement: {
-        id: requirementId,
-        text: firstRequirement.text || "Greenfield project needs an executable scaffold before toolchain gates.",
-      },
-      surface: {
-        id: "SFC-GREENFIELD-SCAFFOLD",
-        kind: "code",
-        label: "Project scaffold",
-        target_files: outputFiles,
-        readonly_files: [],
-        visual_style_source: [],
-        session_budget: { expected: "single_session", max_files: outputFiles.length, max_lines_per_file: 120 },
-      },
-      key_interfaces: outputFiles,
-      read_first: [".yolo/config.json"],
-      acceptance_criteria: ["package.json and .npmrc expose node --test and TypeScript command availability without package-lock or tsconfig churn."],
-      instructions: scaffoldInstructions(needsTypecheck),
-      proof: "package.json exists, npm test succeeds with node --test, and required toolchain commands are available.",
-      verification_hint: "Run npm test after package.json is created; when type gates are required, verify node_modules/.bin/tsc is available.",
-      project_facts: structuredProjectFacts(session),
-      deferred_scope: asArray(session.discussion?.deferred),
-      deferred_scope_confirmation: deferredScopeConfirmation(session),
-      deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
-      out_of_scope: session.requirements?.out_of_scope || [],
-      constraints: session.requirements?.constraints || [],
-      exceptions: [],
-      question_trace: sourceQuestions,
-      evidence_chain: {
-        intake_schema: session.prd_intake?.schema || session.nontechnical_intake?.schema || null,
-        demand_id: session.id,
-        scenario_id: "SCN-GREENFIELD-SCAFFOLD",
-        surface_id: "SFC-GREENFIELD-SCAFFOLD",
-        approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
-      },
-      must_haves: {
-        truths: ["Greenfield type/test gates require a local executable toolchain before downstream tasks run."],
-        artifacts: [
-          sessionPlan.state_path,
-          sessionPlan.handoff_path,
-          sessionPlan.evidence_path,
-          ...sessionPlan.memory_update_paths,
-        ],
-        key_links: [
-          `demand:${session.id}`,
-          `requirement:${requirementId}`,
-          "scenario:SCN-GREENFIELD-SCAFFOLD",
-          "surface:SFC-GREENFIELD-SCAFFOLD",
-        ],
-      },
-    },
-    acceptance_criteria: ["package.json exposes node --test and TypeScript command availability when type gates are required."],
-    scope: {
-      targets: scopeTargets,
-      readonly_files: [],
-      allow_new_files: true,
-      allow_delete_files: false,
-      max_files: outputFiles.length,
-      max_lines_per_file: 120,
-    },
-    pre_conditions: [],
-    post_conditions: scaffoldPostConditions(taskId, context, needsTypecheck),
-    trace: {
-      demand_id: session.id,
-      requirement_id: requirementId,
-      scenario_id: "SCN-GREENFIELD-SCAFFOLD",
-      surface_id: "SFC-GREENFIELD-SCAFFOLD",
-      evidence: uniqueStrings(requirements.flatMap((requirement) => requirement.trace?.evidence || [])),
-      decisions: uniqueStrings(requirements.flatMap((requirement) => requirement.trace?.decisions || [])),
-      question_trace: sourceQuestions,
-      source_question_ids: sourceQuestions,
-    },
-    deferred_scope: asArray(session.discussion?.deferred),
-    deferred_scope_confirmation: deferredScopeConfirmation(session),
-    deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
-    atomicity: {
-      expected_session: "single_session",
-      source: "greenfield_toolchain_scaffold",
-    },
-    must_fix_before_ship: true,
-  };
-}
-
-function addScaffoldDependency(tasks = [], scaffold = null) {
-  if (!scaffold) return tasks;
-  for (const task of tasks) {
-    if (taskToolchainKinds(task).size === 0) continue;
-    task.depends_on = [...new Set([...(task.depends_on || []), scaffold.id])];
-  }
-  return [scaffold, ...tasks];
 }
 
 function uniqueConditions(conditions = []) {
@@ -1749,8 +1473,9 @@ function acceptanceCoverageMarkerGuidance(criteria: Array<Record<string, unknown
 
 function buildAcceptanceCoverageSpec(session = Object(), proofText = "", testFile = "") {
   const records = collectAcceptanceCriterionRecords(session);
-  if (records.length === 0 && clean(proofText)) {
-    records.push({ criterion_id: "AC-AUTOMATED-ACCEPTANCE-001", text: proofText });
+  const proofValue = clean(proofText);
+  if (proofValue && !records.some((record) => clean(record.text).toLowerCase() === proofValue.toLowerCase())) {
+    records.push({ criterion_id: "AC-AUTOMATED-PROOF-001", text: proofValue });
   }
   const criteria = records.map(compileAcceptanceCriterion);
   const manifest = {
@@ -1759,7 +1484,7 @@ function buildAcceptanceCoverageSpec(session = Object(), proofText = "", testFil
     criteria,
   };
   const instructions = [
-    "Acceptance coverage contract: every criterion below must have at least one node:test test name containing its criterion_id.",
+    "Acceptance coverage contract: every criterion below must have at least one automated test case or source marker containing its criterion_id.",
     "Use the required variable names in specialized assertions when listed so the gate can verify the contract: stdoutMarkdown, fileMarkdown, expectedStats.",
     ...acceptanceCoverageMarkerGuidance(criteria),
     ...criteria.flatMap((criterion) => [
@@ -1783,93 +1508,78 @@ function buildAcceptanceCoverageSpec(session = Object(), proofText = "", testFil
   return { manifest, criteria, instructions };
 }
 
-function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile = "") {
-  const text = clean(proofText);
-  const needsCliFixtureSmoke = /(?:--repo|--output|stdout|stderr|exit code|non[- ]?zero|fixture|git repo|git 仓库|本地 git|非零|CLI|命令行)/i.test(text);
-  if (!needsCliFixtureSmoke) {
-    return { instructions: [], criteria: [], postConditions: [] };
-  }
+function markerText(marker) {
+  if (!marker || typeof marker !== "object" || Array.isArray(marker)) return clean(marker);
+  return clean(marker.text || marker.pattern);
+}
 
-  const behaviorMarkers: Array<{ label: string; type: string; params: Record<string, unknown> }> = [
-    { label: "spawnSync", type: "code_contains", params: { file: testFile, text: "spawnSync" } },
+function authenticityContractForAcceptance(testFile = "", criteria: Array<Record<string, unknown>> = []) {
+  const criterionMarkers = criteria
+    .map((criterion) => clean(criterion.criterion_id))
+    .filter(Boolean)
+    .map((id) => ({ text: id, reason: "acceptance criterion id must appear in executor-owned tests" }));
+  const assertionMarkers = uniqueStrings(criteria
+    .flatMap((criterion) => asArray(criterion.required_markers || criterion.required_marker))
+    .map(markerText)
+    .filter(Boolean))
+    .map((text) => text.startsWith("\\") || /[()[\]{}+*?|^$]/.test(text)
+      ? { pattern: text, reason: "declared acceptance assertion marker" }
+      : { text, reason: "declared acceptance assertion marker" });
+  const methods: Array<Record<string, unknown>> = [
     {
-      label: "git init",
-      type: "code_matches",
-      params: {
-        file: testFile,
-        pattern: String.raw`(?:\bgit\s+init\b|['"]git['"]\s*,\s*\[\s*['"]init['"])`,
-      },
+      type: "required_marker",
+      files: [testFile],
+      markers: criterionMarkers,
     },
-    { label: "--repo", type: "code_contains", params: { file: testFile, text: "--repo" } },
-    { label: "--since", type: "code_contains", params: { file: testFile, text: "--since" } },
-    { label: "--until", type: "code_contains", params: { file: testFile, text: "--until" } },
-    { label: "--output", type: "code_contains", params: { file: testFile, text: "--output" } },
-    { label: "bad repo", type: "code_contains", params: { file: testFile, text: "bad repo" } },
+    {
+      type: "forbidden_pattern",
+      files: [testFile],
+      markers: [
+        { text: "tests.length > 0", reason: "test-count presence checks are fake-green proof" },
+        { pattern: String.raw`\bassert\s*\.\s*ok\s*\(\s*true\b`, reason: "constant true assertions are fake-green proof" },
+      ],
+    },
   ];
-  const proofSpecificInstructions: string[] = [];
-  const isCliReportStatsProof = /weekly report|周报|conventional|commit 类型|Total commits|总 commit|总提交|insertions|deletions|added\/deleted|增删行|line stats/i.test(text);
-  if (isCliReportStatsProof) {
-    proofSpecificInstructions.push(
-      "For CLI report acceptance, assert concrete proof values instead of headings only: distinct fixture authors, conventional type counts, total commit count, and numeric added/deleted line stats.",
-      "Set both GIT_AUTHOR_DATE and GIT_COMMITTER_DATE on fixture commits so date-window assertions are deterministic.",
-      "Make the fixture include both an addition and a deletion when line stats are part of the proof, then assert non-zero added and deleted counts.",
-    );
-    if (/Alice/i.test(text)) behaviorMarkers.push({ label: "Alice fixture author", type: "code_contains", params: { file: testFile, text: "Alice" } });
-    if (/Bob/i.test(text)) behaviorMarkers.push({ label: "Bob fixture author", type: "code_contains", params: { file: testFile, text: "Bob" } });
-    if (/(?:fixed|dated|固定).*commit|GIT_AUTHOR_DATE|2026-\d{2}-\d{2}|日期/i.test(text)) {
-      behaviorMarkers.push({ label: "GIT_AUTHOR_DATE", type: "code_contains", params: { file: testFile, text: "GIT_AUTHOR_DATE" } });
-      behaviorMarkers.push({ label: "GIT_COMMITTER_DATE", type: "code_contains", params: { file: testFile, text: "GIT_COMMITTER_DATE" } });
-    }
-    if (/(?:Total commits|Total Commits|总 commit|总提交)[^\n]{0,40}\b2\b/i.test(text)) {
-      behaviorMarkers.push({
-        label: "Total commits: 2 assertion",
-        type: "code_matches",
-        params: { file: testFile, pattern: String.raw`Total\s+[Cc]ommits[\s\S]{0,120}(?:\b2\b|toMatch\([^)]*2|match\([^)]*2)` },
-      });
-    }
-    if (/(?:insertions|deletions|added\/deleted|added lines|deleted lines|Lines Added|Lines Deleted|增删行|line stats|行数)/i.test(text)) {
-      behaviorMarkers.push({
-        label: "numeric added lines assertion",
-        type: "code_matches",
-        params: { file: testFile, pattern: String.raw`(?:Lines Added|Added lines|insertions|added)[\s\S]{0,160}(?:\\\[1-9\\\]|\b[1-9]\d*\b)` },
-      });
-      behaviorMarkers.push({
-        label: "numeric deleted lines assertion",
-        type: "code_matches",
-        params: { file: testFile, pattern: String.raw`(?:Lines Deleted|Deleted lines|deletions|deleted)[\s\S]{0,160}(?:\\\[1-9\\\]|\b[1-9]\d*\b)` },
-      });
-    }
+  if (assertionMarkers.length > 0) {
+    methods.push({
+      type: "assertion_count",
+      files: [testFile],
+      minimum: Math.min(2, assertionMarkers.length),
+      markers: assertionMarkers,
+    });
   }
   return {
-    instructions: [
-      "This is behavior acceptance, not helper-unit coverage: import spawnSync from node:child_process and execute the CLI process from the test.",
-      "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
-      "Create a temporary git fixture repository in the test with git init and dated commits before running the CLI.",
-      "Cover a stdout sample by running the CLI with --repo, --since, and --until, then assert the Markdown includes the report title, authors/commits, conventional type counts, totals, and line stats.",
-      "Cover --output by passing --output and asserting the Markdown file is written.",
-      "Cover bad repo by running a bad repo path and asserting a non-zero exit status.",
-      "Do not duplicate implementation helper functions in the test instead of invoking the CLI.",
-      ...proofSpecificInstructions,
-    ],
-    criteria: [
-      "The node:test file executes the CLI process with spawnSync against a git init fixture repository.",
-      "The test asserts stdout Markdown for --repo/--since/--until, --output file writing, and bad repo non-zero exit behavior.",
-      ...(isCliReportStatsProof ? ["CLI report tests assert concrete author, type-count, commit-count, and numeric line-stat values from the approved proof."] : []),
-    ],
-    postConditions: behaviorMarkers.map((marker, index) => ({
-      id: `POST-${taskId}-BEHAVIOR-${index + 1}`,
-      type: marker.type,
-      severity: "FAIL",
-      params: marker.params,
-      message: `Synthetic acceptance test must exercise required behavior marker: ${marker.label}`,
-    })),
+    authenticity: {
+      required: true,
+      reason: "Executor-owned tests must prove real behavior rather than only report that tests exist.",
+      files: [testFile],
+      methods,
+    },
+  };
+}
+
+function authenticityContractForTestTask(taskId = "", testFile = "", proof = "") {
+  const criterion = compileAcceptanceCriterion({
+    criterion_id: taskId,
+    text: clean(proof) || `Executor-owned tests for ${taskId} must assert the requested behavior.`,
+  });
+  return authenticityContractForAcceptance(testFile, [criterion]);
+}
+
+function testsExpectedToFailCondition(taskId, context = Object()) {
+  const condition = testsPassCondition(taskId, context);
+  return {
+    ...condition,
+    id: `POST-${taskId}-TESTS-RED`,
+    invert: true,
+    message: "Executor-owned acceptance tests must be red before implementation makes them green.",
   };
 }
 
 function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], context = Object()) {
   const existingTestTask = tasks.some((task) => taskTargetFiles(task).some((file) => fileKind(file) === "test"));
   if (existingTestTask) return null;
-  const implementationTasks = tasks.filter((task) => task?.task_kind !== "greenfield_scaffold");
+  const implementationTasks = tasks.filter((task) => task?.status !== "completed");
   if (implementationTasks.length === 0) return null;
   const sourceFiles = uniqueStrings(implementationTasks
     .flatMap((task) => taskTargetFiles(task))
@@ -1889,68 +1599,66 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     surfaceId: "SFC-AUTOMATED-TEST",
   });
   const proofText = collectSyntheticAcceptanceProofText(session, implementationTasks);
-  const behaviorSpec = syntheticAcceptanceBehaviorSpec(taskId, proofText, testFile);
   const acceptanceCoverage = buildAcceptanceCoverageSpec(session, proofText, testFile);
-  const generatedAcceptanceTest = buildGeneratedAcceptanceTestRecord({
-    file: testFile,
-    cliPath: primarySource,
-    coverage: acceptanceCoverage.manifest,
-  });
+  const verificationContract = authenticityContractForAcceptance(testFile, acceptanceCoverage.criteria);
   const testLineBudget = Math.max(120, acceptanceCoverage.criteria.length * 8 + 60);
 
   return {
     id: taskId,
-    title: "验收基准: yolo-generated automated acceptance",
-    description: "YOLO deterministically generated the automated acceptance test file for the approved PRD.",
+    title: "验收基准: executor-owned automated acceptance",
+    description: "Executor writes the automated acceptance tests from the approved PRD and declared authenticity contract.",
     priority: "P1",
     type: "cleanup",
-    status: "completed",
-    task_kind: "yolo_generated_acceptance_test",
+    status: "pending",
+    task_kind: "executor_acceptance_test",
     requirement_ids: requirementIds,
     design_ids: designIds,
     evidence_files: ["EVID-001"],
     source_finding_ids: requirementIds,
     source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
     verification_hint: [
-      `YOLO already generated ${testFile}; business implementation tasks must make this test pass.`,
+      `Executor must write ${testFile}; downstream implementation tasks must make this test pass.`,
       ...acceptanceCoverage.instructions,
     ].join(" "),
     instructions: [
-      `YOLO already generated ${testFile} from the acceptance_coverage manifest; do not ask an executor to write this file.`,
-      "Business implementation tasks must make the CLI satisfy this generated node:test acceptance suite.",
+      `Write ${testFile} from the acceptance_coverage manifest using the project's own test approach.`,
+      "Make this task prove red first: the acceptance test should fail until implementation tasks satisfy the behavior.",
+      "Do not replace behavior assertions with checks that only prove tests exist, such as tests.length > 0.",
       ...acceptanceCoverage.instructions,
-      ...behaviorSpec.instructions,
-      `The generated suite invokes ${primarySource}; executor sessions may edit implementation files in their own business tasks, not this completed yolo artifact record.`,
+      `The acceptance suite should exercise ${primarySource} through the project-native verification path.`,
     ],
     inputs: sourceFiles,
     expected_output: [testFile],
     depends_on: [],
     test_generation: {
-      mode: "none",
-      reason: "YOLO writes the deterministic acceptance test during demand PRD/scaffold generation; executor must not generate it.",
+      mode: "add_minimal",
+      reason: "Executor writes the acceptance test; yolo validates only the declared authenticity contract.",
+      allowed_test_files: [testFile],
+      max_new_test_files: 1,
+      max_test_lines_changed: testLineBudget,
       acceptance_coverage_required: true,
-      acceptance_coverage: generatedAcceptanceTest.acceptance_coverage,
+      acceptance_coverage: acceptanceCoverage.manifest,
     },
-    generated_acceptance_tests: [generatedAcceptanceTest],
+    verification_contract: verificationContract,
     handoff: {
       type: "agent_brief",
       category: "test",
       session: sessionPlan,
-      plain_language_goal: "Use the yolo-generated acceptance test as the business acceptance standard.",
-      user_story: "As the delivery team, I want YOLO to generate acceptance tests deterministically, so executor sessions only implement business behavior.",
+      plain_language_goal: "Write the automated acceptance test from the approved success contract.",
+      user_story: "As the delivery team, I want executor-owned tests with a machine-checked authenticity contract.",
       source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
-      current_behavior: "The acceptance test file is generated by YOLO from the machine-readable coverage manifest.",
-      desired_behavior: "Business implementation tasks make npm test pass against the generated acceptance suite.",
+      current_behavior: "No executor-owned acceptance test exists for the approved success contract.",
+      desired_behavior: "Executor writes acceptance tests whose authenticity markers are verified before implementation turns them green.",
       touchpoint: "automated acceptance test suite",
-      trigger: "delivery verification runs npm test",
+      trigger: "delivery verification runs the declared project test command",
       scenario: {
         id: "AUTOMATED-ACCEPTANCE",
         actor: "delivery team",
         touchpoint: "automated acceptance test suite",
-        trigger: "npm test runs",
-        current_behavior: `YOLO has placed ${testFile} before executor sessions run.`,
-        desired_behavior: "node:test executes automated acceptance coverage and the business CLI satisfies it.",
-        proof: `npm test executes ${testFile} and passes.`,
+        trigger: "project test command runs",
+        current_behavior: `${testFile} does not yet exist.`,
+        desired_behavior: "The acceptance test exists, contains declared authenticity markers, and fails before implementation.",
+        proof: `The declared project test command observes ${testFile}.`,
       },
       requirement: {
         id: requirementIds[0] || null,
@@ -1968,22 +1676,20 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       key_interfaces: [testFile],
       read_first: sourceFiles,
       acceptance_criteria: [
-        `YOLO generated ${testFile} before executor sessions.`,
-        `npm test executes ${testFile} and passes after business implementation.`,
+        `Executor writes ${testFile} before implementation tasks.`,
+        `${testFile} contains the declared authenticity markers and avoids forbidden fake-green patterns.`,
         ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
-        ...behaviorSpec.criteria,
       ],
       proof: [
-        `YOLO generated ${testFile} before executor sessions.`,
-        `npm test executes ${testFile} and passes after business implementation.`,
+        `Executor writes ${testFile} before implementation tasks.`,
+        `${testFile} contains the declared authenticity markers and avoids forbidden fake-green patterns.`,
         ...acceptanceCoverage.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.text}`),
-        ...behaviorSpec.criteria,
       ].join(" "),
       verification_hint: [
-        "Use the approved PRD as the source of behavior; npm test must execute the yolo-generated node:test suite.",
-        "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
+        "Use the approved PRD as the source of behavior; the project test command must execute the executor-owned acceptance suite.",
+        "Use a throwing assertion mechanism appropriate for this project; do not use non-failing console/log-only checks.",
+        "The authenticity gate will fail if the declared marker contract is missing or if forbidden fake-green patterns are present.",
         ...acceptanceCoverage.instructions,
-        ...behaviorSpec.instructions,
       ].join(" "),
       project_facts: {
         schema: "yolo.demand.task_project_facts.v1",
@@ -2014,7 +1720,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
         approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
       },
       must_haves: {
-        truths: ["npm test must execute at least one automated acceptance test."],
+        truths: ["The project test command must execute at least one automated acceptance test."],
         artifacts: [
           testFile,
           sessionPlan.state_path,
@@ -2030,7 +1736,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       },
     },
     scope: {
-      targets: [{ file: testFile, description: `YOLO-generated node:test acceptance coverage for ${primarySource}` }],
+      targets: [{ file: testFile, description: `Executor-owned acceptance coverage for ${primarySource}` }],
       readonly_files: sourceFiles,
       allow_new_files: true,
       allow_delete_files: false,
@@ -2039,21 +1745,15 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     },
     pre_conditions: [],
     post_conditions: uniqueConditions([
+      modifiedFileCondition(taskId, 0, testFile),
       {
-        id: `POST-${taskId}-GENERATED-TEST-FILE`,
+        id: `POST-${taskId}-TEST-FILE`,
         type: "file_exists",
         severity: "FAIL",
         params: { file: testFile },
-        message: "YOLO-generated acceptance test file must exist before executor sessions run.",
+        message: "Executor-owned acceptance test file must exist before implementation sessions run.",
       },
-      {
-        id: `POST-${taskId}-GENERATED-NODE-TEST`,
-        type: "code_contains",
-        severity: "FAIL",
-        params: { file: testFile, text: "node:test" },
-        message: "YOLO-generated acceptance test file must be an executable node:test suite.",
-      },
-      ...behaviorSpec.postConditions,
+      testsExpectedToFailCondition(taskId, context),
     ]),
     trace: {
       demand_id: session.id,
@@ -2070,18 +1770,17 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
     atomicity: {
       expected_session: "single_session",
-      source: "yolo_generated_acceptance_test",
+      source: "executor_acceptance_test",
     },
-    must_fix_before_ship: false,
+    must_fix_before_ship: true,
   };
 }
 
-function attachGeneratedAcceptanceToImplementationTasks(tasks = [], generatedTask = null, context = Object()) {
-  const generated = asArray(generatedTask.generated_acceptance_tests)[0];
-  const testFile = clean(generated?.file);
+function attachExecutorAcceptanceToImplementationTasks(tasks = [], acceptanceTask = null, context = Object()) {
+  const testFile = clean(asArray(acceptanceTask?.scope?.targets)[0]?.file);
   if (!testFile) return tasks;
   const implementationTasks = tasks.filter((task) =>
-    task?.task_kind !== "greenfield_scaffold" && task?.id !== generatedTask.id && task?.status !== "completed"
+    task?.id !== acceptanceTask.id && task?.status !== "completed"
   );
   if (implementationTasks.length === 0) return tasks;
   const appendText = (value, line) => [clean(value), line].filter(Boolean).join(" ");
@@ -2090,26 +1789,29 @@ function attachGeneratedAcceptanceToImplementationTasks(tasks = [], generatedTas
     task.scope = { ...(task.scope || {}), readonly_files: uniqueStrings([...asArray(task.scope?.readonly_files).map(clean), testFile]) };
     task.instructions = uniqueStrings([
       ...asArray(task.instructions).map(clean),
-      `YOLO already generated ${testFile}; treat it as readonly acceptance input and make the business implementation satisfy it.`,
+      `Read executor-owned ${testFile}; make the business implementation satisfy it without weakening the test.`,
     ]);
-    task.verification_hint = appendText(task.verification_hint, `Run npm test against yolo-generated ${testFile}.`);
+    task.verification_hint = appendText(task.verification_hint, `Run the declared project test command against ${testFile}.`);
+    task.depends_on = uniqueStrings([...asArray(task.depends_on).map(clean), acceptanceTask.id]);
+    task.verification_contract = acceptanceTask.verification_contract;
     if (task.handoff) {
       task.handoff.read_first = uniqueStrings([...asArray(task.handoff.read_first).map(clean), testFile]);
       task.handoff.acceptance_criteria = uniqueStrings([
         ...asArray(task.handoff.acceptance_criteria).map(clean),
-        `npm test passes against yolo-generated ${testFile}.`,
+        `The declared project test command passes against executor-owned ${testFile}.`,
       ]);
-      task.handoff.verification_hint = appendText(task.handoff.verification_hint, `Do not edit ${testFile}; make business code satisfy it.`);
+      task.handoff.verification_hint = appendText(task.handoff.verification_hint, `Do not weaken ${testFile}; make business code satisfy it.`);
     }
     task.acceptance_contract = {
       ...(task.acceptance_contract || {}),
       schema: "yolo.demand.acceptance_contract.v1",
-      generated_acceptance_tests: [generated],
-      acceptance_coverage: generated.acceptance_coverage,
+      executor_acceptance_test: testFile,
+      acceptance_coverage: acceptanceTask.test_generation?.acceptance_coverage,
+      verification_contract: acceptanceTask.verification_contract,
     };
   }
   const finalImplementationTask = implementationTasks[implementationTasks.length - 1];
-  const generatedAcceptanceGate = testsPassCondition(finalImplementationTask.id, context, { requireTests: true });
+  const generatedAcceptanceGate = testsPassCondition(finalImplementationTask.id, context);
   finalImplementationTask.post_conditions = uniqueConditions([
     ...asArray(finalImplementationTask.post_conditions).filter((condition) => condition?.id !== generatedAcceptanceGate.id),
     generatedAcceptanceGate,
@@ -2186,6 +1888,7 @@ function addTaskDependencies(tasks = []) {
 
 function deriveFileDependencies(tasks = []) {
   for (const taskB of tasks) {
+    if (taskB.task_kind === "executor_acceptance_test") continue;
     const bInputs = asArray(taskB.inputs).map(clean).filter(Boolean);
     const bOutputs = new Set(asArray(taskB.expected_output).map(clean).filter(Boolean));
     for (const taskA of tasks) {
@@ -2226,6 +1929,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
         const taskTitle = `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || "DEMAND"}`;
         const taskKind = clean(surface.kind).toLowerCase() || fileKind(files[0]) || "code";
         const filesContainTest = files.some((file) => fileKind(file) === "test");
+        const testFiles = files.filter((file) => fileKind(file) === "test");
         const dedupKey = scenarioTaskDedupKey({ files, kind: taskKind, title: taskTitle });
         if (scenarioTaskKeys.has(dedupKey)) continue;
         scenarioTaskKeys.add(dedupKey);
@@ -2249,6 +1953,13 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           });
         }
         const description = clean(scenario.desired_behavior || requirement.text || proof);
+        const testAuthenticityContract = testFiles.length
+          ? authenticityContractForTestTask(taskId, testFiles[0], proof || description)
+          : null;
+        const testAuthenticityInstructions = testFiles.length ? [
+          `Include ${taskId} in the test source as the declared authenticity marker.`,
+          "Do not replace behavior assertions with checks that only prove tests exist, such as tests.length > 0.",
+        ] : [];
         const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
         const taskVerificationHint = verificationHint({ scenario, surface, proof, files });
         const uiTask = isUiSurface(surface, files);
@@ -2309,9 +2020,19 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           design_ids: [`DES-${scenario.requirement_id || requirement.id || "DEMAND"}`],
           source_finding_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
           source_question_ids: sourceQuestions,
-          verification_hint: taskVerificationHint,
+          verification_hint: [taskVerificationHint, ...testAuthenticityInstructions].filter(Boolean).join(" "),
           inputs: readFirst,
           expected_output: files,
+          ...(testFiles.length ? {
+            instructions: testAuthenticityInstructions,
+            test_generation: {
+              mode: "add_minimal",
+              reason: "Executor owns test edits; yolo validates the declared authenticity contract without generating test code.",
+              allowed_test_files: testFiles,
+              max_new_test_files: testFiles.length,
+            },
+            verification_contract: testAuthenticityContract,
+          } : {}),
           ...(uiTask ? {
             state_matrix: uiStateMatrixForTask({ scenario, surface, proof }),
             evidence_plan: uiEvidencePlanForTask({ scenario, surface, proof, files }),
@@ -2354,7 +2075,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             read_first: readFirst,
             acceptance_criteria: [proof].filter(Boolean),
             proof,
-            verification_hint: taskVerificationHint,
+            verification_hint: [taskVerificationHint, ...testAuthenticityInstructions].filter(Boolean).join(" "),
             project_facts: projectFacts,
             deferred_scope: asArray(session.discussion?.deferred),
             deferred_scope_confirmation: deferredScopeConfirmation(session),
@@ -2440,16 +2161,14 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
   if (automatedAcceptanceRequired) {
     const generatedAcceptanceTask = buildSyntheticAutomatedAcceptanceTask(session, tasks, buildContext);
     if (generatedAcceptanceTask) {
-      attachGeneratedAcceptanceToImplementationTasks(tasks, generatedAcceptanceTask, buildContext);
-      tasks.push(generatedAcceptanceTask);
+      tasks.unshift(generatedAcceptanceTask);
+      attachExecutorAcceptanceToImplementationTasks(tasks, generatedAcceptanceTask, buildContext);
     }
   }
   addTaskDependencies(tasks);
   deriveFileDependencies(tasks);
-  const scaffold = buildGreenfieldScaffoldTask(session, tasks, buildContext);
-  const generatedTasks = addScaffoldDependency(tasks, scaffold);
-  annotateGeneratedTaskRequiredCapabilities(generatedTasks);
-  return { tasks: generatedTasks, compileErrors: [...compileErrors, ...inspectGeneratedTaskInstructionsSelfConsistent(generatedTasks)] };
+  annotateGeneratedTaskRequiredCapabilities(tasks);
+  return { tasks, compileErrors: [...compileErrors, ...inspectGeneratedTaskInstructionsSelfConsistent(tasks)] };
 }
 
 function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
@@ -2552,7 +2271,6 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
   const baseCommit = readBaseCommit(input, options);
   const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${asciiIdPart(session.id.replace(/^DEMAND-/, ""), "DEMAND")}`;
   const { tasks, compileErrors } = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
-  const generatedAcceptanceTests = generatedAcceptanceTestsFromTasks(tasks);
   if (compileErrors.length > 0) {
     const verifyOnly = compileErrors.every((err) => (err.code || "ILLEGAL_VERIFY_COMMAND") === "ILLEGAL_VERIFY_COMMAND");
     return {
@@ -2664,7 +2382,6 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       quality_score: quality.total_score,
       quality_report: quality,
       project_facts: structuredProjectFacts(session),
-      generated_acceptance_tests: generatedAcceptanceTests,
       scenario_matrix: {
         schema: session.scenario_matrix?.schema || null,
         scenario_count: asArray(session.scenario_matrix?.scenarios).length,
@@ -2758,25 +2475,6 @@ function groundingArtifact(value = Object()) {
   return artifact;
 }
 
-function generatedAcceptanceTestsFromTasks(tasks = []) {
-  const byFile = new Map();
-  for (const record of asArray(tasks).flatMap((task) => asArray(task?.generated_acceptance_tests))) {
-    const file = clean(record?.file);
-    if (file && !byFile.has(file)) byFile.set(file, record);
-  }
-  return [...byFile.values()];
-}
-
-function writeGeneratedAcceptanceTestArtifacts(projectRoot, prd = Object()) {
-  const artifacts = [];
-  for (const record of asArray(prd?.demand?.generated_acceptance_tests).filter((item) => clean(item?.file) && item?.acceptance_coverage)) {
-    const file = clean(record.file);
-    const cliPath = clean(record.cli_path || record.cliPath);
-    artifacts.push(writeText(resolvePath(projectRoot, file), generateAcceptanceTestFile(record.acceptance_coverage, { cliPath, testFile: file })));
-  }
-  return artifacts;
-}
-
 export function runDemandPrdRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
@@ -2839,9 +2537,6 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     prdPath = writeJson(outputFile, compiled.prd);
     artifacts.push(prdPath);
     outputs.push({ path: prdPath, type: "prd" });
-    const generatedAcceptanceArtifacts = writeGeneratedAcceptanceTestArtifacts(projectRoot, compiled.prd);
-    artifacts.push(...generatedAcceptanceArtifacts);
-    outputs.push(...generatedAcceptanceArtifacts.map((path) => ({ path, type: "generated_acceptance_test" })));
   }
   if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
     const demandSessionPath = writeJson(read.path, compiled.grounded_session);

@@ -47,6 +47,7 @@ export function isPureConfigTask(task = Object()) {
 
 export function atomicityExemptionReason(task = Object()) {
   if (clean(task.task_kind) === "greenfield_scaffold") return "greenfield_scaffold";
+  if (clean(task.task_kind) === "executor_acceptance_test") return "executor_acceptance_test";
   if (isPureConfigTask(task)) return "pure_config";
   return "";
 }
