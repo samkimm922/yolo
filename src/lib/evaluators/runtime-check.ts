@@ -177,7 +177,7 @@ function packageTestScript(command: string, ROOT: string): string {
 const NODE_TEST_REPORTERS = new Set(["spec", "tap"]);
 
 function nodeTestArgsUseFixedSchema(args: string[]): boolean {
-  if (!args.includes("--test") || args.includes("--no-test")) return false;
+  if (!args.includes("--test") || args.some((arg) => arg === "--no-test" || arg.startsWith("--no-test="))) return false;
   if (args.some((arg) => ["-c", "--check", "-e", "--eval", "-p", "--print"].includes(arg) || /^-(?:e|p).+/.test(arg) || /^--(?:eval|print)=/.test(arg))) {
     return false;
   }
