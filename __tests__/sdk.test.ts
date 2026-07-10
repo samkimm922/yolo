@@ -14,6 +14,7 @@ function mkdtempSync(prefix: string): string {
 }
 import createYoloSdk, { ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION, buildAcceptanceReport, buildAdapterEvidencePlan, buildAgentIntegrationDoctorPlan, buildControlledBetaReleaseDecisionPlan, buildEvidenceArtifact, buildInitToFirstPrdSmokePlan, buildLifecycleStageReport, buildManualExternalReleasePlan, buildOperatorReleaseRunbookPlan, buildOperatorReleaseStatePlan, buildPackageInstallSmokePlan, buildPiExecutionDrillPlan, buildPostReleaseAuditPlan, buildProgressDashboardUiEvidence, buildPublicBetaEvidencePlan, buildPublicBetaHardeningDrillPlan, buildRealProjectDogfoodPlan, buildReviewFixPrd, buildReviewOutput, buildRunFinalAnswer, buildRunReport, buildRuntimeBoundaryDecisionPlan, buildStableGraduationPlan, buildTraceabilityMatrix, buildYoloBenchmarkPlan, createEvidenceLedger, createPrdMigrationAdvice, discoverPackManifests, formatAcceptanceReportText, formatRunFinalAnswerMarkdown, formatYoloBenchmarkText, formatYoloCheckText, inspectAcceptanceReport, inspectPackageReadiness, inspectPackedPackage, inspectPrdContract, inspectProgressDashboardUiEvidence, inspectReviewFixLoop, inspectYoloCheck, listAgentPresets, listBenchmarkFixtures, listFixtureDefinitions, listWorkflows, migratePrdFile, migratePrdGates, normalizeReviewFinding, preflightPrd, PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION, readPackManifest, resolveProjectContext, runAdapterEvidenceCollector, runAgentIntegrationDoctor, runBenchmark, runControlledBetaReleaseDecisionGate, runFixtureHarness, runInitToFirstPrdSmoke, runManualExternalReleaseGate, runOperatorReleaseRunbookGate, runOperatorReleaseStateMutation, runPackageInstallSmoke, runPiAgent, runPiExecutionDrillGate, runPiRuntime, runPostReleaseAuditGate, runProgressDashboardUiEvidence, runPublicBetaEvidenceGate, runPublicBetaHardeningDrill, runRealProjectDogfoodGate, runRunnerRuntime, runRuntimeBoundaryDecisionGate, runStableGraduationGate, runYoloBenchmark, scanProject, scoreBenchmarkScenario, supportedConditionTypes, validatePackManifest, writeRunReport, YOLO_BENCHMARK_SCHEMA_VERSION } from "../sdk.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { registerGeneratedArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
 import {
   buildControlledParallelExecutionPlan,
   buildTaskDependencyGraph,
@@ -765,7 +766,10 @@ describe("yolo sdk", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-lifecycle-"));
     const stateRoot = join(root, ".yolo");
     try {
-      mkdirSync(join(stateRoot, "lifecycle"), { recursive: true });
+      mkdirSync(join(stateRoot, "keys"), { recursive: true });
+      writeFileSync(join(stateRoot, "keys/ledger.hmac"), "sdk-pi-lifecycle-ledger-key", "utf8");
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/service.ts"), "export const service = true;\n", "utf8");
       const prdPath = join(root, "prd.json");
       writeFileSync(prdPath, JSON.stringify({
         version: "2.0",
@@ -800,6 +804,11 @@ describe("yolo sdk", () => {
           }],
         }],
       }), "utf8");
+      registerGeneratedArtifactIntegrity([prdPath], {
+        rootDir: root,
+        stateRoot,
+        source: "sdk-pi-lifecycle-fixture",
+      });
       const runEvidencePath = join(root, "state/reports/pi-lifecycle/run-report.json");
       mkdirSync(dirname(runEvidencePath), { recursive: true });
       const runEvidence = {

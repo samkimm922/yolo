@@ -70,11 +70,29 @@ describe("YOLO doctor", () => {
       assert.equal(report.commands.names.includes("yolo-discover"), false);
       assert.equal(report.commands.names.includes("yolo-doctor"), false);
       assert.equal((report.findings || []).some((finding) => finding.code === "YOLO_DOCTOR_WORKTREE_DRIFT"), false);
+      assert.ok(report.pending.some((finding) => finding.code === "YOLO_DOCTOR_WORKTREE_BASELINE_PENDING"));
+      assert.equal(report.blockers.some((finding) => finding.code === "YOLO_DOCTOR_WORKTREE_UNVERIFIABLE"), false);
       assert.ok(report.warnings.some((warning) => warning.code === "YOLO_DOCTOR_AGENT_BRIDGE_INSTALLED"));
       assert.match(formatYoloDoctorText(report), /\[yolo doctor\] warning/);
       assert.equal(runYoloDoctorCli([root, "--target", "codex", "--scope", "project", "--json"], {
         stdout: { write() {} },
       }), 2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reports an error when an established source snapshot is missing", () => {
+    const root = tempProject();
+    try {
+      initProject({ projectRoot: root, projectName: "doctor-missing-snapshot", now: "2026-05-25T00:00:00.000Z" });
+      writeSourceSnapshot({ projectRoot: root, stateRoot: join(root, ".yolo") });
+      rmSync(join(root, ".yolo", "lifecycle", "source-snapshot.json"));
+
+      const report = buildYoloDoctorReport({ projectRoot: root, yoloRoot: "/tmp/yolo", targets: "codex", scope: "project" });
+
+      assert.ok(report.blockers.some((finding) => finding.code === "YOLO_DOCTOR_WORKTREE_UNVERIFIABLE"));
+      assert.equal(report.pending.some((finding) => finding.code === "YOLO_DOCTOR_WORKTREE_BASELINE_PENDING"), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

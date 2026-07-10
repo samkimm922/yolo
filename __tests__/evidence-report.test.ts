@@ -228,6 +228,7 @@ describe("evidence run report", () => {
       assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"artifact_integrity"/);
       assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"sha256"/);
       const artifactLedger = readFileSync(join(stateDir, "artifacts.jsonl"), "utf8");
+      assert.match(artifactLedger, /"event":"artifact.digest.registered"/);
       assert.match(artifactLedger, /"event":"artifact.write"/);
       assert.match(artifactLedger, /"ledger":"artifact"/);
       assert.match(artifactLedger, /"run_report_json"/);

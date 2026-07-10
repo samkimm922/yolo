@@ -65,7 +65,8 @@ const INVENTORY = [
   ["src/runtime/adapters/provider-capability-bits.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/runtime/adapters/provider-runtime-matrix.ts", { WARN: 0, warning: 9, "best-effort": 0, skip: 0 }],
   ["src/runtime/evidence/report.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 23 }],
-  ["src/runtime/evidence/source-fingerprint.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
+  // Fail-closed tri-state fingerprinting no longer describes unreadable declared files as skipped.
+  ["src/runtime/evidence/source-fingerprint.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/runtime/execution/baselines.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 6 }],
   ["src/runtime/execution/commit-flow.ts", { WARN: 2, warning: 1, "best-effort": 0, skip: 6 }],
   ["src/runtime/execution/context-pack-validator.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],

@@ -643,6 +643,12 @@ function releaseCandidateArtifactIssues(reportName: ReleaseCandidateReportName, 
         actual_sha256: artifact.sha256,
       },
     )),
+    ...integrity.unverified.map((artifact) => issue(
+      "RC_GATE_ARTIFACT_UNVERIFIED",
+      reportName,
+      "release candidate gate report artifact has no declared expected sha256",
+      { artifact_path: artifact.absolute_path },
+    )),
   ];
   return { integrity, issues };
 }

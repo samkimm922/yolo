@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { registerGeneratedArtifactIntegrity } from "../../src/runtime/evidence/artifact-integrity.js";
 
 const require = createRequire(import.meta.url);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -539,6 +540,11 @@ function buildApprovedPrd(projectRoot: string, baseCommit: string) {
 function writeApprovedPrd(projectRoot: string, baseCommit: string) {
   const prdPath = join(projectRoot, ".yolo", "data", "prd", "current", "packed-external-prd.json");
   writeJson(prdPath, buildApprovedPrd(projectRoot, baseCommit));
+  registerGeneratedArtifactIntegrity([prdPath], {
+    rootDir: projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    source: "packed-external-prd",
+  });
   const prd = readJson<PackedPrd>(prdPath);
   assertCondition(prd.demand.approval.effective_for_prd === true, "PRD demand.approval.effective_for_prd is true");
   return prdPath;
@@ -686,6 +692,11 @@ function seedAdapterEvidence(projectRoot: string) {
       runtime_errors: [],
       screenshots: [".yolo/state/evidence/adapters/packed-local-browser/external-smoke.txt"],
     },
+  });
+  registerGeneratedArtifactIntegrity([evidencePath, screenshot], {
+    rootDir: projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    source: "packed-external-adapter-evidence",
   });
   assertCondition(existsSync(evidencePath), "packed smoke adapter evidence exists");
 }

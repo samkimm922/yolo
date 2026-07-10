@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
+import { appendJsonlRecord, readLedgerJsonl, validateLedgerChain } from "./ledger.js";
 
 type DigestByPath = Record<string, unknown>;
 
@@ -12,12 +13,11 @@ interface ArtifactIntegrityOptions {
   expected_sha256?: unknown;
   expectedSha256ByPath?: unknown;
   expected_sha256_by_path?: unknown;
-  // M9: when true (release/ship mode), an existing artifact with NO pre-
-  // registered expected digest is treated as a mismatch (unverified post-hoc
-  // artifact) rather than ignored. Default false (accept-mode tolerates
-  // runtime-collected artifacts that have no pre-registered digest).
-  requireExpectedDigest?: unknown;
-  require_expected_digest?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  source?: unknown;
+  allowUnsignedDevelopment?: unknown;
+  allow_unsigned_development?: unknown;
 }
 
 export interface ArtifactIntegrityRecord extends Record<string, unknown> {
@@ -30,6 +30,13 @@ export interface ArtifactIntegrityRecord extends Record<string, unknown> {
   digest_match: boolean | null;
   issue?: string;
   issue_detail?: string;
+}
+
+export interface RegisteredArtifactDigestsResult {
+  status: "pass" | "unverifiable";
+  registered_count: number;
+  expected_sha256_by_path: Record<string, string>;
+  errors: unknown[];
 }
 
 function clean(value: unknown): string {
@@ -109,6 +116,7 @@ export function artifactIntegrityRecord(path: unknown, options: ArtifactIntegrit
 
   const stat = statSync(resolved);
   const sha256 = sha256File(resolved);
+  const issue = expectedSha256 ? undefined : "expected_digest_missing";
   return {
     path: displayPath,
     absolute_path: resolved,
@@ -117,6 +125,7 @@ export function artifactIntegrityRecord(path: unknown, options: ArtifactIntegrit
     sha256,
     expected_sha256: expectedSha256 || null,
     digest_match: expectedSha256 ? sha256 === expectedSha256 : null,
+    ...(issue ? { issue } : {}),
   };
 }
 
@@ -124,23 +133,108 @@ export function verifyArtifactIntegrity(paths: unknown[] = [], options: Artifact
   const uniquePaths = [...new Set(asArray(paths).map(clean).filter(Boolean))];
   const artifacts = uniquePaths.map((path) => artifactIntegrityRecord(path, options));
   const missing = artifacts.filter((artifact) => artifact.exists !== true);
-  // M9: in release/ship mode (requireExpectedDigest), an existing SOURCE artifact
-  // with no pre-registered digest (digest_match === null) is unverified (potential
-  // post-hoc append) and must fail. State/approval JSON files are not delivered
-  // source, so they remain tolerated even in release mode.
-  const requireExpectedDigest = options.requireExpectedDigest === true || options.require_expected_digest === true;
-  const SOURCE_EXT = /\.(mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|vue|svelte)$/i;
-  const digestMismatches = artifacts.filter((artifact) => {
-    if (artifact.exists !== true) return false;
-    if (artifact.digest_match === false) return true;
-    // M9: a source file with no pre-registered digest in release mode is unverified.
-    return requireExpectedDigest && artifact.digest_match === null && SOURCE_EXT.test(String(artifact.path || artifact.absolute_path || ""));
-  });
+  const digestMismatches = artifacts.filter((artifact) => artifact.exists === true && artifact.digest_match === false);
+  const unverified = artifacts.filter((artifact) => artifact.exists === true && artifact.digest_match === null);
   return {
-    status: missing.length > 0 || digestMismatches.length > 0 ? "fail" : "pass",
+    status: missing.length > 0 || digestMismatches.length > 0 || unverified.length > 0 ? "fail" : "pass",
     checked_count: artifacts.length,
     artifacts,
     missing,
     digest_mismatches: digestMismatches,
+    unverified,
+  };
+}
+
+export function registerGeneratedArtifactIntegrity(paths: unknown[] = [], options: ArtifactIntegrityOptions = Object()) {
+  const rootDir = resolve(String(options.rootDir || options.root_dir || process.cwd()));
+  const expectedSha256ByPath: Record<string, string> = {};
+  for (const path of [...new Set(asArray(paths).map(clean).filter(Boolean))]) {
+    const record = artifactIntegrityRecord(path, { rootDir });
+    if (record.exists === true && typeof record.sha256 === "string") expectedSha256ByPath[path] = record.sha256;
+  }
+  const integrity = verifyArtifactIntegrity(paths, { ...options, rootDir, expectedSha256ByPath });
+  const stateRoot = clean(options.stateRoot || options.state_root);
+  if (stateRoot && integrity.status === "pass") {
+    appendJsonlRecord(join(resolve(stateRoot), "state", "artifacts.jsonl"), {
+      event: "artifact.digest.registered",
+      ledger: "artifact",
+      source: clean(options.source) || "generated-artifact",
+      artifact_integrity: integrity,
+    }, {
+      stateRoot: resolve(stateRoot),
+      allowUnsignedDevelopment: options.allowUnsignedDevelopment === true || options.allow_unsigned_development === true,
+    });
+  }
+  return integrity;
+}
+
+export function readRegisteredArtifactDigests(paths: unknown[] = [], options: ArtifactIntegrityOptions = Object()): RegisteredArtifactDigestsResult {
+  const rootDir = resolve(String(options.rootDir || options.root_dir || process.cwd()));
+  const stateRoot = clean(options.stateRoot || options.state_root);
+  const requestedPaths = [...new Set(asArray(paths).map(clean).filter(Boolean))];
+  const expectedSha256ByPath: Record<string, string> = {};
+  if (!stateRoot) {
+    return {
+      status: "unverifiable",
+      registered_count: 0,
+      expected_sha256_by_path: expectedSha256ByPath,
+      errors: [{ code: "ARTIFACT_DIGEST_REGISTRY_STATE_ROOT_MISSING" }],
+    };
+  }
+  const ledgerPath = join(resolve(stateRoot), "state", "artifacts.jsonl");
+  if (!existsSync(ledgerPath)) {
+    return {
+      status: "unverifiable",
+      registered_count: 0,
+      expected_sha256_by_path: expectedSha256ByPath,
+      errors: [{ code: "ARTIFACT_DIGEST_REGISTRY_MISSING", ledger_path: ledgerPath }],
+    };
+  }
+  const records = readLedgerJsonl(ledgerPath);
+  const validation = validateLedgerChain(records, {
+    stateRoot: resolve(stateRoot),
+    allowUnsignedDevelopment: options.allowUnsignedDevelopment === true || options.allow_unsigned_development === true,
+  });
+  if (!validation.ok) {
+    return {
+      status: "unverifiable",
+      registered_count: 0,
+      expected_sha256_by_path: expectedSha256ByPath,
+      errors: validation.errors,
+    };
+  }
+
+  const digestByAbsolutePath = new Map<string, string>();
+  for (const record of records) {
+    if (record.event !== "artifact.digest.registered") continue;
+    const integrity = record.artifact_integrity;
+    if (!integrity || typeof integrity !== "object" || Array.isArray(integrity)) continue;
+    const artifacts = (integrity as { artifacts?: unknown }).artifacts;
+    if (!Array.isArray(artifacts)) continue;
+    for (const artifact of artifacts) {
+      if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) continue;
+      const entry = artifact as { absolute_path?: unknown; sha256?: unknown; digest_match?: unknown };
+      const absolutePath = clean(entry.absolute_path);
+      const sha256 = clean(entry.sha256);
+      if (absolutePath && /^[a-f0-9]{64}$/i.test(sha256) && entry.digest_match === true) {
+        digestByAbsolutePath.set(resolve(absolutePath), sha256);
+      }
+    }
+  }
+
+  let registeredCount = 0;
+  for (const path of requestedPaths) {
+    const absolutePath = normalizePath(path, rootDir);
+    const digest = digestByAbsolutePath.get(absolutePath);
+    if (!digest) continue;
+    registeredCount += 1;
+    expectedSha256ByPath[path] = digest;
+    expectedSha256ByPath[absolutePath] = digest;
+  }
+  return {
+    status: registeredCount === requestedPaths.length ? "pass" : "unverifiable",
+    registered_count: registeredCount,
+    expected_sha256_by_path: expectedSha256ByPath,
+    errors: [],
   };
 }

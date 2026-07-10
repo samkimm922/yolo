@@ -93,22 +93,39 @@ export function gitTrackedSourceFiles(projectRoot: string): string[] {
 export function computeSourceFingerprint(
   projectRoot: string,
   files?: string[],
-): { [relPath: string]: string } {
+): SourceFingerprintCapture {
   const resolvedRoot = resolve(projectRoot);
   const relFiles = files && files.length > 0
     ? [...new Set(files.map(normalizeRel).filter(Boolean))].sort((a, b) => a.localeCompare(b))
     : gitTrackedSourceFiles(resolvedRoot);
   const fingerprint: { [relPath: string]: string } = {};
+  const unverifiablePaths: string[] = [];
   for (const rel of relFiles) {
     const abs = resolve(resolvedRoot, rel);
-    if (!existsSync(abs)) continue;
+    if (!existsSync(abs)) {
+      unverifiablePaths.push(rel);
+      continue;
+    }
     try {
       fingerprint[rel] = sha256File(abs);
     } catch {
-      // Unreadable file: skip at capture; absence is caught at compare time.
+      unverifiablePaths.push(rel);
     }
   }
-  return fingerprint;
+  const hasVerifiedFiles = Object.keys(fingerprint).length > 0;
+  return {
+    status: unverifiablePaths.length === 0 && hasVerifiedFiles ? "verified" : "unverifiable",
+    files: fingerprint,
+    unverifiable_paths: unverifiablePaths,
+    reason: relFiles.length === 0 ? "no_source_files" : unverifiablePaths.length > 0 ? "source_files_unreadable" : null,
+  };
+}
+
+export interface SourceFingerprintCapture {
+  status: "verified" | "unverifiable";
+  files: { [relPath: string]: string };
+  unverifiable_paths: string[];
+  reason: "no_source_files" | "source_files_unreadable" | null;
 }
 
 export interface SourceFingerprintCompare {

@@ -1,6 +1,8 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { registerGeneratedArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { resolveLedgerHmacKey } from "../evidence/ledger.js";
 import {
   buildReviewPreCompletedSet,
   ensureReviewTaskShape,
@@ -377,6 +379,7 @@ export async function runReviewLoop({
   runId,
   yoloRoot,
   rootDir,
+  stateRoot,
   progress,
   mainLoop,
   loadPRD,
@@ -402,6 +405,7 @@ export async function runReviewLoop({
   runId?: string;
   yoloRoot: string;
   rootDir: string;
+  stateRoot?: string;
   progress: { total: number; done?: number; failed?: number };
   mainLoop?: (prdPath: string, preCompleted: Set<unknown>) => Promise<TaskResults>;
   loadPRD?: (prdPath: string) => Prd;
@@ -754,6 +758,13 @@ export async function runReviewLoop({
       }
 
       writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
+      if (stateRoot && resolveLedgerHmacKey(stateRoot)) {
+        registerGeneratedArtifactIntegrity([prdPath], {
+          rootDir,
+          stateRoot,
+          source: "review-loop-prd-update",
+        });
+      }
 
       const reviewTaskIds = reviewTaskIdSet(executorTasks);
       if (typeof mainLoop === "function" && taskResults) {
@@ -885,6 +896,14 @@ export async function runReviewLoop({
         })),
         human_needed: true,
       },
+    });
+  }
+
+  if (stateRoot && prdPath && existsSync(prdPath) && resolveLedgerHmacKey(stateRoot)) {
+    registerGeneratedArtifactIntegrity([prdPath], {
+      rootDir,
+      stateRoot,
+      source: "review-loop-prd-final",
     });
   }
 

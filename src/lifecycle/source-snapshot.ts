@@ -18,6 +18,8 @@ import { resolveLifecycleStateRoot, lifecycleDir } from "./state.js";
 
 export const SOURCE_SNAPSHOT_FILE = "source-snapshot.json";
 export const SOURCE_SNAPSHOT_SCHEMA = "yolo.lifecycle.source_snapshot.v1";
+export const SOURCE_SNAPSHOT_HISTORY_FILE = "source-snapshot-history.json";
+export const SOURCE_SNAPSHOT_HISTORY_SCHEMA = "yolo.lifecycle.source_snapshot_history.v1";
 
 export type SnapshotOptions = Record<string, unknown>;
 
@@ -38,6 +40,12 @@ export interface SourceSnapshotRecord extends Record<string, unknown> {
   method?: string;
   signature?: string;
   captured_at?: string;
+}
+
+interface SourceSnapshotHistory {
+  schema: string;
+  established_at: string;
+  snapshot_schema: string;
 }
 
 const EXCLUDED_DIRS = new Set([
@@ -153,6 +161,10 @@ export function sourceSnapshotPath(options: SnapshotOptions = Object()): string 
   return join(lifecycleDir(options), SOURCE_SNAPSHOT_FILE);
 }
 
+export function sourceSnapshotHistoryPath(options: SnapshotOptions = Object()): string {
+  return join(lifecycleDir(options), SOURCE_SNAPSHOT_HISTORY_FILE);
+}
+
 export function writeSourceSnapshot(options: SnapshotOptions = Object()): { path: string; payload: SourceSnapshotPayload } {
   const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
@@ -167,6 +179,12 @@ export function writeSourceSnapshot(options: SnapshotOptions = Object()): { path
   };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  const history: SourceSnapshotHistory = {
+    schema: SOURCE_SNAPSHOT_HISTORY_SCHEMA,
+    established_at: payload.captured_at,
+    snapshot_schema: payload.schema,
+  };
+  writeFileSync(sourceSnapshotHistoryPath({ projectRoot, stateRoot }), `${JSON.stringify(history, null, 2)}\n`, "utf8");
   return { path, payload };
 }
 
@@ -180,11 +198,42 @@ export function readSourceSnapshot(options: SnapshotOptions = Object()): SourceS
   }
 }
 
-export interface WorktreeDriftResult {
-  has_drift: boolean;
-  reason: string | null;
+interface WorktreeDriftMetadata {
   captured_at?: string | null;
   current_difference_file_count?: number | null;
+}
+
+export type WorktreeDriftResult = WorktreeDriftMetadata & (
+  | { status: "clean"; has_drift: false; reason: null }
+  | { status: "drift"; has_drift: true; reason: string }
+  | {
+    status: "unverifiable";
+    has_drift: null;
+    reason: "no_snapshot" | "snapshot_unreadable";
+    baseline_state: "bootstrap" | "expected";
+  }
+);
+
+function lifecycleHistoryRequiresSnapshot(options: SnapshotOptions): boolean {
+  const statusPath = join(lifecycleDir(options), "status.json");
+  try {
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    return Array.isArray(status?.stages) && status.stages.some((stage: unknown) => {
+      if (!stage || typeof stage !== "object" || Array.isArray(stage)) return false;
+      const record = stage as Record<string, unknown>;
+      return record.status === "completed" && (record.id === "check" || record.writes_code === true);
+    });
+  } catch {
+    return false;
+  }
+}
+
+function sourceSnapshotWasEstablished(options: SnapshotOptions): boolean {
+  try {
+    const history = JSON.parse(readFileSync(sourceSnapshotHistoryPath(options), "utf8")) as Partial<SourceSnapshotHistory>;
+    if (history.schema === SOURCE_SNAPSHOT_HISTORY_SCHEMA && clean(history.established_at)) return true;
+  } catch {}
+  return lifecycleHistoryRequiresSnapshot(options);
 }
 
 function inspectWorktreeDifference(options: SnapshotOptions = Object()) {
@@ -202,16 +251,25 @@ function inspectWorktreeDifference(options: SnapshotOptions = Object()) {
 // Drift = signatures differ (method-agnostic: any working-tree change).
 export function inspectWorktreeDrift(options: SnapshotOptions = Object()): WorktreeDriftResult {
   const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
-  const snapshot = readSourceSnapshot({ ...options, projectRoot });
+  const resolvedOptions = { ...options, projectRoot };
+  const path = sourceSnapshotPath(resolvedOptions);
+  const snapshot = readSourceSnapshot(resolvedOptions);
   if (!snapshot) {
-    return { has_drift: false, reason: "no_snapshot" };
+    const baselineState = existsSync(path) || sourceSnapshotWasEstablished(resolvedOptions) ? "expected" : "bootstrap";
+    return {
+      status: "unverifiable",
+      has_drift: null,
+      reason: existsSync(path) ? "snapshot_unreadable" : "no_snapshot",
+      baseline_state: baselineState,
+    };
   }
   const current = computeWorktreeSignature(projectRoot);
   if (current.signature === snapshot.signature) {
-    return { has_drift: false, reason: null, captured_at: clean(snapshot.captured_at) || null, current_difference_file_count: 0 };
+    return { status: "clean", has_drift: false, reason: null, captured_at: clean(snapshot.captured_at) || null, current_difference_file_count: 0 };
   }
   const difference = inspectWorktreeDifference({ ...options, projectRoot });
   return {
+    status: "drift",
     has_drift: true,
     reason: `working tree changed since last check snapshot (snapshot method: ${snapshot.method}, captured_at: ${snapshot.captured_at || "unknown"})`,
     captured_at: clean(snapshot.captured_at) || null,

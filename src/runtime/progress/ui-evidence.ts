@@ -4,6 +4,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { HTML } from "./server.js";
+import { registerGeneratedArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { resolveLedgerHmacKey } from "../evidence/ledger.js";
 
 export const PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION = "1.0";
 export const PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA = "yolo.progress_dashboard.ui_evidence.v1";
@@ -478,7 +480,23 @@ export function buildProgressDashboardUiEvidence(input = Object(), options = Obj
       : ["Fix the blocked UI/UX checks and rerun progress dashboard evidence."],
   };
 
-  if (writeArtifacts) writeText(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+  if (writeArtifacts) {
+    writeText(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+    if (resolveLedgerHmacKey(stateRoot)) {
+      const generatedArtifacts = [
+        outputPath,
+        idlePath,
+        activePath,
+        ...themedHtmlArtifacts.map((artifact) => artifact.path),
+        ...browserEvidence.screenshots.map((path) => resolve(projectRoot, path)),
+      ].filter((path) => existsSync(path));
+      registerGeneratedArtifactIntegrity(generatedArtifacts, {
+        rootDir: projectRoot,
+        stateRoot,
+        source: "progress-dashboard-ui-evidence",
+      });
+    }
+  }
 
   return report;
 }

@@ -76,16 +76,22 @@ describe("source-snapshot worktree drift detection", () => {
       assert.equal(result.status, "unverifiable");
       assert.equal(result.has_drift, null);
       assert.equal(result.reason, "no_snapshot");
+      assert.equal(result.baseline_state, "bootstrap");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("lifecycle guard blocks downstream work when the drift snapshot is unavailable", () => {
+  test("lifecycle guard allows first check bootstrap but blocks downstream work after an established snapshot disappears", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-snap-guard-none-"));
     try {
       initLifecycleState({ projectRoot: root });
 
+      const bootstrap = inspectLifecycleDrift(root);
+      assert.equal(bootstrap.drift_records.some((record) => record.code === "WORKTREE_UNVERIFIABLE"), false);
+
+      writeSourceSnapshot({ projectRoot: root, stateRoot: join(root, ".yolo") });
+      rmSync(join(root, ".yolo", "lifecycle", "source-snapshot.json"));
       const result = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root });
 
       assert.equal(result.status, "blocked");

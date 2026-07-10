@@ -10,16 +10,29 @@ import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { runYoloCli } from "../src/cli/yolo.js";
 import { generateApprovalKeyPair, signApproval } from "../src/lib/security/approval-signing.js";
 import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
+import { registerGeneratedArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
 
 function tempProject() {
   const root = mkdtempSync(join(tmpdir(), "yolo-acceptance-report-"));
   writeText(join(root, ".yolo", "keys", "ledger.hmac"), "acceptance-report-test-ledger-key");
+  writeText(join(root, "src/pages/inventory.tsx"), "export const Inventory = () => null;\n");
   return root;
 }
 
 function writeJson(file, payload) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(payload, null, 2), "utf8");
+  let projectRoot = dirname(file);
+  while (dirname(projectRoot) !== projectRoot && !existsSync(join(projectRoot, ".yolo/keys/ledger.hmac"))) {
+    projectRoot = dirname(projectRoot);
+  }
+  if (existsSync(join(projectRoot, ".yolo/keys/ledger.hmac"))) {
+    registerGeneratedArtifactIntegrity([file], {
+      rootDir: projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      source: "acceptance-internal-fixture",
+    });
+  }
 }
 
 function writeText(file, text) {
@@ -238,6 +251,44 @@ describe("acceptance report", () => {
     }
   });
 
+  test("loads expected digests registered by earlier internal lifecycle stages", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      const runReportPath = join(stateRoot, "state/reports/run-test-001/run-report.json");
+      const fixturePrd = prd();
+      writeJson(prdPath, fixturePrd);
+      writeJson(runReportPath, runReport(prdPath));
+      writeText(join(root, "src/pages/inventory.tsx"), "export const Inventory = () => null;\n");
+      registerGeneratedArtifactIntegrity([prdPath, runReportPath], {
+        rootDir: root,
+        stateRoot,
+        source: "acceptance-test-lifecycle",
+      });
+
+      const report = buildAcceptanceReport({
+        prdPath,
+        runReportPath,
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.status, "pass", JSON.stringify(report.issues, null, 2));
+      assert.equal(report.issues.some((issue) => issue.code === "ACCEPTANCE_ARTIFACT_UNVERIFIED"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks review_fix acceptance when the source finding is still open in review report", () => {
     const root = tempProject();
     try {
@@ -293,6 +344,7 @@ describe("acceptance report", () => {
   test("passes review_fix acceptance when source finding is absent from latest review report", () => {
     const root = tempProject();
     try {
+      writeText(join(root, "src/services/auth.ts"), "export const authenticate = () => true;\n");
       const report = buildAcceptanceReport({
         prd: prd({
           id: "FIX-REVIEW-001",
@@ -905,6 +957,7 @@ describe("acceptance report", () => {
   test("accepts recovered automation remediation as clean run history", () => {
     const root = tempProject();
     try {
+      writeText(join(root, "src/services/inventory.ts"), "export const inventory = new Map();\n");
       const autoRemediation = {
         source: "state",
         task_id: "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001",
@@ -1439,6 +1492,7 @@ describe("acceptance report", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
     try {
+      writeText(join(root, "src/services/inventory.ts"), "export const inventory = new Map();\n");
       const servicePrd = prd({
         title: "Build inventory service",
         scope: { targets: [{ file: "src/services/inventory.ts" }] },

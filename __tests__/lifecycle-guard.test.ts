@@ -181,7 +181,8 @@ describe("lifecycle guard", () => {
       }, {
         projectRoot: root,
         stateRoot,
-        source: "unit",
+        source: "runner-baseline",
+        runnerBaselineCommit: "test-baseline",
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });

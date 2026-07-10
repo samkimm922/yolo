@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { runReviewLoop } from "../src/runtime/review-loop/orchestrator.js";
 import { classifyTaskExecution } from "../src/runtime/task-loop/router.js";
+import { readRegisteredArtifactDigests, verifyArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -102,6 +103,7 @@ test("runReviewLoop exits cleanly when scanner has no findings", async () => {
 
 test("runReviewLoop converts one finding into one review_fix task with non-empty post conditions", async () => {
   const root = mkdtempSync(resolve(tmpdir(), "yolo-review-one-finding-"));
+  const stateRoot = resolve(root, ".yolo");
   const prdPath = resolve(root, "prd.json");
   const prd = {
     id: "PRD-REVIEW-ONE-FINDING",
@@ -116,6 +118,8 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
   };
 
   try {
+    mkdirSync(resolve(stateRoot, "keys"), { recursive: true });
+    writeFileSync(resolve(stateRoot, "keys/ledger.hmac"), "review-loop-test-ledger-key", "utf8");
     writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
 
     const result = await runReviewLoop({
@@ -124,7 +128,8 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
       taskResults: emptyTaskResults(),
       runId: "run-test",
       yoloRoot: YOLO_DIR,
-      rootDir: YOLO_DIR,
+      rootDir: root,
+      stateRoot,
       progress: { total: 1, done: 0, failed: 0 },
       maxReviewRounds: 1,
       maxReviewTasksPerRound: 5,
@@ -148,7 +153,12 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
           description: "Avoid as any",
         }],
       }),
-      mainLoop: async () => emptyTaskResults(),
+      mainLoop: async () => {
+        const current = JSON.parse(readFileSync(prdPath, "utf8"));
+        current.review_applied = true;
+        writeFileSync(prdPath, JSON.stringify(current, null, 2), "utf8");
+        return emptyTaskResults();
+      },
       loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
       normalizeRepoPath: (value) => value,
     });
@@ -166,6 +176,13 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
       condition.severity === "FAIL" &&
       condition.params.source_finding_id === "REV-ONE"
     ));
+    const registered = readRegisteredArtifactDigests([prdPath], { rootDir: root, stateRoot });
+    assert.equal(registered.status, "pass");
+    const integrity = verifyArtifactIntegrity([prdPath], {
+      rootDir: root,
+      expectedSha256ByPath: registered.expected_sha256_by_path,
+    });
+    assert.equal(integrity.status, "pass");
     assert.deepEqual(result.failed, ["FIX-R1-001", "REVIEW-FINDINGS-PERSISTED"]);
     assert.deepEqual(result.blocked, ["REVIEW-FINDINGS-PERSISTED"]);
     assert.equal(result.review_outcome.reason, "review_findings_persisted");

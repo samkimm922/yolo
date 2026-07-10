@@ -10,6 +10,7 @@ import { writeLifecycleStageReport } from "../../src/lifecycle/progress.js";
 import { runPiRuntime } from "../../src/runtime/pi-runtimes.js";
 import { computeSourceFingerprint } from "../../src/runtime/evidence/source-fingerprint.js";
 import { buildAcceptanceReport } from "../../src/runtime/acceptance/report.js";
+import { registerGeneratedArtifactIntegrity } from "../../src/runtime/evidence/artifact-integrity.js";
 
 type ShipBatteryCase = {
   id: string;
@@ -156,10 +157,16 @@ async function runRealEvidenceShipsCase(): Promise<ShipBatteryResult> {
     writeJson(prdPath, prd);
     const stateRoot = join(root, ".yolo");
     initLifecycleState({ projectRoot: root });
+    registerGeneratedArtifactIntegrity([prdPath], {
+      rootDir: root,
+      stateRoot,
+      source: "ship-battery-prd",
+    });
     const opt = lifecycleOptions(root);
 
     // Build a genuine acceptance report over the real PRD + structured run report.
     const acceptance = buildAcceptanceReport({
+      prdPath,
       prd,
       runReport: { status: "success", run_id: "run-pos-001", summary: { planned: 1, completed: 1, failed: 0, blocked: 0 } },
       reviewReport: { status: "pass", findings: [] },
@@ -192,6 +199,7 @@ async function runRealEvidenceShipsCase(): Promise<ShipBatteryResult> {
       evidence: [{ path: "state/review.json" }],
     }, opt);
     writeLifecycleStageReport("acceptance", {
+      ...acceptance,
       status: "pass",
       summary: "acceptance passed",
       prd_path: prdPath,
