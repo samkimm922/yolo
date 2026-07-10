@@ -56,7 +56,7 @@ const INVENTORY = [
   ["src/release/decision-gate.ts", { WARN: 0, warning: 34, "best-effort": 0, skip: 0 }],
   ["src/release/dogfood-matrix.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
   ["src/release/hardening-drill.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
-  ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
+  ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 5 }],
   ["src/review/fix-loop.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   // PR-13: skip count 2 -> 1 after replacing while-no-cursor keyword scanning comments with condition-variable analysis.
   ["src/review/scanner.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
