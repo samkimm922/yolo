@@ -20,7 +20,10 @@ function installManualAcceptanceKey(stateRoot) {
 }
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-lifecycle-progress-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-lifecycle-progress-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "lifecycle-progress-test-ledger-key", "utf8");
+  return root;
 }
 
 describe("lifecycle progress", () => {

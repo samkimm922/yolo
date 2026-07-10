@@ -1,10 +1,17 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync as rawMkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runDemandDiscussRuntime, runDemandPrdRuntime } from "../src/demand/runtime.js";
 import { planControlledParallelWaves } from "../src/runtime/parallel/wave-planner.js";
+
+function mkdtempSync(prefix: string): string {
+  const root = rawMkdtempSync(prefix);
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "p2-16-test-ledger-key", "utf8");
+  return root;
+}
 
 function isTestFile(file = "") {
   const path = String(file).toLowerCase();

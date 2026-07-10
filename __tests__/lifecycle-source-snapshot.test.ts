@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync as rawMkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -12,6 +12,13 @@ import {
 } from "../src/lifecycle/source-snapshot.js";
 import { inspectLifecycleDrift } from "../src/lifecycle/guard.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+
+function mkdtempSync(prefix: string): string {
+  const root = rawMkdtempSync(prefix);
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "source-snapshot-test-ledger-key", "utf8");
+  return root;
+}
 
 function gitInit(root) {
   const result = spawnSync("git", ["init"], { cwd: root, encoding: "utf8" });

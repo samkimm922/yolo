@@ -10,6 +10,23 @@
     "ledgerEvent": {
       "type": "object",
       "required": ["schema_version", "schema", "ts", "ledger", "event", "source", "prev_hash", "record_hash"],
+      "oneOf": [
+        { "required": ["record_sig"] },
+        {
+          "required": ["evidence_security"],
+          "properties": {
+            "evidence_security": {
+              "type": "object",
+              "required": ["mode", "production_ready", "notice"],
+              "properties": {
+                "mode": { "const": "development_unsigned" },
+                "production_ready": { "const": false },
+                "notice": { "const": "UNSIGNED EVIDENCE: NOT VALID FOR PRODUCTION ACCEPTANCE" }
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "schema_version": { "const": "1.0" },
         "schema": { "const": "yolo.ledger.event.v1" },
@@ -33,7 +50,8 @@
           ],
           "description": "Hash of the previous ledger record. null for the genesis record."
         },
-        "record_hash": { "type": "string", "minLength": 1, "description": "SHA-256 hash of the canonical record payload." }
+        "record_hash": { "type": "string", "minLength": 1, "description": "SHA-256 hash of the canonical record payload." },
+        "record_sig": { "type": "string", "minLength": 1, "description": "HMAC-SHA256 signature of record_hash and prev_hash." }
       },
       "additionalProperties": true
     },

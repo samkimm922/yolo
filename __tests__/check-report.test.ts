@@ -12,7 +12,10 @@ import { initLifecycleState } from "../src/lifecycle/state.js";
 const R6_DEMAND_PRD_SHA256 = "fd62ceadc9983b9c7e357d8bf871ecc346531da9765d58fe857ca1aec4fd250b";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-check-report-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-check-report-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "check-report-test-ledger-key", "utf8");
+  return root;
 }
 
 function writeJson(file, payload) {

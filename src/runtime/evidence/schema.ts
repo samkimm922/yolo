@@ -4,12 +4,16 @@ export const EVIDENCE_SCHEMA_VERSION = "1.0";
 export const LEDGER_EVENT_SCHEMA = "yolo.ledger.event.v1";
 export const EVIDENCE_ARTIFACT_SCHEMA = "yolo.evidence.artifact.v1";
 export const EVIDENCE_HASH_ALGORITHM = "sha256";
+export const UNSIGNED_DEVELOPMENT_WARNING = "UNSIGNED EVIDENCE: NOT VALID FOR PRODUCTION ACCEPTANCE";
 
 export type EvidenceObject = Record<string, unknown>;
 
 export interface EvidenceValidationResult {
   ok: boolean;
   errors: string[];
+  status?: "pass" | "fail" | "non_production";
+  production_ready?: boolean;
+  notices?: string[];
 }
 
 export interface EvidenceLedgerRecord extends EvidenceObject {
@@ -36,6 +40,19 @@ export interface EvidenceArtifactRecord extends EvidenceObject {
 }
 
 const VALID_LEDGER_KINDS: ReadonlySet<unknown> = new Set(["state", "run", "artifact", "custom"]);
+
+function unsignedDevelopmentAllowed(options: EvidenceObject = Object()): boolean {
+  return options.allowUnsignedDevelopment === true || options.allow_unsigned_development === true;
+}
+
+function hasUnsignedDevelopmentMarker(record: EvidenceObject): boolean {
+  const security = record.evidence_security;
+  if (!security || typeof security !== "object" || Array.isArray(security)) return false;
+  const marker = security as EvidenceObject;
+  return marker.mode === "development_unsigned"
+    && marker.production_ready === false
+    && marker.notice === UNSIGNED_DEVELOPMENT_WARNING;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -84,9 +101,9 @@ export function ledgerRecordHash(record: EvidenceObject = Object()): string {
 // the attacker also needs the project HMAC key.
 //
 // The key is resolved by the caller (project-rooted, e.g.
-// <stateRoot>/keys/ledger.hmac) and passed through options; when no key is
-// configured the system falls back to plain-hash validation (backward-
-// compatible with existing ledger records).
+// <stateRoot>/keys/ledger.hmac) and passed through options. Unsigned records
+// are never production evidence; an explicit development-only path marks them
+// as non-production so formal gates cannot accept a silent downgrade.
 export function ledgerRecordSig(record: EvidenceObject = Object(), hmacKey: string): string {
   const material = {
     record_hash: String(record.record_hash || ""),
@@ -145,6 +162,13 @@ export function buildLedgerRecord<TData extends EvidenceObject = EvidenceObject>
     source: payloadSource || options.source || "yolo",
     prev_hash: payloadPrevHash ?? options.prevHash ?? options.prev_hash ?? null,
     ...rest,
+    ...(unsignedDevelopmentAllowed(options) ? {
+      evidence_security: {
+        mode: "development_unsigned",
+        production_ready: false,
+        notice: UNSIGNED_DEVELOPMENT_WARNING,
+      },
+    } : {}),
   };
   const withHash = {
     ...record,
@@ -191,7 +215,7 @@ export function buildEvidenceArtifact<TPayload extends EvidenceObject = Evidence
   } as EvidenceArtifactRecord & TPayload;
 }
 
-export function validateLedgerRecord(record: unknown = Object(), options: { hmacKey?: string } = Object()): EvidenceValidationResult {
+export function validateLedgerRecord(record: unknown = Object(), options: { hmacKey?: string; allowUnsignedDevelopment?: boolean; allow_unsigned_development?: boolean } = Object()): EvidenceValidationResult {
   const errors: string[] = [];
   // ledger.jsonl files live on disk and may be corrupted by partial flushes,
   // SIGKILL mid-write, or external edits (the same boundary that readJsonl in
@@ -227,10 +251,22 @@ export function validateLedgerRecord(record: unknown = Object(), options: { hmac
     else if (!verifyLedgerRecordSig(ledgerRecord, hmacKey)) errors.push("record_sig does not verify against the configured ledger HMAC key");
   } else if (hasSig) {
     errors.push("record_sig present but no ledger HMAC key configured to verify it");
+  } else if (unsignedDevelopmentAllowed(options)) {
+    if (!hasUnsignedDevelopmentMarker(ledgerRecord)) {
+      errors.push("unsigned development evidence must carry the non-production security marker");
+    }
+  } else {
+    errors.push("record_sig is required for production evidence");
   }
+  const developmentUnsigned = !hmacKey && unsignedDevelopmentAllowed(options) && errors.length === 0;
   return {
     ok: errors.length === 0,
     errors,
+    ...(developmentUnsigned ? {
+      status: "non_production" as const,
+      production_ready: false,
+      notices: [UNSIGNED_DEVELOPMENT_WARNING],
+    } : {}),
   };
 }
 

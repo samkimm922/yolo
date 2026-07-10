@@ -244,7 +244,7 @@ export function runDemandDiscussRuntime(input = Object(), options = Object()) {
         demand_dir: outputDir,
         phase: "discuss",
         ledger: "state",
-      });
+      }, { stateRoot });
       if (session.approval?.approved === true) {
         appendJsonlRecord(join(stateDir, "evidence", "ledger.jsonl"), {
           event: "demand.approved",
@@ -254,7 +254,7 @@ export function runDemandDiscussRuntime(input = Object(), options = Object()) {
           demand_dir: outputDir,
           phase: "prd_intake",
           ledger: "state",
-        });
+        }, { stateRoot });
       }
     } catch (_) {
       // Ledger write is nonblocking; gate will catch missing evidence
@@ -304,7 +304,7 @@ export function runDemandApprovedRuntime(input = Object(), options = Object()) {
         demand_dir: outputDir,
         phase: "prd_intake",
         ledger: "state",
-      });
+      }, { stateRoot });
     } catch (_) {
       // Ledger write is nonblocking; spec will report any missing evidence explicitly.
     }

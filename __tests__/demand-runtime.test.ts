@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync as rawMkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -53,6 +53,13 @@ interface DemandPrdResultForTest extends DemandRecord {
   output_path?: string | null;
   prd?: DemandPrdDocument | null;
   quality_report?: DemandRecord & { blockers?: Array<{ code?: string }> };
+}
+
+function mkdtempSync(prefix: string): string {
+  const root = rawMkdtempSync(prefix);
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "demand-runtime-test-ledger-key", "utf8");
+  return root;
 }
 
 function requirePrd(result: DemandPrdResultForTest): asserts result is DemandPrdResultForTest & { prd: DemandPrdDocument } {
@@ -145,7 +152,11 @@ function seedDogfoodGitweeklyR2Fixture(root: string): string {
   mkdirSync(demandDir, { recursive: true });
   writeJson(join(demandDir, "session.json"), session);
   mkdirSync(join(root, ".yolo", "state", "evidence"), { recursive: true });
-  writeFileSync(join(root, ".yolo", "state", "evidence", "ledger.jsonl"), readFileSync(ledgerPath, "utf8"), "utf8");
+  const targetLedgerPath = join(root, ".yolo", "state", "evidence", "ledger.jsonl");
+  for (const fixtureRecord of readFileSync(ledgerPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line))) {
+    const { schema_version, schema, prev_hash, record_hash, record_sig, ...record } = fixtureRecord;
+    appendJsonlRecord(targetLedgerPath, record, { stateRoot: join(root, ".yolo") });
+  }
   writeJson(join(root, ".yolo", "config.json"), {
     schema_version: "1.0",
     project: { name: "dogfood-gitweekly-r2" },

@@ -21,6 +21,8 @@ export const MEMORY_CHECKPOINT_STATUSES = new Set([
 
 export function createRunnerLedgerWriters({
   getStateDir,
+  getStateRoot = () => undefined,
+  allowUnsignedDevelopment = () => false,
   getRunId = () => null,
   appendStateEvent,
   appendRunEvent,
@@ -31,7 +33,10 @@ export function createRunnerLedgerWriters({
       try {
         const runId = getRunId();
         const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
-        appendStateEvent(getStateDir(), event, payload);
+        appendStateEvent(getStateDir(), event, payload, {
+          stateRoot: getStateRoot(),
+          allowUnsignedDevelopment: allowUnsignedDevelopment(),
+        });
       } catch (e) {
         error("[runner] logEvent 写入失败:", e.message);
       }
@@ -40,7 +45,10 @@ export function createRunnerLedgerWriters({
       try {
         const runId = getRunId();
         const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
-        appendRunEvent(getStateDir(), event, payload);
+        appendRunEvent(getStateDir(), event, payload, {
+          stateRoot: getStateRoot(),
+          allowUnsignedDevelopment: allowUnsignedDevelopment(),
+        });
       } catch (e) {
         error("[runner] logRun 写入失败:", e.message);
       }

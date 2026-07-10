@@ -26,6 +26,7 @@ import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
 import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
+import { requireLedgerHmacKey, UNSIGNED_DEVELOPMENT_WARNING } from "../evidence/ledger.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -630,7 +631,13 @@ export function prepareRunStartup({
   runnerError = createRunnerError,
   processKill = process.kill,
   processExit = process.exit,
+  allowUnsignedDevelopment = false,
+  consoleWarn = (...args) => console.warn(...args),
 } = Object()) {
+  const ledgerHmacKey = requireLedgerHmacKey(yoloRoot, { allowUnsignedDevelopment });
+  if (!ledgerHmacKey) {
+    consoleWarn(`[yolo-runner] SECURITY WARNING: ${UNSIGNED_DEVELOPMENT_WARNING}`);
+  }
   const gitBaseline = ensureRunGitBaseline({ rootDir, execFileSync, consoleLog, runnerError });
   if (gitBaseline.status === "created") {
     refreshCheckSnapshotAfterRunnerBaseline({

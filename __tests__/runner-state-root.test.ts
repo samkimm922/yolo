@@ -118,6 +118,8 @@ describe("runner state root", () => {
     const prdPath = join(stateRoot, "data/prd/current/state-root-smoke.json");
     const runId = `run-state-root-${Date.now()}`;
     try {
+      mkdirSync(join(stateRoot, "keys"), { recursive: true });
+      writeFileSync(join(stateRoot, "keys", "ledger.hmac"), "runner-state-root-test-ledger-key", "utf8");
       mkdirSync(join(stateRoot, "data/prd/current"), { recursive: true });
       writeFileSync(join(projectRoot, "README.md"), "# state root smoke\n", "utf8");
       writeFileSync(join(projectRoot, "package.json"), JSON.stringify({

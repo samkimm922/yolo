@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -42,6 +42,8 @@ describe("YOLO eval benchmark", () => {
 
   test("missing benchmark results fail closed and write evidence", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-eval-missing-"));
+    mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+    writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "eval-benchmark-test-ledger-key", "utf8");
     const report = runYoloBenchmark({ projectRoot: root });
 
     assert.equal(report.status, "blocked");

@@ -9,7 +9,10 @@ import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-runner-runtime-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-runner-runtime-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "runner-runtime-test-ledger-key", "utf8");
+  return root;
 }
 
 function writeJson(file, payload) {

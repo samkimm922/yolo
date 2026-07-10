@@ -13,10 +13,46 @@ import {
 } from "../src/runtime/evidence/report.js";
 
 function tempStateDir() {
-  return mkdtempSync(join(tmpdir(), "yolo-report-state-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-report-state-"));
+  const stateDir = join(root, "state");
+  mkdirSync(stateDir, { recursive: true });
+  mkdirSync(join(root, "keys"), { recursive: true });
+  writeFileSync(join(root, "keys", "ledger.hmac"), "evidence-report-test-ledger-key", "utf8");
+  return stateDir;
 }
 
 describe("evidence run report", () => {
+  test("unsigned development reports are writable but never production-ready", () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), "yolo-report-development-"));
+    const stateDir = join(stateRoot, "state");
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-DEV", tasks: 1 }, {
+        stateRoot,
+        allowUnsignedDevelopment: true,
+      });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-DEV", passed: 1, failed: 0 }, {
+        stateRoot,
+        allowUnsignedDevelopment: true,
+      });
+
+      const result = writeRunReport({
+        stateDir,
+        stateRoot,
+        runId: "RUN-DEV",
+        progressTotal: 1,
+        taskResults: { completed: ["TASK-DEV"], failed: [], skipped: [], blocked: [] },
+        allowUnsignedDevelopment: true,
+      });
+
+      assert.equal(result.report.ledger?.integrity?.status, "fail");
+      assert.equal(result.report.ledger?.integrity?.production_ready, false);
+      assert.ok(Number(result.report.ledger?.integrity?.error_count) >= 1);
+      assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"mode":"development_unsigned"/);
+    } finally {
+      rmSync(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   test("buildRunReport summarizes task results from evidence ledgers", () => {
     const stateDir = tempStateDir();
     try {

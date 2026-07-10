@@ -10,7 +10,10 @@ import {
 } from "../src/cli/yolo.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-interview-cli-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-interview-cli-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "interview-cli-test-ledger-key", "utf8");
+  return root;
 }
 
 function capture() {

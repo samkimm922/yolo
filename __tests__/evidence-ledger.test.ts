@@ -24,8 +24,13 @@ import {
 import { redact, redactDeep } from "../src/lib/security/redact.js";
 
 function tempDir() {
-  return mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+  mkdirSync(join(root, "keys"), { recursive: true });
+  writeFileSync(join(root, "keys", "ledger.hmac"), TEST_LEDGER_HMAC_KEY, "utf8");
+  return root;
 }
+
+const TEST_LEDGER_HMAC_KEY = "evidence-ledger-test-key";
 
 function readJsonl(filePath) {
   return readFileSync(filePath, "utf8")
@@ -83,6 +88,58 @@ function runConcurrentAppendWorker(filePath, worker) {
 }
 
 describe("evidence ledger", () => {
+  test("formal ledger append fails closed when the HMAC key is missing", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-missing-key-"));
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "formal-evidence" }, { stateRoot: root }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_HMAC_KEY_REQUIRED"),
+      );
+      assert.equal(existsSync(filePath), false, "missing-key failure must happen before an unsigned record is written");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("formal chain validation rejects unsigned records when no HMAC key is configured", () => {
+    const unsigned = buildLedgerRecord("unsigned-evidence", {}, {
+      now: "2026-05-24T15:00:00.000Z",
+      ledger: "state",
+      source: "test",
+    });
+
+    const validation = validateLedgerChain([unsigned]);
+    assert.equal(validation.ok, false);
+    assert.equal(validation.status, "fail");
+    assert.ok(validation.errors.some((error) => error.code === "LEDGER_HMAC_KEY_REQUIRED"));
+  });
+
+  test("explicit unsigned development mode is visibly non-production", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-development-"));
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const record = appendJsonlRecord(filePath, { event: "local-debug" }, {
+        stateRoot: root,
+        allowUnsignedDevelopment: true,
+        now: "2026-05-24T15:00:00.000Z",
+      });
+
+      assert.deepEqual(record.evidence_security, {
+        mode: "development_unsigned",
+        production_ready: false,
+        notice: "UNSIGNED EVIDENCE: NOT VALID FOR PRODUCTION ACCEPTANCE",
+      });
+      const validation = validateLedgerChain([record], { allowUnsignedDevelopment: true });
+      assert.equal(validation.ok, true);
+      assert.equal(validation.status, "non_production");
+      assert.equal(validation.production_ready, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("appendJsonlRecord appends timestamped records", () => {
     const root = tempDir();
     try {
@@ -91,7 +148,7 @@ describe("evidence ledger", () => {
         now: "2026-05-24T15:00:00.000Z",
       });
 
-      assert.deepEqual({ ...payload, record_hash: "<hash>" }, {
+      assert.deepEqual({ ...payload, record_hash: "<hash>", record_sig: "<sig>" }, {
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:00.000Z",
@@ -101,9 +158,10 @@ describe("evidence ledger", () => {
         prev_hash: null,
         task_id: "FIX-P36-001",
         record_hash: "<hash>",
+        record_sig: "<sig>",
       });
       assert.equal(payload.record_hash, ledgerRecordHash(payload));
-      assert.deepEqual(validateLedgerRecord(payload), { ok: true, errors: [] });
+      assert.deepEqual(validateLedgerRecord(payload, { hmacKey: TEST_LEDGER_HMAC_KEY }), { ok: true, errors: [] });
       assert.deepEqual(readJsonl(filePath), [payload]);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -122,7 +180,7 @@ describe("evidence ledger", () => {
 
       const stateEvents = readJsonl(join(root, "events.jsonl"));
       const runEvents = readJsonl(join(root, "runs.jsonl"));
-      assert.deepEqual(stateEvents.map((entry) => ({ ...entry, record_hash: "<hash>" })), [{
+      assert.deepEqual(stateEvents.map((entry) => ({ ...entry, record_hash: "<hash>", record_sig: "<sig>" })), [{
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:00.000Z",
@@ -132,8 +190,9 @@ describe("evidence ledger", () => {
         prev_hash: null,
         task_id: "FIX-P36-001",
         record_hash: "<hash>",
+        record_sig: "<sig>",
       }]);
-      assert.deepEqual(runEvents.map((entry) => ({ ...entry, record_hash: "<hash>" })), [{
+      assert.deepEqual(runEvents.map((entry) => ({ ...entry, record_hash: "<hash>", record_sig: "<sig>" })), [{
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:01.000Z",
@@ -144,6 +203,7 @@ describe("evidence ledger", () => {
         passed: 1,
         failed: 0,
         record_hash: "<hash>",
+        record_sig: "<sig>",
       }]);
       assert.equal(stateEvents[0].record_hash, ledgerRecordHash(stateEvents[0]));
       assert.equal(runEvents[0].record_hash, ledgerRecordHash(runEvents[0]));
@@ -174,6 +234,7 @@ describe("evidence ledger", () => {
       now: "2026-05-24T15:00:02.000Z",
       ledger: "state",
       source: "gate",
+      hmacKey: TEST_LEDGER_HMAC_KEY,
     });
     const artifact = buildEvidenceArtifact("gate.failure", {
       status: "fail",
@@ -188,7 +249,7 @@ describe("evidence ledger", () => {
     assert.equal(record.source, "gate");
     assert.equal(record.prev_hash, null);
     assert.equal(record.record_hash, ledgerRecordHash(record));
-    assert.deepEqual(validateLedgerRecord(record), { ok: true, errors: [] });
+    assert.deepEqual(validateLedgerRecord(record, { hmacKey: TEST_LEDGER_HMAC_KEY }), { ok: true, errors: [] });
     assert.equal(artifact.schema_version, EVIDENCE_SCHEMA_VERSION);
     assert.equal(artifact.schema, EVIDENCE_ARTIFACT_SCHEMA);
     assert.equal(artifact.artifact_type, "gate.failure");
@@ -204,10 +265,10 @@ describe("evidence ledger", () => {
       const second = appendJsonlRecord(filePath, { event: "second" }, { now: "2026-05-24T15:00:01.000Z" });
 
       assert.equal(second.prev_hash, first.record_hash);
-      assert.equal(validateLedgerChain(readJsonl(filePath)).status, "pass");
+      assert.equal(validateLedgerChain(readJsonl(filePath), { hmacKey: TEST_LEDGER_HMAC_KEY }).status, "pass");
 
       const tampered = [{ ...first, event: "changed" }, second];
-      const validation = validateLedgerChain(tampered);
+      const validation = validateLedgerChain(tampered, { hmacKey: TEST_LEDGER_HMAC_KEY });
       assert.equal(validation.status, "fail");
       assert.ok(validation.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
     } finally {
@@ -256,7 +317,7 @@ describe("evidence ledger", () => {
       await Promise.all(Array.from({ length: workerCount }, (_, index) => runConcurrentAppendWorker(filePath, index)));
 
       const records = readLedgerJsonl(filePath);
-      const validation = validateLedgerChain(records);
+      const validation = validateLedgerChain(records, { hmacKey: TEST_LEDGER_HMAC_KEY });
       assert.equal(records.length, workerCount);
       assert.equal(validation.ok, true, JSON.stringify(validation.errors.slice(0, 3), null, 2));
       assert.equal(validation.status, "pass");
@@ -301,8 +362,8 @@ describe("evidence ledger", () => {
       const second = appendJsonlRecord(filePath, { event: "second" }, { now: "2026-05-24T15:00:01.000Z" });
       const retained = [second];
 
-      assert.equal(validateLedgerChain(retained).status, "fail");
-      assert.equal(validateLedgerChain(retained, { allowExternalHead: true }).status, "pass");
+      assert.equal(validateLedgerChain(retained, { hmacKey: TEST_LEDGER_HMAC_KEY }).status, "fail");
+      assert.equal(validateLedgerChain(retained, { allowExternalHead: true, hmacKey: TEST_LEDGER_HMAC_KEY }).status, "pass");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -316,17 +377,17 @@ describe("evidence ledger", () => {
     // TypeError on `record.schema_version` / `"prev_hash" in record`.
     // Mirrors the readJsonl null/non-object defense in report.ts (#70/#82).
     const first = buildLedgerRecord("first", {}, {
-      now: "2026-05-24T15:00:00.000Z", ledger: "state", source: "test",
+      now: "2026-05-24T15:00:00.000Z", ledger: "state", source: "test", hmacKey: TEST_LEDGER_HMAC_KEY,
     });
 
     // null record
-    let validation = validateLedgerChain([null]);
+    let validation = validateLedgerChain([null], { hmacKey: TEST_LEDGER_HMAC_KEY });
     assert.equal(validation.status, "fail");
     assert.equal(validation.ok, false);
     assert.ok(validation.errors.some((error) => error.code === "LEDGER_RECORD_INVALID" && error.message.includes("plain object")));
 
     // Mixed: valid record followed by null, number, string, array
-    validation = validateLedgerChain([first, null, 42, "bad", ["array"]]);
+    validation = validateLedgerChain([first, null, 42, "bad", ["array"]], { hmacKey: TEST_LEDGER_HMAC_KEY });
     assert.equal(validation.status, "fail");
     const invalidRecords = validation.errors.filter((error) => error.code === "LEDGER_RECORD_INVALID");
     assert.equal(invalidRecords.length, 4, "each non-object entry produces one LEDGER_RECORD_INVALID");
@@ -384,13 +445,13 @@ describe("evidence ledger", () => {
         "LEDGER_JSONL_MALFORMED_LINE",
         "LEDGER_JSONL_MALFORMED_LINE",
       ]);
-      assert.equal(validateLedgerChain(records).status, "fail");
+      assert.equal(validateLedgerChain(records, { hmacKey: TEST_LEDGER_HMAC_KEY }).status, "fail");
 
       // Appending to a corrupted ledger must recover from the last good record
       // instead of crashing while computing prev_hash.
       const third = appendJsonlRecord(filePath, { event: "third" }, { now: "2026-05-24T15:00:02.000Z" });
       assert.equal(third.prev_hash, second.record_hash);
-      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "fail");
+      assert.equal(validateLedgerChain(readLedgerJsonl(filePath), { hmacKey: TEST_LEDGER_HMAC_KEY }).status, "fail");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -406,7 +467,7 @@ describe("evidence ledger", () => {
 
     // Real ledger record and artifact built by the runtime must pass the schema.
     const record = buildLedgerRecord("gate.failed", { task_id: "T1" }, {
-      now: "2026-05-24T15:00:02.000Z", ledger: "state", source: "gate",
+      now: "2026-05-24T15:00:02.000Z", ledger: "state", source: "gate", hmacKey: TEST_LEDGER_HMAC_KEY,
     });
     const artifact = buildEvidenceArtifact("gate.failure", { status: "fail", task_id: "T1" }, {
       now: "2026-05-24T15:00:03.000Z", source: "gate",
@@ -427,6 +488,11 @@ describe("evidence ledger", () => {
     const recordWithoutRecordHash = { ...record };
     delete recordWithoutRecordHash.record_hash;
     assert.equal(validate(recordWithoutRecordHash), false, "schema must reject record without record_hash");
+
+    const unsignedRecord = buildLedgerRecord("gate.failed", { task_id: "T1" }, {
+      now: "2026-05-24T15:00:02.000Z", ledger: "state", source: "gate",
+    });
+    assert.equal(validate(unsignedRecord), false, "schema must reject unsigned production evidence");
 
     const artifactWithoutDigest = { ...artifact };
     delete artifactWithoutDigest.artifact_digest;
@@ -474,7 +540,7 @@ describe("evidence ledger", () => {
       assert.deepEqual(persisted[0], payload);
 
       // Chain validation must pass — hash is computed on redacted data
-      const chain = validateLedgerChain(persisted);
+      const chain = validateLedgerChain(persisted, { hmacKey: TEST_LEDGER_HMAC_KEY });
       assert.equal(chain.ok, true);
       assert.equal(chain.status, "pass");
       assert.equal(chain.checked_count, 1);

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
-import { validateLedgerChain, readLedgerJsonl } from "../runtime/evidence/ledger.js";
+import { resolveLedgerHmacKey, validateLedgerChain, readLedgerJsonl } from "../runtime/evidence/ledger.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
 import {
   buildEvidenceRequirements,
@@ -48,7 +48,7 @@ function hasLedgerEvidence(stateDir: string, context: { phase?: unknown; demandI
     if (!existsSync(ledgerPath)) return false;
     const records = readLedgerJsonl(ledgerPath);
     if (records.length === 0) return false;
-    const validation = validateLedgerChain(records);
+    const validation = validateLedgerChain(records, { stateRoot: resolve(stateDir, "..") });
     if (!validation.ok) return false;
     const requiredEvents = demandEvidenceEventsForPhase(context.phase);
     const demandId = cleanLedgerValue(context.demandId || context.demand_id);

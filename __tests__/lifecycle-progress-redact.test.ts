@@ -1,9 +1,18 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync as rawMkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+
+function mkdtempSync(prefix: string): string {
+  const root = rawMkdtempSync(prefix);
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "lifecycle-redact-test-ledger-key", "utf8");
+  mkdirSync(join(root, "keys"), { recursive: true });
+  writeFileSync(join(root, "keys", "ledger.hmac"), "lifecycle-redact-test-ledger-key", "utf8");
+  return root;
+}
 
 describe("lifecycle stage report secret redaction", () => {
   test("writeLifecycleStageReport redacts secrets from blocker messages and report clone", () => {
