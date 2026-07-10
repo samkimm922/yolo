@@ -13,7 +13,7 @@ const DETERMINISTIC_ACCEPTANCE_RULES = new Set([
   "fixture_ground_truth_statistics",
   "error_input_nonzero_exit",
 ]);
-const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence"]);
+const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence", "test_count"]);
 
 function asArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -229,6 +229,29 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
     if (["must_fail_probe", "red_green_sequence"].includes(type)) {
       // PRD contract doctor validates condition references. This runtime gate only
       // checks source/evidence artifacts that exist after the executor session.
+      continue;
+    }
+    if (type === "test_count") {
+      const minimum = Number(method.minimum);
+      const pattern = clean(method.pattern);
+      const flags = clean(method.flags);
+      if (!Number.isInteger(minimum) || minimum < 1) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_MINIMUM_INVALID",
+          detail: "test_count authenticity method must declare a positive integer minimum.",
+        });
+      }
+      if (!pattern.includes("(?<count>")) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_CAPTURE_MISSING",
+          detail: "test_count authenticity method pattern must declare a named (?<count>...) capture.",
+        });
+      } else if (!/^[imsu]*$/.test(flags) || !safeRegExp(pattern, flags)) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_PATTERN_INVALID",
+          detail: "test_count authenticity method must declare a safe output pattern and flags.",
+        });
+      }
       continue;
     }
 

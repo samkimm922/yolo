@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { isWithin } from "../security/path-guard.js";
+import { parseCommandToArgv } from "../security/command-guard.js";
+import { safeRegExp } from "../security/regex-guard.js";
 import { config } from "../config.js";
 import { execCommand } from "../security/safe-exec.js";
 import { businessFilePolicyDescription, isBusinessFile } from "../../runtime/execution/change-set.js";
@@ -22,6 +24,29 @@ type CommandRunResult = {
   out: string;
   message: string;
 };
+
+type TestCountRule = Record<string, unknown>;
+
+type TestCountProof = {
+  passed: boolean;
+  detail?: string;
+  found?: number;
+  minimum?: number;
+  proof?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  return value == null ? [] : [value];
+}
+
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
 
 function targetFilesFromScope(taskScope: TaskScope): string[] {
   return (taskScope.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file));
@@ -52,22 +77,126 @@ function requiresNonEmptyTests(params: EvalParams = {}): boolean {
   return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
 }
 
-function testOutputLooksEmpty(output = ""): boolean {
-  return String(output || "").split(/\r?\n/).some((line) => {
-    const trimmed = line.trim();
-    return /^(?:#|ℹ)?\s*tests\s+0\b/i.test(trimmed)
-      || /^(?:#|ℹ)?\s*0\s+tests?\b(?:\s+(?:found|run|executed|passed|total))?$/i.test(trimmed)
-      || /^no tests? (?:found|run|executed)\b/i.test(trimmed);
+function nodeTestCount(output = ""): number | null {
+  const counts = String(output || "").split(/\r?\n/).flatMap((line) => {
+    const normalized = line.replace(/\x1b\[[0-9;]*m/g, "").trim();
+    const match = normalized.match(/^(?:#|ℹ)?\s*tests\s+(\d+)\s*$/i);
+    if (!match) return [];
+    const count = Number(match[1]);
+    return Number.isSafeInteger(count) ? [count] : [];
   });
+  return counts.length > 0 ? counts[counts.length - 1] : null;
+}
+
+function testOutputLooksEmpty(output = ""): boolean {
+  return nodeTestCount(output) === 0;
 }
 
 function testOutputHasAssertionFailure(output = ""): boolean {
   return String(output || "").split(/\r?\n/).some((line) => /\bAssertion failed\b/i.test(line.trim()));
 }
 
-function commandConfig(kind: BuildCommandKind, command: string): Record<string, unknown> {
-  const build = config.build && typeof config.build === "object" ? config.build as Record<string, unknown> : Object();
-  return { ...config, build: { ...build, [kind]: command } };
+function commandConfig(kind: BuildCommandKind, command: string, source: Record<string, unknown> = config): Record<string, unknown> {
+  const build = isRecord(source.build) ? source.build : Object();
+  return { ...source, build: { ...build, [kind]: command } };
+}
+
+function authenticityContract(task: unknown): Record<string, unknown> | null {
+  if (!isRecord(task)) return null;
+  const generation = isRecord(task.test_generation) ? task.test_generation : isRecord(task.testGeneration) ? task.testGeneration : null;
+  const contract = task.verification_contract || task.verificationContract || generation?.verification_contract || generation?.verificationContract;
+  if (!isRecord(contract)) return null;
+  const authenticity = contract.authenticity || contract.truthfulness;
+  return isRecord(authenticity) ? authenticity : null;
+}
+
+function declaredTestCountRule(options: EvaluatorOptions = {}): { rule?: TestCountRule; source?: string; error?: string } {
+  const authenticity = authenticityContract(options.task);
+  const methods = authenticity
+    ? asArray(authenticity.methods || authenticity.proofs || authenticity.mechanisms)
+      .filter(isRecord)
+      .filter((method) => cleanString(method.type) === "test_count")
+    : [];
+  if (methods.length > 1) return { error: "authenticity contract must declare exactly one test_count method" };
+  if (methods.length === 1) return { rule: methods[0], source: "verification_contract.authenticity.test_count" };
+
+  const projectConfig = isRecord(options.config) ? options.config : config;
+  const build = isRecord(projectConfig.build) ? projectConfig.build : null;
+  if (!build || !Object.prototype.hasOwnProperty.call(build, "test_count")) return {};
+  return isRecord(build.test_count)
+    ? { rule: build.test_count, source: "config.build.test_count" }
+    : { error: "config.build.test_count must be an object" };
+}
+
+function extractDeclaredTestCount(output: string, rule: TestCountRule, source: string): TestCountProof {
+  const minimum = Number(rule.minimum);
+  const pattern = cleanString(rule.pattern);
+  const flags = cleanString(rule.flags);
+  if (!Number.isInteger(minimum) || minimum < 1) {
+    return { passed: false, detail: `${source} must declare a positive integer minimum` };
+  }
+  if (!pattern.includes("(?<count>")) {
+    return { passed: false, detail: `${source} pattern must declare a named (?<count>...) capture` };
+  }
+  const regex = /^[imsu]*$/.test(flags) ? safeRegExp(pattern, flags) : null;
+  if (!regex) return { passed: false, detail: `${source} pattern or flags are invalid or unsafe` };
+  const captured = regex.exec(output)?.groups?.count;
+  if (captured === undefined) return { passed: false, detail: `${source} 未能从测试输出提取 count` };
+  if (!/^\d+$/.test(captured)) return { passed: false, detail: `${source} 提取的 count 不是非负整数: ${captured}` };
+  const found = Number(captured);
+  if (!Number.isSafeInteger(found)) return { passed: false, detail: `${source} 提取的 count 超出安全整数范围` };
+  return found < minimum
+    ? { passed: false, detail: `测试命令通过但实际执行测试数 ${found} < 声明最小值 ${minimum}`, found, minimum, proof: source }
+    : { passed: true, found, minimum, proof: source };
+}
+
+function executableName(value: string): string {
+  return value.replace(/\\/g, "/").split("/").pop()?.toLowerCase().replace(/\.exe$/, "") || "";
+}
+
+function packageTestScript(command: string, ROOT: string): string {
+  const parsed = parseCommandToArgv(command);
+  if (!parsed.ok || !parsed.argv) return "";
+  const [executable, ...args] = parsed.argv;
+  if (!["npm", "pnpm", "yarn"].includes(executableName(executable))) return "";
+  const first = args.findIndex((arg) => !arg.startsWith("-"));
+  const script = first >= 0 && args[first] === "run" ? args[first + 1] : args[first];
+  if (script !== "test") return "";
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8"));
+    return cleanString(pkg?.scripts?.test);
+  } catch {
+    return "";
+  }
+}
+
+function commandUsesNodeTest(command: string, ROOT: string, nested = false): boolean {
+  const parsed = parseCommandToArgv(command);
+  if (!parsed.ok || !parsed.argv) return false;
+  const [executable, ...args] = parsed.argv;
+  if (executableName(executable) === "node" && args.some((arg) => arg === "--test" || arg.startsWith("--test="))) return true;
+  if (nested) return false;
+  const script = packageTestScript(command, ROOT);
+  return Boolean(script) && commandUsesNodeTest(script, ROOT, true);
+}
+
+function verifyRequiredTestCount(output: string, command: string, ROOT: string, options: EvaluatorOptions): TestCountProof {
+  const declaration = declaredTestCountRule(options);
+  if (declaration.error) return { passed: false, detail: declaration.error };
+  if (declaration.rule && declaration.source) {
+    return extractDeclaredTestCount(output, declaration.rule, declaration.source);
+  }
+  if (!commandUsesNodeTest(command, ROOT)) {
+    return { passed: false, detail: "require_tests=true 但未声明 test_count 提取规则；请在 verification_contract.authenticity 或 config.build.test_count 中补充声明" };
+  }
+  const found = nodeTestCount(output);
+  if (found === null) {
+    return { passed: false, detail: "node:test 命令未产生可验证的 tests 计数摘要；请使用固定 TAP 摘要或声明 test_count 提取规则" };
+  }
+  if (testOutputLooksEmpty(output)) {
+    return { passed: false, detail: "测试命令通过但 node:test 报告 0 tests", found, minimum: 1, proof: "node:test TAP" };
+  }
+  return { passed: true, found, minimum: 1, proof: "node:test TAP" };
 }
 
 function buildCommandKind(value: unknown): BuildCommandKind | null {
@@ -96,20 +225,14 @@ export function evalBuildCommandAvailable(params: EvalParams = {}, _taskScope: T
   };
 }
 
-export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
-  const baseCommand = String(params.command || resolveBuildCommand("test", config, ROOT));
+export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, options: EvaluatorOptions = {}): EvalResult {
+  const projectConfig = isRecord(options.config) ? options.config : config;
+  const baseCommand = String(params.command || resolveBuildCommand("test", projectConfig, ROOT));
   const file = params.file || params.test_file;
   const commandWithFile = file && baseCommand.includes("{file}") ? baseCommand.replaceAll("{file}", file) : baseCommand;
-  const availability = assertBuildCommandAvailable("test", commandConfig("test", commandWithFile), ROOT);
+  const availability = assertBuildCommandAvailable("test", commandConfig("test", commandWithFile, projectConfig), ROOT);
   if (!availability.ok) return { passed: false, detail: availability.message, type: "tests_pass" };
   const result = runCommand(commandWithFile, ROOT, params.timeout_ms || resolveGateTimeout("test", config), "test");
-  if (result.ok && requiresNonEmptyTests(params) && testOutputLooksEmpty(result.out)) {
-    return {
-      passed: false,
-      detail: `测试命令通过但测试套件为空或报告 0 tests: ${commandWithFile}`,
-      type: "tests_pass",
-    };
-  }
   if (result.ok && requiresNonEmptyTests(params) && testOutputHasAssertionFailure(result.out)) {
     return {
       passed: false,
@@ -117,10 +240,18 @@ export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, RO
       type: "tests_pass",
     };
   }
+  let testCount: TestCountProof | null = null;
+  if (result.ok && requiresNonEmptyTests(params)) {
+    testCount = verifyRequiredTestCount(result.out, commandWithFile, ROOT, options);
+    if (!testCount.passed) {
+      return { passed: false, detail: testCount.detail || "测试执行计数无法验证", type: "tests_pass", ...testCount };
+    }
+  }
   return {
     passed: result.ok,
     detail: result.ok ? `测试命令通过: ${commandWithFile}` : `测试命令失败: ${result.message.slice(0, 200)}`,
     type: "tests_pass",
+    ...(testCount ? { found: testCount.found, minimum: testCount.minimum, proof: testCount.proof } : {}),
   };
 }
 

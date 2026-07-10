@@ -1232,7 +1232,8 @@
                       "required_marker",
                       "forbidden_pattern",
                       "must_fail_probe",
-                      "red_green_sequence"
+                      "red_green_sequence",
+                      "test_count"
                     ]
                   },
                   "files": {
@@ -1265,6 +1266,16 @@
                   },
                   "expected_before": {
                     "type": "string"
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "For test_count, a project-declared output regex containing a named (?<count>...) capture."
+                  },
+                  "flags": {
+                    "type": "string",
+                    "pattern": "^[imsu]*$",
+                    "description": "Optional safe regex flags for a test_count output pattern."
                   }
                 },
                 "additionalProperties": true

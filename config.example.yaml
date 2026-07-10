@@ -44,6 +44,12 @@ build:
   # Optional literal output markers. Matching failures are typed by this
   # project declaration; unmatched non-zero commands fall back to stderr.
   failure_output_rules: []
+  # For require_tests=true outside the built-in node:test TAP adapter, declare
+  # how the project reports the executed test count. Extraction is fail-closed.
+  # test_count:
+  #   minimum: 1
+  #   pattern: "^(?<count>[0-9]+) passed"
+  #   flags: "m"
 
 executor:
   # Default executor/provider invocation timeout. Override for slower agents.

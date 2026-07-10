@@ -182,7 +182,7 @@ function collectStaticImports(content: string, importPath: string): StaticImport
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
 
-function createEvaluators(root: string, options: ContractOptions = {}): Record<string, EvaluatorFn> {
+function createEvaluators(root: string, options: ContractOptions = {}, task: PrdTask = {}): Record<string, EvaluatorFn> {
   const exec = createExec(root);
   const evaluatorConfig = options.config;
   return {
@@ -203,8 +203,8 @@ function createEvaluators(root: string, options: ContractOptions = {}): Record<s
     no_new_lint_errors: (params, ts) => evalNoNewLintErrors(params, ts, root, exec),
     no_new_dead_code: (params, ts) => evalNoNewDeadCode(params, ts, root),
     no_file_over_max_lines: (params, ts) => evalNoFileOverMaxLines(params, ts, root),
-    tests_pass: (params, ts) => evalTestsPass(params, ts, root),
-    test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
+    tests_pass: (params, ts) => evalTestsPass(params, ts, root, { config: evaluatorConfig, task }),
+    test_file_passes: (params, ts) => evalTestsPass(params, ts, root, { config: evaluatorConfig, task }),
     build_command_available: (params, ts) => evalBuildCommandAvailable(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
     business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec, { config: evaluatorConfig, changedFiles: options.changedFiles || options.changed_files }),
@@ -386,11 +386,11 @@ function normalizeEvaluatorStatus(result: Partial<EvaluatorResult> = {}): string
   return result.passed ? "pass" : "fail";
 }
 
-function evaluateCondition(condition: PrdCondition, taskScope: PrdScope, options: ContractOptions = {}): ConditionEvaluation {
+function evaluateCondition(condition: PrdCondition, taskScope: PrdScope, options: ContractOptions = {}, task: PrdTask = {}): ConditionEvaluation {
   const { id, type, params = {}, severity = "FAIL", invert = false } =
     condition;
 
-  const fn = createEvaluators(scopedRoot(options), options)[condition.type || ""];
+  const fn = createEvaluators(scopedRoot(options), options, task)[condition.type || ""];
   if (!fn) {
     return {
       id: condition.id || "UNKNOWN",
@@ -437,8 +437,8 @@ function evaluateCondition(condition: PrdCondition, taskScope: PrdScope, options
  * 评估一组条件
  * @returns {{ allPass, failConditions, warnConditions, results }}
  */
-function evaluateConditions(conditions: PrdCondition[], taskScope: PrdScope, options: ContractOptions = {}): ConditionEvaluationSummary {
-  const results = conditions.map((c) => evaluateCondition(c, taskScope, options));
+function evaluateConditions(conditions: PrdCondition[], taskScope: PrdScope, options: ContractOptions = {}, task: PrdTask = {}): ConditionEvaluationSummary {
+  const results = conditions.map((c) => evaluateCondition(c, taskScope, options, task));
   const nonPassConditions = results.filter((r) => r.status !== "pass" || r.passed !== true);
   const failConditions = results.filter(
     (r) => (r.status !== "pass" || r.passed !== true) &&
@@ -490,7 +490,7 @@ export function evaluatePreConditions(task: unknown, prd: unknown, options: Cont
   if (conditions.length === 0) {
     return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
   }
-  return evaluateConditions(conditions, taskRecord.scope || {}, options);
+  return evaluateConditions(conditions, taskRecord.scope || {}, options, taskRecord);
 }
 
 /**
@@ -563,7 +563,7 @@ export function evaluatePostConditions(task: unknown, prd: unknown, options: Con
     });
   }
 
-  return evaluateConditions(allConditions, scope, options);
+  return evaluateConditions(allConditions, scope, options, taskRecord);
 }
 
 /**
