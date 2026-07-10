@@ -7,6 +7,7 @@ import { buildLifecycleStageReport, writeLifecycleStageReport } from "../src/lif
 import { createLifecycleStateSnapshot } from "../src/lifecycle/schema.js";
 import { generateApprovalKeyPair, signApproval } from "../src/lib/security/approval-signing.js";
 import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
+import { readRegisteredArtifactDigests } from "../src/runtime/evidence/artifact-integrity.js";
 
 // Install a freshly-generated project-rooted manual-acceptance public key into
 // a test state root and return the matching private key (PEM). CR1 made
@@ -49,6 +50,8 @@ describe("lifecycle progress", () => {
       assert.equal(existsSync(join(stateRoot, "lifecycle/status.json")), true);
       assert.equal(existsSync(join(stateRoot, "state/events.jsonl")), true);
       assert.equal(existsSync(join(stateRoot, "state/session-memory.jsonl")), true);
+      const registered = readRegisteredArtifactDigests([result.artifact_path], { rootDir: root, stateRoot });
+      assert.equal(registered.status, "pass");
 
       const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
       assert.equal(status.current_stage, "run");

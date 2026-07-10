@@ -20,6 +20,7 @@ import {
 import { writeSourceSnapshot } from "./source-snapshot.js";
 import { redactDeep } from "../lib/security/redact.js";
 import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
+import { registerGeneratedArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
 
 export const LIFECYCLE_PROGRESS_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STAGE_REPORT_SCHEMA = "yolo.lifecycle.stage_report.v1";
@@ -391,6 +392,12 @@ export function writeLifecycleStageReport(stageId: string, report: StageReportEn
   const artifactPath = lifecycleArtifactPath(stageId, { ...options, stateRoot });
   mkdirSync(dirname(artifactPath), { recursive: true });
   writeFileSync(artifactPath, stableJson(redactDeep(stageReport)), "utf8");
+  registerGeneratedArtifactIntegrity([artifactPath], {
+    rootDir: options.projectRoot || options.project_root || process.cwd(),
+    stateRoot,
+    source: options.source || "lifecycle-progress",
+    allowUnsignedDevelopment: options.allowUnsignedDevelopment === true || options.allow_unsigned_development === true,
+  });
   const status = updateStatusForStage(stageId, stageStatus, { ...options, stateRoot, now });
   const stateDir = stateDirFor({ ...options, stateRoot });
   mkdirSync(stateDir, { recursive: true });

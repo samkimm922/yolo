@@ -12,7 +12,7 @@ import {
   uiTasks,
 } from "../gates/readiness-policy.js";
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
-import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { readRegisteredArtifactDigests, verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
 import { computeSourceFingerprint } from "../evidence/source-fingerprint.js";
 import { ACCEPTANCE_RUN_PASS_STATUSES } from "../../lib/status-vocab.js";
@@ -1015,6 +1015,7 @@ interface ArtifactIntegrityResult {
   artifacts: ArtifactIntegrityRecord[];
   missing?: ArtifactIntegrityRecord[];
   digest_mismatches?: ArtifactIntegrityRecord[];
+  unverified?: ArtifactIntegrityRecord[];
 }
 
 function pushArtifactIntegrityIssues(issues: AcceptanceIssue[], integrity: ArtifactIntegrityResult): void {
@@ -1028,6 +1029,11 @@ function pushArtifactIntegrityIssues(issues: AcceptanceIssue[], integrity: Artif
       artifact_path: artifact.absolute_path,
       expected_sha256: artifact.expected_sha256,
       actual_sha256: artifact.sha256,
+    });
+  }
+  for (const artifact of integrity.unverified || []) {
+    pushIssue(issues, "P1", "ACCEPTANCE_ARTIFACT_UNVERIFIED", "Acceptance evidence artifact has no declared expected sha256.", {
+      artifact_path: artifact.absolute_path,
     });
   }
 }
@@ -1169,14 +1175,25 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
     uiEvidence && uiEvidencePath && (!uiEvidenceFromInput || uiEvidencePathExplicit) ? resolve(uiEvidencePath) : "",
     adapterEvidence?.artifact_path || (adapterEvidence && adapterEvidencePath && (!adapterEvidenceFromInput || adapterEvidencePathExplicit) ? resolve(adapterEvidencePath) : ""),
   ].filter(Boolean) as string[];
+  const registeredArtifactDigests = readRegisteredArtifactDigests(artifactPaths, {
+    rootDir: projectRoot,
+    stateRoot,
+  });
   const artifactIntegrity = verifyArtifactIntegrity(artifactPaths, {
     rootDir: projectRoot,
-    expectedSha256ByPath: expectedArtifactDigests(input, options),
-    // M9: in release/ship mode an artifact with no pre-registered digest is
-    // unverified (potential post-hoc append) and must fail integrity.
-    requireExpectedDigest: releaseMode,
+    expectedSha256ByPath: {
+      ...expectedArtifactDigests(input, options),
+      ...registeredArtifactDigests.expected_sha256_by_path,
+    },
   }) as ArtifactIntegrityResult;
   pushArtifactIntegrityIssues(issues, artifactIntegrity);
+  const sourceFingerprint = computeSourceFingerprint(projectRoot, prdTargetFiles(prd));
+  if (sourceFingerprint.status !== "verified") {
+    pushIssue(issues, "P1", "ACCEPTANCE_SOURCE_FINGERPRINT_UNVERIFIABLE", "Acceptance source fingerprint could not verify every declared source file.", {
+      reason: sourceFingerprint.reason,
+      paths: sourceFingerprint.unverifiable_paths,
+    });
+  }
   if (!prd) {
     pushIssue(issues, "P1", "PRD_MISSING", "Acceptance requires a PRD.");
   } else {
@@ -1276,7 +1293,7 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
     // and ship) while still catching tampering of the files actually under
     // delivery. Falls back to the full git-tracked set only when no PRD targets
     // are declared.
-    source_fingerprint: computeSourceFingerprint(projectRoot, prdTargetFiles(prd)) as AcceptanceRecord,
+    source_fingerprint: sourceFingerprint as unknown as AcceptanceRecord,
     next_actions: status === "blocked"
       ? ["Fix P0/P1 acceptance blockers, then rerun /yolo-accept.", "Do not ship until acceptance report is pass or approved with documented human review."]
       : status === "warning"

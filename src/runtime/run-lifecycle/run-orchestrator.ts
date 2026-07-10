@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
 import { runRetryPhase } from "../recovery/retry-orchestrator.js";
 import { runReviewLoop } from "../review-loop/orchestrator.js";
+import { registerGeneratedArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { resolveLedgerHmacKey } from "../evidence/ledger.js";
 import { finalizeRun } from "./finalize.js";
 import { cleanupProgressServer } from "./shutdown.js";
 
@@ -174,6 +177,7 @@ export async function runTaskPipeline({
         runId,
         yoloRoot: toolsRoot,
         rootDir: projectRoot,
+        stateRoot,
         progress,
         mainLoop,
         loadPRD,
@@ -190,6 +194,14 @@ export async function runTaskPipeline({
         logReviewIssue,
         logReviewDone,
         logReviewError,
+      });
+    }
+
+    if (stateRoot && prdPath && existsSync(prdPath) && resolveLedgerHmacKey(stateRoot)) {
+      registerGeneratedArtifactIntegrity([prdPath], {
+        rootDir: projectRoot,
+        stateRoot,
+        source: "run-lifecycle-prd-final",
       });
     }
 

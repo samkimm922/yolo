@@ -8,6 +8,8 @@ import {
 import type { DiscoveryArtifact } from "./artifacts.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import type { ProgressOptions, StageReportEntry } from "../lifecycle/progress.js";
+import { registerGeneratedArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
+import { resolveLedgerHmacKey } from "../runtime/evidence/ledger.js";
 
 type ReadDiscoveryArtifactResult =
   | { ok: true; path: string; discovery: DiscoveryArtifact }
@@ -234,7 +236,16 @@ export function runDiscoveryPrdRuntime(input: DiscoveryRuntimeRecord = Object(),
   const outputFile = resolveOutputPath(projectRoot, input.outputFile || input.output_file || input.prdPath || input.prd_path || options.outputFile || defaultDiscoveryPrdPath(stateRoot));
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts: string[] = [];
-  if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
+  if (shouldWrite && compiled.prd) {
+    artifacts.push(writeJson(outputFile, compiled.prd));
+    if (resolveLedgerHmacKey(stateRoot)) {
+      registerGeneratedArtifactIntegrity([outputFile], {
+        rootDir: projectRoot,
+        stateRoot,
+        source: input.source || "yolo-prd",
+      });
+    }
+  }
   const compiledExecutable = compiled.executable;
   const executable = compiled.status === "success" || compiledExecutable === true;
 

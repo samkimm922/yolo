@@ -28,7 +28,7 @@ type BridgeArtifact = NonNullable<AgentBridgeInstallPlan["files"][number]>;
 
 export interface DoctorCheck {
   code: string;
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "pending";
   passed: boolean;
   message: string;
   [key: string]: unknown;
@@ -54,7 +54,7 @@ interface LifecycleInspection {
 
 function check(
   code: string,
-  severity: "error" | "warning",
+  severity: "error" | "warning" | "pending",
   passed: boolean,
   message: string,
   extra: Record<string, unknown> = {},
@@ -130,9 +130,24 @@ function latestCheckedPrdPath(projectRoot: string, stateRoot: string): string {
 
 function worktreeDriftFinding(projectRoot: string, stateRoot: string): DoctorCheck | null {
   const drift = inspectWorktreeDrift({ projectRoot, stateRoot });
-  if (!drift.has_drift) return null;
+  if (drift.status === "clean") return null;
   const prdPath = latestCheckedPrdPath(projectRoot, stateRoot);
   const fixCommand = prdPath ? `yolo check ${prdPath}` : "yolo check";
+  if (drift.status === "unverifiable") {
+    if (drift.baseline_state === "bootstrap") {
+      return check("YOLO_DOCTOR_WORKTREE_BASELINE_PENDING", "pending", false, "Lifecycle source snapshot baseline is pending; the first successful yolo check will establish it.", {
+        baseline_state: "bootstrap_pending",
+        captured_at: null,
+        current_difference_file_count: null,
+        fix_command: fixCommand,
+      });
+    }
+    return check("YOLO_DOCTOR_WORKTREE_UNVERIFIABLE", "error", false, "Lifecycle source snapshot is missing; worktree drift cannot be verified.", {
+      captured_at: null,
+      current_difference_file_count: null,
+      fix_command: fixCommand,
+    });
+  }
   return check("YOLO_DOCTOR_WORKTREE_DRIFT", "error", false, "Lifecycle check snapshot differs from the current worktree.", {
     captured_at: drift.captured_at || null,
     current_difference_file_count: drift.current_difference_file_count ?? null,
@@ -281,6 +296,7 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
 
   const blockers = checks.filter((item) => item.severity === "error" && item.passed !== true);
   const warnings = checks.filter((item) => item.severity === "warning" && item.passed !== true);
+  const pending = checks.filter((item) => item.severity === "pending" && item.passed !== true);
   const status = blockers.length > 0 ? "blocked" : (warnings.length > 0 ? "warning" : "pass");
   const driftBlocker = blockers.find((item) => item.code === "YOLO_DOCTOR_WORKTREE_DRIFT");
   const driftFixCommand = typeof driftBlocker?.fix_command === "string" ? driftBlocker.fix_command : "";
@@ -295,6 +311,7 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
     checks,
     blockers,
     warnings,
+    pending,
     findings: driftFinding ? [driftFinding] : [],
     lifecycle: {
       status_path: lifecycle.path,

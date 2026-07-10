@@ -11,6 +11,8 @@ import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { lifecycleArtifactPath } from "../lifecycle/state.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
+import { resolveLedgerHmacKey } from "../runtime/evidence/ledger.js";
+import { registerGeneratedArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { loadProjectToolchainConfig, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
 
@@ -2537,6 +2539,13 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
   let prdPath = null;
   if (shouldWrite && compiled.prd && compiled.status === "success") {
     prdPath = writeJson(outputFile, compiled.prd);
+    if (resolveLedgerHmacKey(stateRoot)) {
+      registerGeneratedArtifactIntegrity([prdPath], {
+        rootDir: projectRoot,
+        stateRoot,
+        source: "yolo-prd",
+      });
+    }
     artifacts.push(prdPath);
     outputs.push({ path: prdPath, type: "prd" });
   }

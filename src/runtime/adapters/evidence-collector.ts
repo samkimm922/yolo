@@ -5,6 +5,8 @@ import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js
 import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { redactDeep } from "../../lib/security/redact.js";
 import { execCommand } from "../../lib/security/safe-exec.js";
+import { registerGeneratedArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { resolveLedgerHmacKey } from "../evidence/ledger.js";
 
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA = "yolo.adapter.evidence_collector.v1";
@@ -494,6 +496,13 @@ export function runAdapterEvidenceCollector(input: Record<string, unknown> = Obj
   if (writeArtifact) {
     mkdirSync(dirname(plan.artifact_path), { recursive: true });
     writeFileSync(plan.artifact_path, JSON.stringify(result, null, 2), "utf8");
+    if (resolveLedgerHmacKey(plan.state_root)) {
+      registerGeneratedArtifactIntegrity([plan.artifact_path], {
+        rootDir: plan.project_root,
+        stateRoot: plan.state_root,
+        source: "adapter-evidence-collector",
+      });
+    }
     (result.artifacts).push(plan.artifact_path);
   }
 

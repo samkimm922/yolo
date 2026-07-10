@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { inspectStoryAtomicityFromPrd } from "../../demand/story-atomicity.js";
 import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
-import { inspectWorktreeDrift } from "../../lifecycle/source-snapshot.js";
+import { inspectWorktreeDrift, writeSourceSnapshot } from "../../lifecycle/source-snapshot.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { preflightPrd } from "../../prd/preflight.js";
 import { resolveWithinRoot } from "../../lib/security/path-guard.js";
@@ -483,7 +483,30 @@ function taskCompletedInRunState(task, statuses) {
 
 function driftRealityReadiness({ prd, projectRoot, stateRoot }) {
   const drift = inspectWorktreeDrift({ projectRoot, stateRoot });
-  if (!drift.has_drift) return null;
+  if (drift.status === "clean") return null;
+  if (drift.status === "unverifiable") {
+    if (drift.baseline_state === "bootstrap") {
+      return checkRecord("drift_reality", "pass", "Worktree drift baseline is pending and will be established by this successful check.", {
+        blockers: [],
+        warnings: [],
+        verification_status: "bootstrap_unverifiable",
+        baseline_state: "bootstrap_pending",
+        reason: drift.reason,
+        captured_at: null,
+        current_difference_file_count: null,
+      });
+    }
+    return checkRecord("drift_reality", "blocked", "Worktree drift cannot be verified without a lifecycle source snapshot.", {
+      blockers: [{
+        code: "WORKTREE_SNAPSHOT_UNVERIFIABLE",
+        message: "Run yolo check to establish a source snapshot before relying on drift checks.",
+        human_needed: false,
+      }],
+      warnings: [],
+      captured_at: null,
+      current_difference_file_count: null,
+    });
+  }
   const runTaskStatuses = readRunTaskStatuses(stateRoot);
   const blockers = asArray(prd.tasks).flatMap((task) => (
     !taskCompletedInRunState(task, runTaskStatuses) ? [] : targetFileModifiedReferences(task).flatMap((file) => {
@@ -1019,6 +1042,28 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
   ].filter(Boolean)
     .map((check) => applyWarningPolicy(check, { failClosed: failClosedWarnings }))
     .sort((a, b) => severity(b.status) - severity(a.status));
+  let sourceSnapshot = null;
+  const writeLifecycle = input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle;
+  if (writeLifecycle && aggregateStatus(checks) === "pass") {
+    try {
+      sourceSnapshot = writeSourceSnapshot({ projectRoot, stateRoot });
+      const driftCheck = checks.find((check) => check.name === "drift_reality");
+      if (driftCheck?.baseline_state === "bootstrap_pending") {
+        driftCheck.verification_status = "bootstrap_established";
+        driftCheck.baseline_state = "established";
+        driftCheck.summary = "Worktree drift was unverifiable at startup; this check established the initial baseline.";
+      }
+    } catch (error) {
+      checks.push(checkRecord("drift_snapshot_write", "blocked", "Successful check could not establish its worktree drift baseline.", {
+        blockers: [{
+          code: "WORKTREE_SNAPSHOT_WRITE_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+          human_needed: false,
+        }],
+        warnings: [],
+      }));
+    }
+  }
   const status = aggregateStatus(checks);
   const blockers = [
     ...checkStatusIntegrityBlockers(checks),
@@ -1071,6 +1116,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
       human_needed: status !== "pass" || remediationPlan.requires_human || blockers.some((blocker) => blocker.human_needed === true) || blockingWarnings.length > 0,
     },
     remediation_plan: remediationPlan,
+    source_snapshot: sourceSnapshot,
     artifacts: [resolvedPrdPath],
     next_actions: blockers.length > 0
       ? remediationPlan.next_actions
@@ -1079,7 +1125,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
         : ["Run /yolo-run only after user approval."],
   });
 
-  if (input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle) {
+  if (writeLifecycle) {
     report.lifecycle_write = writeLifecycleStageReport("check", report, {
       projectRoot,
       stateRoot,

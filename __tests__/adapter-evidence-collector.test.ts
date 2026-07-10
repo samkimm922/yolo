@@ -7,6 +7,7 @@ import {
   buildAdapterEvidencePlan,
   runAdapterEvidenceCollector,
 } from "../src/runtime/adapters/evidence-collector.js";
+import { readRegisteredArtifactDigests } from "../src/runtime/evidence/artifact-integrity.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-adapter-evidence-"));
@@ -219,6 +220,7 @@ describe("adapter evidence collector", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
     try {
+      writeText(join(stateRoot, "keys/ledger.hmac"), "adapter-evidence-test-ledger-key");
       writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), adapterManifest());
       writeText(join(root, "tools/write-evidence.cjs"), [
         "const fs = require('fs');",
@@ -246,6 +248,8 @@ describe("adapter evidence collector", () => {
       assert.equal(result.ui_evidence.page_reachable, true);
       assert.equal(result.ui_evidence.screenshots.length, 1);
       assert.equal(existsSync(join(stateRoot, "state/evidence/adapters/local-browser-latest.json")), true);
+      const registered = readRegisteredArtifactDigests([result.artifact_path], { rootDir: root, stateRoot });
+      assert.equal(registered.status, "pass");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

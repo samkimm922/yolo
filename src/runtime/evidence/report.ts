@@ -9,7 +9,7 @@ import {
   validateLedgerChain,
   writeJsonArtifact,
 } from "./ledger.js";
-import { verifyArtifactIntegrity } from "./artifact-integrity.js";
+import { registerGeneratedArtifactIntegrity } from "./artifact-integrity.js";
 import { normalizeReviewFinding } from "../../review/findings.js";
 import {
   EVIDENCE_RUN_REPORT_PASS_STATUSES,
@@ -1018,12 +1018,17 @@ export function writeRunReport(options: BuildRunReportOptions = Object()) {
   });
   writeJsonArtifact(paths.final_answer_json_path, finalAnswer);
   writeFileSync(paths.final_answer_markdown_path, formatRunFinalAnswerMarkdown(finalAnswer), "utf8");
-  const artifactIntegrity = verifyArtifactIntegrity([
+  const artifactIntegrity = registerGeneratedArtifactIntegrity([
     paths.json_path,
     paths.markdown_path,
     paths.final_answer_json_path,
     paths.final_answer_markdown_path,
-  ], { rootDir: options.stateDir });
+  ], {
+    rootDir: options.stateDir,
+    stateRoot: options.stateRoot || dirname(options.stateDir),
+    source: "run-report",
+    allowUnsignedDevelopment: options.allowUnsignedDevelopment === true,
+  });
 
   appendStateEvent(options.stateDir, "run.report", {
     run_id: report.run_id,

@@ -33,7 +33,6 @@ import { runDemandEvidenceDispatchRuntime } from "../../demand/evidence-dispatch
 import { demandInterviewToDemandInput } from "../../demand/interview.js";
 import { buildUnderstandingPlayback } from "../../demand/understanding-playback.js";
 import { nextLifecycleAction } from "../../lifecycle/guard.js";
-import { writeSourceSnapshot } from "../../lifecycle/source-snapshot.js";
 import { installAgentBridge } from "../../../tools/install-agent-bridge.js";
 import { formatYoloCheckText, inspectYoloCheck } from "../../runtime/gates/check-report.js";
 
@@ -294,15 +293,6 @@ export async function runYoloCheckCli(argv = [], io = Object()) {
     strictExecution: input.strictExecution,
     writeLifecycle: options.writeLifecycle,
   }, { learnFailures: true });
-  // BUG-C2: stamp the worktree signature whenever the check writes its
-  // lifecycle artifact, so the next guard call can detect out-of-band edits.
-  if (options.writeLifecycle && report.status === "pass") {
-    try {
-      writeSourceSnapshot({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
-    } catch {
-      // Snapshot is non-blocking telemetry; never fail the check on it.
-    }
-  }
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
   return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;

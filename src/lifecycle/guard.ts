@@ -415,7 +415,7 @@ function recoveryPrdPath(projectRoot: string, stateRoot: string, input: GuardInp
   return inputPath && existsSync(inputPath) ? inputPath : checkedPrdPath(projectRoot, stateRoot);
 }
 
-const CHECK_RECOVERY_BLOCKER_CODES = new Set(["LIFECYCLE_DRIFT_WORKTREE_DIVERGED", "CHECK_REQUIRED"]);
+const CHECK_RECOVERY_BLOCKER_CODES = new Set(["LIFECYCLE_DRIFT_WORKTREE_DIVERGED", "LIFECYCLE_DRIFT_WORKTREE_UNVERIFIABLE", "CHECK_REQUIRED"]);
 
 function checkRecoveryCommand(blockers: GuardBlocker[], projectRoot: string, stateRoot: string, input: GuardInput = Object()): string {
   if (!blockers.some((blocker) => CHECK_RECOVERY_BLOCKER_CODES.has(blocker.code))) return "";
@@ -536,12 +536,25 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
 // enforce and we do not block here — other gates cover fabricated evidence.
 function sourceFingerprintBlockers(stageReport: GuardRecord, projectRoot: string): GuardBlocker[] {
   const nested = stageReport.report as GuardRecord | undefined;
-  const fingerprint = (nested?.source_fingerprint || stageReport.source_fingerprint) as
-    | { [relPath: string]: string }
-    | undefined;
-  if (!fingerprint || typeof fingerprint !== "object" || Array.isArray(fingerprint)) return [];
+  const fingerprint = nested?.source_fingerprint || stageReport.source_fingerprint;
+  if (!fingerprint || typeof fingerprint !== "object" || Array.isArray(fingerprint)) {
+    return [makeBlocker("ACCEPTANCE_SOURCE_FINGERPRINT_UNVERIFIABLE", "acceptance", "Acceptance source fingerprint is missing or unverifiable; rerun acceptance.")];
+  }
+  const capture = fingerprint as GuardRecord;
+  if ("status" in capture) {
+    if (capture.status !== "verified" || !capture.files || typeof capture.files !== "object" || Array.isArray(capture.files)) {
+      return [makeBlocker("ACCEPTANCE_SOURCE_FINGERPRINT_UNVERIFIABLE", "acceptance", "Acceptance source fingerprint is missing or unverifiable; rerun acceptance.")];
+    }
+    return sourceFingerprintComparisonBlockers(capture.files as { [relPath: string]: string }, projectRoot);
+  }
+  return sourceFingerprintComparisonBlockers(capture as { [relPath: string]: string }, projectRoot);
+}
+
+function sourceFingerprintComparisonBlockers(fingerprint: { [relPath: string]: string }, projectRoot: string): GuardBlocker[] {
   const keys = Object.keys(fingerprint);
-  if (keys.length === 0) return [];
+  if (keys.length === 0) {
+    return [makeBlocker("ACCEPTANCE_SOURCE_FINGERPRINT_UNVERIFIABLE", "acceptance", "Acceptance source fingerprint is empty; rerun acceptance.")];
+  }
   const comparison = compareSourceFingerprint(fingerprint, projectRoot);
   if (comparison.ok) return [];
   return [makeBlocker(
@@ -989,13 +1002,15 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
   // check snapshot. If the working tree signature changed, the lifecycle state
   // can no longer be trusted as authoritative.
   const worktreeDrift = inspectWorktreeDrift({ projectRoot });
-  if (worktreeDrift.has_drift) {
+  if (worktreeDrift.status !== "clean" && !(worktreeDrift.status === "unverifiable" && worktreeDrift.baseline_state === "bootstrap")) {
     drift_records.push({
       stage: "check",
-      code: "WORKTREE_DIVERGED",
+      code: worktreeDrift.status === "drift" ? "WORKTREE_DIVERGED" : "WORKTREE_UNVERIFIABLE",
       declared: "clean",
-      actual: "diverged",
-      message: worktreeDrift.reason || "Working tree changed since the last check snapshot.",
+      actual: worktreeDrift.status === "drift" ? "diverged" : "unverifiable",
+      message: worktreeDrift.status === "drift"
+        ? worktreeDrift.reason
+        : "Working tree drift cannot be verified because no source snapshot exists.",
     });
   }
 

@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -10,11 +10,14 @@ import {
   runDiscoveryRuntime,
 } from "../src/discovery/runtime.js";
 import { validatePrdPath } from "../src/prd/validate.js";
+import { readRegisteredArtifactDigests } from "../src/runtime/evidence/artifact-integrity.js";
 
 describe("discovery runtime artifact chain", () => {
   test("writes discovery, plan, and non-executable draft PRD artifacts from one main line", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-discovery-runtime-"));
     try {
+      mkdirSync(join(root, ".yolo/keys"), { recursive: true });
+      writeFileSync(join(root, ".yolo/keys/ledger.hmac"), "discovery-runtime-test-ledger-key", "utf8");
       const discoveryResult = runDiscoveryRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -65,6 +68,11 @@ describe("discovery runtime artifact chain", () => {
       assert.equal(prdResult.draft_prd.demand.approval.approved, false);
       assert.equal(existsSync(prdResult.artifacts[0]), true);
       assert.equal(validatePrdPath(prdResult.artifacts[0]).ok, true);
+      const registered = readRegisteredArtifactDigests(prdResult.artifacts, {
+        rootDir: root,
+        stateRoot: join(root, ".yolo"),
+      });
+      assert.equal(registered.status, "pass");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

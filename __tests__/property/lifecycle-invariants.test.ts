@@ -11,6 +11,7 @@ import { evaluatePostConditions } from "../../src/prd/contract.js";
 import { runDemandDiscussRuntime, runDemandPrdRuntime } from "../../src/demand/runtime.js";
 import { deriveEvidenceRequirements, isGreenfieldDemandSession } from "../../src/demand/evidence-requirements.js";
 import { orderTasksByDependencies } from "../../src/runtime/task-loop/expansion.js";
+import { registerGeneratedArtifactIntegrity } from "../../src/runtime/evidence/artifact-integrity.js";
 import {
   assertExecutableTaskGraph,
   duplicateTaskKeys,
@@ -519,6 +520,7 @@ describe("property lifecycle invariants", () => {
       try {
         const prdPath = join(root, "prd.json");
         writeJson(prdPath, acceptancePrd(input.seed, input.file));
+        writeText(join(root, input.file), "export const acceptanceFixture = true;\n");
         writeLifecycleStageReport("run", {
           status: "success",
           summary: "stage wrapper only; not structured run evidence",
@@ -536,6 +538,11 @@ describe("property lifecycle invariants", () => {
           ...runReport(input.seed, prdPath),
           run_id: input.selectedRunId,
         });
+        registerGeneratedArtifactIntegrity([
+          prdPath,
+          join(stateRoot, `state/reports/${input.oldRunId}/run-report.json`),
+          join(stateRoot, `state/reports/${input.selectedRunId}/run-report.json`),
+        ], { rootDir: root, stateRoot, source: "property-internal-fixture" });
 
         const report = buildAcceptanceReport({
           prdPath,

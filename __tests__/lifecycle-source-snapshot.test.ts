@@ -10,8 +10,9 @@ import {
   readSourceSnapshot,
   inspectWorktreeDrift,
 } from "../src/lifecycle/source-snapshot.js";
-import { inspectLifecycleDrift } from "../src/lifecycle/guard.js";
+import { inspectLifecycleDrift, inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { initLifecycleState } from "../src/lifecycle/state.js";
 
 function mkdtempSync(prefix: string): string {
   const root = rawMkdtempSync(prefix);
@@ -68,11 +69,33 @@ describe("source-snapshot worktree drift detection", () => {
     }
   });
 
-  test("no snapshot present → no drift reported (not a hard error)", () => {
+  test("no snapshot present is explicitly unverifiable", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-snap-none-"));
     try {
       const result = inspectWorktreeDrift({ projectRoot: root, stateRoot: join(root, ".yolo") });
-      assert.equal(result.has_drift, false);
+      assert.equal(result.status, "unverifiable");
+      assert.equal(result.has_drift, null);
+      assert.equal(result.reason, "no_snapshot");
+      assert.equal(result.baseline_state, "bootstrap");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("lifecycle guard allows first check bootstrap but blocks downstream work after an established snapshot disappears", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-snap-guard-none-"));
+    try {
+      initLifecycleState({ projectRoot: root });
+
+      const bootstrap = inspectLifecycleDrift(root);
+      assert.equal(bootstrap.drift_records.some((record) => record.code === "WORKTREE_UNVERIFIABLE"), false);
+
+      writeSourceSnapshot({ projectRoot: root, stateRoot: join(root, ".yolo") });
+      rmSync(join(root, ".yolo", "lifecycle", "source-snapshot.json"));
+      const result = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.blockers.some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_UNVERIFIABLE"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

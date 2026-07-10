@@ -22,6 +22,7 @@ import { inspectStoryAtomicityFromPrd } from "../src/demand/story-atomicity.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
+import { readRegisteredArtifactDigests } from "../src/runtime/evidence/artifact-integrity.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
 import { validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 import {
@@ -775,6 +776,11 @@ describe("demand runtime", () => {
       assert.equal(spec.prd_path, prdPath);
       assert.equal(spec.output_path, prdPath);
       assert.equal(spec.artifacts[0], prdPath);
+      const registered = readRegisteredArtifactDigests([prdPath], {
+        rootDir: root,
+        stateRoot: join(root, ".yolo"),
+      });
+      assert.equal(registered.status, "pass");
       const outputs = spec.outputs || [];
       assert.equal(outputs.find((output) => output.type === "prd")?.path, prdPath);
       assert.equal(outputs.find((output) => output.path.endsWith("session.json"))?.type, "demand_session");

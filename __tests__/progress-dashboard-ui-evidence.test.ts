@@ -9,6 +9,7 @@ import { buildProgressDashboardUiEvidence } from "../src/runtime/progress/ui-evi
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
+import { readRegisteredArtifactDigests } from "../src/runtime/evidence/artifact-integrity.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -16,6 +17,7 @@ function tempProject() {
   const root = mkdtempSync(join(tmpdir(), "yolo-progress-ui-evidence-"));
   mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
   writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "progress-ui-test-ledger-key", "utf8");
+  writeText(join(root, "src/runtime/progress/server.ts"), "export const progressServer = true;\n");
   return root;
 }
 
@@ -153,6 +155,10 @@ describe("progress dashboard UI evidence", () => {
       const activeHtml = readFileSync(join(stateRoot, "state/evidence/progress-dashboard-ui/active.html"), "utf8");
 
       assert.equal(report.status, "pass");
+      const registered = readRegisteredArtifactDigests([
+        join(stateRoot, "state/evidence/progress-dashboard-ui/ui-evidence.json"),
+      ], { rootDir: root, stateRoot });
+      assert.equal(registered.status, "pass");
       assert.ok(activeHtml.includes('id="uiEvidencePanel"'));
       assert.ok(activeHtml.includes("color-scheme: light dark"));
       assert.ok(activeHtml.includes("prefers-color-scheme: dark"));
