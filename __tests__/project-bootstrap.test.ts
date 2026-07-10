@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildProjectBootstrapPlan, initProject } from "../src/core/bootstrap.js";
@@ -107,6 +107,11 @@ describe("project bootstrap", () => {
       assert.equal(first.status, "success");
       assert.equal(first.created.length, 55);
       assert.equal(first.memory_refresh.status, "ok");
+      const ledgerKeyPath = join(root, ".yolo/keys/ledger.hmac");
+      const ledgerKey = readFileSync(ledgerKeyPath, "utf8");
+      assert.equal(first.ledger_hmac_key_created, true);
+      assert.match(ledgerKey, /^[a-f0-9]{64}$/);
+      assert.equal(statSync(ledgerKeyPath).mode & 0o777, 0o600);
       assert.equal(existsSync(join(root, ".yolo/config.json")), true);
       assert.equal(existsSync(join(root, ".yolo/constitution.md")), true);
       assert.equal(existsSync(join(root, ".yolo/lifecycle/status.json")), true);
@@ -142,6 +147,8 @@ describe("project bootstrap", () => {
       const second = initProject({ projectRoot: root, projectName: "demo-app" });
       assert.equal(second.skipped.includes("specs/requirements.md"), true);
       assert.equal(readFileSync(join(root, "specs/requirements.md"), "utf8"), "custom requirements\n");
+      assert.equal(second.ledger_hmac_key_created, false);
+      assert.equal(readFileSync(ledgerKeyPath, "utf8"), ledgerKey);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

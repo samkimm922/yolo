@@ -83,6 +83,8 @@ runner:
   stash_prefix: "temp-stash-for-"
 
 state:
+  # Formal runs require a non-empty HMAC key at
+  # <stateRoot>/keys/ledger.hmac (normally .yolo/keys/ledger.hmac).
   dir: "state"
   max_events: 500
   max_changes: 500

@@ -12,7 +12,9 @@ import { generateApprovalKeyPair, signApproval } from "../src/lib/security/appro
 import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-acceptance-report-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-acceptance-report-"));
+  writeText(join(root, ".yolo", "keys", "ledger.hmac"), "acceptance-report-test-ledger-key");
+  return root;
 }
 
 function writeJson(file, payload) {

@@ -26,6 +26,11 @@ function tempDir() {
   return mkdtempSync(join(tmpdir(), "yolo-run-startup-"));
 }
 
+function installLedgerHmacKey(stateRoot) {
+  mkdirSync(join(stateRoot, "keys"), { recursive: true });
+  writeFileSync(join(stateRoot, "keys", "ledger.hmac"), "run-startup-test-ledger-key", "utf8");
+}
+
 function git(root, args) {
   return execFileSync("git", args, {
     cwd: root,
@@ -159,6 +164,7 @@ describe("run lifecycle startup helpers", () => {
       writeFileSync(join(root, "README.md"), "# startup\n", "utf8");
       writeFileSync(join(root, "src/app.js"), "console.log('ready');\n", "utf8");
       const stateRoot = join(root, ".yolo");
+      installLedgerHmacKey(stateRoot);
       const stateDir = join(stateRoot, "state");
       const runtimeDir = join(stateDir, "runtime");
       const expandedTasksFile = join(stateDir, "expanded-tasks.json");
@@ -399,6 +405,7 @@ describe("run lifecycle startup helpers", () => {
     const root = tempDir();
     try {
       const stateDir = join(root, ".yolo", "state");
+      installLedgerHmacKey(join(root, ".yolo"));
       const runtimeDir = join(stateDir, "runtime");
       const expandedTasksFile = join(stateDir, "expanded-tasks.json");
       const resultsFile = join(runtimeDir, "task-results.jsonl");

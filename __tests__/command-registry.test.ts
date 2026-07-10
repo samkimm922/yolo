@@ -22,7 +22,10 @@ import { lifecycleStageIds } from "../src/lifecycle/schema.js";
 import { STABLE_WORKFLOW_COMMAND_SURFACES, listWorkflows } from "../src/workflows/registry.js";
 
 function tempProject(prefix = "yolo-command-registry-") {
-  return mkdtempSync(join(tmpdir(), prefix));
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "command-registry-test-ledger-key", "utf8");
+  return root;
 }
 
 function captureIo(cwd, extra = {}) {

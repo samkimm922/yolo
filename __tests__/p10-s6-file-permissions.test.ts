@@ -4,7 +4,7 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, statSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -116,6 +116,8 @@ describe("P10.S6 secure file permissions (CWE-276)", () => {
   test("appendJsonlRecord creates files with 0o600 permissions", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p10-s6-ledger-"));
     try {
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(join(root, "keys", "ledger.hmac"), "file-permissions-test-ledger-key", "utf8");
       const ledgerFile = join(root, "events.jsonl");
       const record = withUmask(0o22, () => {
         return appendJsonlRecord(ledgerFile, { event: "test_event", detail: "perm check" });

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildAcceptanceReport } from "../../src/runtime/acceptance/report.js";
@@ -71,7 +71,10 @@ const TASK_TYPES = ["feature", "bugfix", "cleanup"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
 
 function propertyTempRoot(prefix: string) {
-  return mkdtempSync(join(tmpdir(), prefix));
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "property-test-ledger-key", "utf8");
+  return root;
 }
 
 function assertNoDuplicateTaskKeys(tasks: any[]) {

@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { buildLifecycleStateFiles } from "../lifecycle/state.js";
 import { appendSessionMemory } from "../runtime/evidence/session-memory.js";
 import { refreshMemoryCenter } from "../runtime/memory/center.js";
+import { provisionLedgerHmacKey } from "../runtime/evidence/ledger.js";
 
 export const PROJECT_BOOTSTRAP_SCHEMA_VERSION = "1.0";
 
@@ -761,6 +762,9 @@ export function initProject(options: ProjectBootstrapOptions = Object()) {
   const created: string[] = [];
   const overwritten: string[] = [];
   const skipped: string[] = [];
+  const ledgerHmac = dryRun
+    ? { key_path: join(plan.project_root, ".yolo/keys/ledger.hmac"), created: false }
+    : provisionLedgerHmacKey(join(plan.project_root, ".yolo"));
 
   for (const dir of plan.directories) {
     const absoluteDir = join(plan.project_root, dir);
@@ -823,6 +827,8 @@ export function initProject(options: ProjectBootstrapOptions = Object()) {
     created,
     overwritten,
     skipped,
+    ledger_hmac_key_path: relative(plan.project_root, ledgerHmac.key_path),
+    ledger_hmac_key_created: ledgerHmac.created,
     session_memory,
     memory_refresh,
     artifacts: plan.files.map((file) => file.path),

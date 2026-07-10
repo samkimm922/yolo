@@ -10,6 +10,7 @@ import { preflightPrd } from "../prd/preflight.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
 import { inspectYoloCheck } from "../runtime/gates/check-report.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import { initLifecycleState } from "../lifecycle/state.js";
 import { loadProjectToolchainConfig, resolveBuildCommand } from "../lib/toolchain.js";
 
 export const INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION = "1.0";
@@ -274,6 +275,7 @@ export async function runInitToFirstPrdSmoke(options: InitToFirstPrdSmokeOptions
   writeFileSync(prdAbsolutePath, stableJson(plan.prd), "utf8");
   // Write lifecycle reports to a temporary state root to avoid polluting real project state
   const smokeStateRoot = join(projectRoot, ".yolo", "smoke");
+  initLifecycleState({ projectRoot, stateRoot: smokeStateRoot });
   writeLifecycleStageReport("discovery", {
     status: "success",
     summary: "Init-to-first-PRD smoke captured bootstrap discovery.",

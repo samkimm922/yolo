@@ -35,7 +35,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
 
 function tempProject(prefix = "yolo-adversarial-") {
-  return mkdtempSync(join(tmpdir(), prefix));
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "adversarial-test-ledger-key", "utf8");
+  return root;
 }
 
 function writeJson(path, value) {

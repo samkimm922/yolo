@@ -162,6 +162,17 @@ YOLO 把“人看的记忆”和“机器看的账本”分开：
 
 修改配置后无需重启，下次运行自动读取。
 
+### 证据账本 HMAC
+
+正式运行前必须在 state root 安装项目专属 HMAC key；外部项目的默认位置是 `.yolo/keys/ledger.hmac`。`yolo init` 会为新项目生成随机 key（权限 0600，已有文件绝不覆盖）；已有项目可用下列命令补配。缺失、空文件或不可读都会在 runner 启动前 fail closed，未签名记录也不能通过 demand、run-report 等正式证据验证。
+
+```bash
+mkdir -p .yolo/keys
+node -e "require('node:fs').writeFileSync('.yolo/keys/ledger.hmac', require('node:crypto').randomBytes(32).toString('hex'), { mode: 0o600 })"
+```
+
+本地调试只能显式使用 runner 的 `--mode=dev`，或底层 ledger API 的 `allowUnsignedDevelopment: true`。这类记录会包含 `development_unsigned` / `production_ready: false` 警告，验证状态为 `non_production`，不能用于生产验收。
+
 ## 闸门系统
 
 闸门是质量底线，每一轮 AI 修复后必须通过：

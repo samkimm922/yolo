@@ -7,6 +7,7 @@ import {
   LIFECYCLE_STAGES,
   validateLifecycleState,
 } from "./schema.js";
+import { provisionLedgerHmacKey } from "../runtime/evidence/ledger.js";
 
 export const LIFECYCLE_DIR_NAME = "lifecycle";
 export const LIFECYCLE_STATUS_FILE = "status.json";
@@ -112,6 +113,9 @@ export function initLifecycleState(options: LifecycleOptions = Object()) {
   const created: string[] = [];
   const overwritten: string[] = [];
   const skipped: string[] = [];
+  const ledgerHmac = dryRun
+    ? { key_path: join(stateRoot, "keys/ledger.hmac"), created: false }
+    : provisionLedgerHmacKey(stateRoot);
 
   const absoluteDir = join(projectRoot, plan.directory);
   if (!existsSync(absoluteDir)) {
@@ -143,6 +147,8 @@ export function initLifecycleState(options: LifecycleOptions = Object()) {
     lifecycle_dir: projectRelative(projectRoot, join(stateRoot, LIFECYCLE_DIR_NAME)),
     dry_run: dryRun,
     force,
+    ledger_hmac_key_path: projectRelative(projectRoot, ledgerHmac.key_path),
+    ledger_hmac_key_created: ledgerHmac.created,
     created_dirs: createdDirs,
     created,
     overwritten,

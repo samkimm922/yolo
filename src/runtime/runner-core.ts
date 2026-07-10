@@ -11,7 +11,7 @@ import { ensureCanonicalDirs, yoloPath } from "../lib/paths.js";
 import { detectModelProvider as detectProvider } from "./adapters/provider-doctor.js";
 import { evaluatePostConditions, setContractRoot } from "../prd/contract.js";
 import { inspectPreExecutionGates } from "./gates/pre-execution-gates.js";
-import { appendRunEvent, appendStateEvent } from "./evidence/ledger.js";
+import { appendRunEvent, appendStateEvent, requireLedgerHmacKey } from "./evidence/ledger.js";
 import { writeRunReport } from "./evidence/report.js";
 import { appendTaskResult, updatePrdTaskStatusFile } from "./task-state/writers.js";
 import { applyTaskTransition } from "./task-state/transitions.js";
@@ -94,8 +94,7 @@ let globalMode = "fix";
 let runnerContext = resolveRunnerContext({ projectRoot: resolve(PACKAGE_ROOT, config.project.root), stateRoot: PACKAGE_ROOT }, { packageRoot: PACKAGE_ROOT, config, yoloPath });
 let ROOT = runnerContext.rootDir, STATE_ROOT = runnerContext.stateRoot;
 setContractRoot(ROOT);
-let runtimeConfig = config;
-let STATE_DIR = runnerContext.stateDir;
+let runtimeConfig = config, STATE_DIR = runnerContext.stateDir;
 let RUNTIME_DIR = runnerContext.runtimeDir;
 let TSC_BASELINE = runnerContext.tscBaselinePath, ESLINT_BASELINE = runnerContext.eslintBaselinePath;
 let RESULTS_FILE = runnerContext.resultsFile;
@@ -127,8 +126,7 @@ function applyRunnerContext(options = Object(), cfg = runtimeConfig) {
 // ── state 日志函数 ──────────────────────────────────────
 
 const runnerLedgerWriters = createRunnerLedgerWriters({
-  getStateDir: () => STATE_DIR,
-  getRunId: () => activeRunId,
+  getStateDir: () => STATE_DIR, getStateRoot: () => STATE_ROOT, getRunId: () => activeRunId, allowUnsignedDevelopment: () => globalMode === "dev",
   appendStateEvent,
   appendRunEvent,
 });
@@ -496,6 +494,7 @@ function archiveCurrentRun(runId, results) {
 export async function run(prdPath, options = Object()) {
   runtimeConfig = withExecutionConfig(options.config || config, options);
   applyRunnerContext(options, runtimeConfig);
+  requireLedgerHmacKey(STATE_ROOT, { allowUnsignedDevelopment: globalMode === "dev" || options.mode === "dev" });
   const exitOnComplete = options.exitOnComplete !== false;
   if (options.mode) globalMode = options.mode;
   // Generate run_id for this session
@@ -526,6 +525,7 @@ export async function run(prdPath, options = Object()) {
       initializeBaselines: options.initializeBaselines !== false,
       logProgress: logP,
       runnerError,
+      allowUnsignedDevelopment: globalMode === "dev",
     });
 
     return await runTaskPipeline({
@@ -557,7 +557,7 @@ export async function run(prdPath, options = Object()) {
       logRun,
       logProgress: logP,
       writeStateSnapshot,
-      writeRunReport,
+      writeRunReport: (reportOptions) => writeRunReport({ ...reportOptions, stateRoot: STATE_ROOT, allowUnsignedDevelopment: globalMode === "dev" }),
       archiveCurrentRun,
       execFileSync,
       processExecPath: process.execPath,

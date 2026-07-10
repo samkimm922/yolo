@@ -1,12 +1,15 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildReviewFixPrd, inspectReviewFixLoop } from "../src/review/fix-loop.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-review-fix-loop-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-review-fix-loop-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "review-fix-loop-test-ledger-key", "utf8");
+  return root;
 }
 
 const highFinding = {

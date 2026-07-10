@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -18,10 +18,12 @@ describe("public evidence ledger facade", () => {
   test("appendJsonlRecord writes timestamped JSONL records", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-public-evidence-"));
     try {
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(join(root, "keys", "ledger.hmac"), "public-evidence-test-ledger-key", "utf8");
       const filePath = join(root, "events.jsonl");
       const payload = appendJsonlRecord(filePath, { event: "spec.checked" }, { now: "2026-05-24T00:00:00.000Z" });
 
-      assert.deepEqual({ ...payload, record_hash: "<hash>" }, {
+      assert.deepEqual({ ...payload, record_hash: "<hash>", record_sig: "<sig>" }, {
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T00:00:00.000Z",
@@ -30,6 +32,7 @@ describe("public evidence ledger facade", () => {
         source: "yolo",
         prev_hash: null,
         record_hash: "<hash>",
+        record_sig: "<sig>",
       });
       assert.equal(payload.record_hash, ledgerRecordHash(payload));
       assert.equal(readFileSync(filePath, "utf8"), `${JSON.stringify(payload)}\n`);
@@ -41,6 +44,8 @@ describe("public evidence ledger facade", () => {
   test("createEvidenceLedger scopes state events and run events to one stateDir", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-public-evidence-"));
     try {
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(join(root, "keys", "ledger.hmac"), "public-evidence-test-ledger-key", "utf8");
       const stateDir = join(root, "state");
       const ledger = createEvidenceLedger({ stateDir });
       ledger.appendStateEvent("spec.warning", { task_id: "FIX-SPEC-001" }, { now: "2026-05-24T00:00:00.000Z" });

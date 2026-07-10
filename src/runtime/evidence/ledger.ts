@@ -10,7 +10,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { readJsonlTail } from "../../lib/bounded-read.js";
 import {
@@ -21,6 +21,7 @@ import {
   EVIDENCE_HASH_ALGORITHM,
   EVIDENCE_SCHEMA_VERSION,
   LEDGER_EVENT_SCHEMA,
+  UNSIGNED_DEVELOPMENT_WARNING,
   ledgerRecordHash,
   sha256Evidence,
   stableEvidenceJson,
@@ -67,6 +68,23 @@ function ledgerAppendError(code: string, message: string, details: Record<string
     ...details,
     ...(cause ? { cause } : {}),
   });
+}
+
+function allowUnsignedDevelopment(options: LedgerOptions = Object()): boolean {
+  return options.allowUnsignedDevelopment === true || options.allow_unsigned_development === true;
+}
+
+function explicitLedgerHmacKey(options: LedgerOptions = Object()): string | undefined {
+  const value = typeof options.hmacKey === "string" ? options.hmacKey
+    : typeof options.hmac_key === "string" ? options.hmac_key
+    : undefined;
+  return value && value.trim().length > 0 ? value : undefined;
+}
+
+function optionStateRoot(options: LedgerOptions = Object()): string | undefined {
+  return typeof options.stateRoot === "string" ? options.stateRoot
+    : typeof options.state_root === "string" ? options.state_root
+    : undefined;
 }
 
 function fsErrorCode(error: unknown): string {
@@ -267,11 +285,10 @@ function previousRecordHash(filePath: string): unknown {
   return null;
 }
 
-// H3: resolve an optional project-rooted HMAC key for ledger record signing.
-// The key lives at <stateRoot>/keys/ledger.hmac (project-rooted, optional). When
-// present, appended records carry a record_sig computed with this key, so
-// append-only write access alone cannot forge a valid chain. Returns undefined
-// when no key is configured (backward-compatible with existing unsigned chains).
+// Resolve the project-rooted HMAC key used for ledger record signing. The key
+// lives at <stateRoot>/keys/ledger.hmac. Callers that produce or accept formal
+// evidence use requireLedgerHmacKey so missing, empty, or unreadable keys fail
+// closed; this resolver remains non-throwing for structured validation reports.
 export const LEDGER_HMAC_KEY_REL = "keys/ledger.hmac";
 export function resolveLedgerHmacKey(stateRoot?: string): string | undefined {
   if (!stateRoot) return undefined;
@@ -285,15 +302,67 @@ export function resolveLedgerHmacKey(stateRoot?: string): string | undefined {
   }
 }
 
+function discoverLedgerHmacStateRoot(filePath: string): string | undefined {
+  let current = dirname(filePath);
+  while (true) {
+    if (existsSync(join(current, LEDGER_HMAC_KEY_REL))) return current;
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+export function requireLedgerHmacKey(stateRoot?: string, options: LedgerOptions = Object()): string | undefined {
+  const key = explicitLedgerHmacKey(options) || resolveLedgerHmacKey(stateRoot);
+  if (key) return key;
+  if (allowUnsignedDevelopment(options)) return undefined;
+  const keyPath = stateRoot ? join(stateRoot, LEDGER_HMAC_KEY_REL) : null;
+  throw ledgerAppendError(
+    "LEDGER_HMAC_KEY_REQUIRED",
+    `Evidence ledger HMAC key is required${keyPath ? ` at ${keyPath}` : " via hmacKey or stateRoot"}; refusing unsigned production evidence.`,
+    {
+      hmac_key_path: keyPath,
+      production_ready: false,
+    },
+  );
+}
+
+export function provisionLedgerHmacKey(stateRoot: string): { key_path: string; created: boolean } {
+  const keyPath = join(stateRoot, LEDGER_HMAC_KEY_REL);
+  if (existsSync(keyPath)) return { key_path: keyPath, created: false };
+  mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(keyPath, randomBytes(32).toString("hex"), { encoding: "utf8", flag: "wx", mode: 0o600 });
+    return { key_path: keyPath, created: true };
+  } catch (error) {
+    if (fsErrorCode(error) === "EEXIST") return { key_path: keyPath, created: false };
+    throw error;
+  }
+}
+
 export function validateLedgerChain(records: unknown[] = [], options: LedgerOptions = Object()) {
   const errors: LedgerChainError[] = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
-  // H3: HMAC key for record_sig verification (project-rooted, optional). When
-  // present, every record's record_sig is verified; a forged append fails closed.
-  const hmacKey = typeof options.hmacKey === "string" ? options.hmacKey : (typeof options.hmac_key === "string" ? options.hmac_key : undefined);
+  // Every production record must have a verifiable record_sig. The only
+  // unsigned path is the explicit development option, which returns a visibly
+  // non-production result and requires the marker embedded by the writer.
+  const hmacKey = explicitLedgerHmacKey(options) || resolveLedgerHmacKey(optionStateRoot(options));
+  const unsignedDevelopment = !hmacKey && allowUnsignedDevelopment(options);
+  if (!hmacKey && !unsignedDevelopment) {
+    errors.push({
+      index: -1,
+      code: "LEDGER_HMAC_KEY_REQUIRED",
+      message: "Evidence ledger HMAC key is required; unsigned records cannot satisfy production evidence validation.",
+      production_ready: false,
+    });
+  }
   let previousHash = allowExternalHead && isRecord(records[0]) && records[0].prev_hash ? records[0].prev_hash : null;
   records.forEach((record, index) => {
-    const validation = validateLedgerRecord(record, hmacKey ? { hmacKey } : Object());
+    const validation = validateLedgerRecord(record, hmacKey
+      ? { hmacKey }
+      : unsignedDevelopment
+        ? { allowUnsignedDevelopment: true }
+        : Object());
     for (const error of validation.errors) {
       errors.push({ index, code: "LEDGER_RECORD_INVALID", message: error });
     }
@@ -320,7 +389,9 @@ export function validateLedgerChain(records: unknown[] = [], options: LedgerOpti
   });
   return {
     ok: errors.length === 0,
-    status: errors.length === 0 ? "pass" : "fail",
+    status: errors.length > 0 ? "fail" : unsignedDevelopment ? "non_production" : "pass",
+    production_ready: errors.length === 0 && Boolean(hmacKey),
+    ...(unsignedDevelopment ? { notices: [UNSIGNED_DEVELOPMENT_WARNING] } : {}),
     checked_count: records.length,
     head_hash: previousHash,
     errors,
@@ -356,6 +427,8 @@ export function withLedgerAppendLock<T>(filePath: string, options: LedgerOptions
 }
 
 export function appendJsonlRecord<TRecord extends LedgerRecord>(filePath: string, record: TRecord, options: LedgerOptions = Object()): EvidenceLedgerRecord & TRecord {
+  const hmacKey = requireLedgerHmacKey(optionStateRoot(options) || discoverLedgerHmacStateRoot(filePath), options);
+  const unsignedDevelopment = !hmacKey && allowUnsignedDevelopment(options);
   return withLedgerAppendLock(filePath, options, () => {
     const now = options.now || new Date().toISOString();
     mkdirSync(dirname(filePath), { recursive: true });
@@ -363,20 +436,17 @@ export function appendJsonlRecord<TRecord extends LedgerRecord>(filePath: string
     // computes record_hash) so the hash is self-consistent with the redacted
     // payload. Readers see only redacted data; the chain integrity is preserved.
     const safeRecord = redactDeep(record || Object());
-    // H3: resolve the project HMAC key (from explicit option or stateRoot) so
-    // the appended record carries a record_sig when the project has committed
-    // to HMAC-signed ledger chains.
-    const hmacKey = typeof options.hmacKey === "string" ? options.hmacKey
-      : typeof options.hmac_key === "string" ? options.hmac_key
-      : resolveLedgerHmacKey(typeof options.stateRoot === "string" ? options.stateRoot : (typeof options.state_root === "string" ? options.state_root : undefined));
+    // Resolve the project HMAC key before writing. Missing keys already failed
+    // above unless the caller explicitly selected unsigned development mode.
     const payload = buildLedgerRecord(safeRecord?.event, safeRecord, {
       ...options,
       now,
       ledger: safeRecord?.ledger || options.ledger,
       prevHash: options.prevHash ?? options.prev_hash ?? safeRecord?.prev_hash ?? previousRecordHash(filePath),
       hmacKey,
+      allowUnsignedDevelopment: unsignedDevelopment,
     });
-    const validation = validateLedgerRecord(payload, hmacKey ? { hmacKey } : Object());
+    const validation = validateLedgerRecord(payload, hmacKey ? { hmacKey } : { allowUnsignedDevelopment: true });
     if (!validation.ok) {
       throw ledgerAppendError("LEDGER_APPEND_RECORD_INVALID", `Invalid evidence ledger record: ${validation.errors.join("; ")}`, {
         ledger_path: filePath,
@@ -389,11 +459,17 @@ export function appendJsonlRecord<TRecord extends LedgerRecord>(filePath: string
 }
 
 export function appendStateEvent<TData extends LedgerRecord>(stateDir: string, event: unknown, data: TData = Object() as TData, options: LedgerOptions = Object()) {
-  return appendJsonlRecord(join(stateDir, "events.jsonl"), { ...data, event, ledger: "state" }, options);
+  return appendJsonlRecord(join(stateDir, "events.jsonl"), { ...data, event, ledger: "state" }, {
+    stateRoot: optionStateRoot(options) || (resolveLedgerHmacKey(stateDir) ? stateDir : dirname(stateDir)),
+    ...options,
+  });
 }
 
 export function appendRunEvent<TData extends LedgerRecord>(stateDir: string, event: unknown, data: TData = Object() as TData, options: LedgerOptions = Object()) {
-  return appendJsonlRecord(join(stateDir, "runs.jsonl"), { ...data, event, ledger: "run" }, options);
+  return appendJsonlRecord(join(stateDir, "runs.jsonl"), { ...data, event, ledger: "run" }, {
+    stateRoot: optionStateRoot(options) || (resolveLedgerHmacKey(stateDir) ? stateDir : dirname(stateDir)),
+    ...options,
+  });
 }
 
 export function writeJsonArtifact(filePath: string, payload: unknown): string {
@@ -431,6 +507,7 @@ export {
   EVIDENCE_HASH_ALGORITHM,
   EVIDENCE_SCHEMA_VERSION,
   LEDGER_EVENT_SCHEMA,
+  UNSIGNED_DEVELOPMENT_WARNING,
   ledgerRecordHash,
   sha256Evidence,
   stableEvidenceJson,

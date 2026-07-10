@@ -13,7 +13,10 @@ import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-progress-ui-evidence-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-progress-ui-evidence-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "progress-ui-test-ledger-key", "utf8");
+  return root;
 }
 
 function writeJson(file, payload) {

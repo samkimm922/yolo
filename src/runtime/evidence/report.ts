@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import {
   appendJsonlRecord,
   appendStateEvent,
   buildEvidenceArtifact,
   readLedgerJsonl,
+  resolveLedgerHmacKey,
   validateLedgerChain,
   writeJsonArtifact,
 } from "./ledger.js";
@@ -124,6 +125,8 @@ interface BuildRunReportOptions {
   finishedAt?: unknown;
   durationSec?: unknown;
   taskLogsDir?: string | null;
+  stateRoot?: string;
+  allowUnsignedDevelopment?: boolean;
 }
 
 interface FinalAnswerOptions extends JsonRecord {
@@ -408,25 +411,30 @@ function summarizeFixtureEvidence(stateEvents: JsonRecord[]): FixtureSummary {
   };
 }
 
-function validateLedgerChainWithArchive(records: unknown[] = [], archiveHashes: Set<unknown> = new Set()) {
+function validateLedgerChainWithArchive(records: unknown[] = [], archiveHashes: Set<unknown> = new Set(), options: Record<string, unknown> = Object()) {
   const firstRecord = isRecord(records[0]) ? records[0] : null;
   const externalHead = firstRecord?.prev_hash || null;
   const allowExternalHead = Boolean(externalHead && archiveHashes.has(externalHead));
   return {
-    ...validateLedgerChain(records, { allowExternalHead }),
+    ...validateLedgerChain(records, { allowExternalHead, ...options }),
     external_head: externalHead,
     external_head_allowed: allowExternalHead,
   };
 }
 
-function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" }: { runs?: unknown[]; events?: unknown[]; stateDir?: string } = Object()) {
+function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "", stateRoot, allowUnsignedDevelopment = false }: { runs?: unknown[]; events?: unknown[]; stateDir?: string; stateRoot?: string; allowUnsignedDevelopment?: boolean } = Object()) {
   const archiveHashes = archivedLedgerHashes(stateDir);
-  const runChain = validateLedgerChainWithArchive(runs, archiveHashes.run);
-  const stateChain = validateLedgerChainWithArchive(events, archiveHashes.state);
+  const resolvedStateRoot = stateRoot || dirname(stateDir);
+  const hmacKey = resolveLedgerHmacKey(resolvedStateRoot);
+  const validationOptions = { stateRoot: resolvedStateRoot, hmacKey, allowUnsignedDevelopment };
+  const runChain = validateLedgerChainWithArchive(runs, archiveHashes.run, validationOptions);
+  const stateChain = validateLedgerChainWithArchive(events, archiveHashes.state, validationOptions);
   const archiveErrors = archiveHashes.errors || [];
-  const errorCount = runChain.errors.length + stateChain.errors.length + archiveErrors.length;
+  const productionReady = runChain.production_ready === true && stateChain.production_ready === true;
+  const errorCount = runChain.errors.length + stateChain.errors.length + archiveErrors.length + (productionReady ? 0 : 1);
   return {
     status: errorCount === 0 ? "pass" : "fail",
+    production_ready: productionReady,
     error_count: errorCount,
     archive_errors: archiveErrors.slice(0, 10),
     run_chain: {
@@ -622,6 +630,8 @@ export function buildRunReport({
   finishedAt = new Date().toISOString(),
   durationSec = null,
   taskLogsDir = null,
+  stateRoot,
+  allowUnsignedDevelopment = false,
 }: BuildRunReportOptions = Object()): RunReport {
   if (!stateDir) throw new Error("buildRunReport requires stateDir");
 
@@ -637,7 +647,13 @@ export function buildRunReport({
   const taskLogEntries = taskLogScope.current;
   const runStart = runEvents.find((entry) => entry.event === "run_start") || null;
   const runEnd = last(runEvents.filter((entry) => entry.event === "run_end"));
-  const ledgerIntegrity = summarizeLedgerIntegrity({ runs, events, stateDir });
+  const ledgerIntegrity = summarizeLedgerIntegrity({
+    runs,
+    events,
+    stateDir,
+    stateRoot,
+    allowUnsignedDevelopment,
+  });
 
   // Fall back to state/runtime/task-results.jsonl when callers do not pass an
   // explicit taskResults aggregation. This keeps buildRunReport useful for
@@ -1018,7 +1034,11 @@ export function writeRunReport(options: BuildRunReportOptions = Object()) {
     final_answer_json: relative(resolve(options.stateDir), paths.final_answer_json_path),
     final_answer_markdown: relative(resolve(options.stateDir), paths.final_answer_markdown_path),
     artifact_integrity: artifactIntegrity,
-  }, { source: "run-report" });
+  }, {
+    source: "run-report",
+    stateRoot: options.stateRoot || dirname(options.stateDir),
+    allowUnsignedDevelopment: options.allowUnsignedDevelopment === true,
+  });
 
   appendJsonlRecord(join(options.stateDir, "artifacts.jsonl"), {
     event: "artifact.write",
@@ -1032,7 +1052,11 @@ export function writeRunReport(options: BuildRunReportOptions = Object()) {
       { type: "final_answer_markdown", path: relative(resolve(options.stateDir), paths.final_answer_markdown_path) },
     ],
     artifact_integrity: artifactIntegrity,
-  }, { source: "run-report" });
+  }, {
+    source: "run-report",
+    stateRoot: options.stateRoot || dirname(options.stateDir),
+    allowUnsignedDevelopment: options.allowUnsignedDevelopment === true,
+  });
 
   return {
     report,

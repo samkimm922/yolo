@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve, join, normalize } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
-import { buildEvidenceArtifact, createEvidenceLedger, evidenceArtifactDigest, validateEvidenceArtifact } from "../runtime/evidence/ledger.js";
+import { buildEvidenceArtifact, createEvidenceLedger, evidenceArtifactDigest, provisionLedgerHmacKey, validateEvidenceArtifact } from "../runtime/evidence/ledger.js";
 import {
   fixtureEvidenceRecord,
   getFixtureDefinition,
@@ -169,6 +169,7 @@ export function runFixtureHarness(id, options = Object()) {
   }
 
   const workspace = copyFixtureToWorkspace(fixture, options);
+  provisionLedgerHmacKey(workspace);
   const commands = fixture.run?.commands || [];
   const dependencyBlockingFailures = dependencyFailures(fixture, workspace, options.spawnSync || defaultSpawnSync);
   const commandResults = commands.map((command) =>

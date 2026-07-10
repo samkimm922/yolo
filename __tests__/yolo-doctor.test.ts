@@ -14,7 +14,10 @@ import {
 } from "../src/devtools/doctor.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "yolo-doctor-"));
+  const root = mkdtempSync(join(tmpdir(), "yolo-doctor-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "yolo-doctor-test-ledger-key", "utf8");
+  return root;
 }
 
 function git(root, args) {

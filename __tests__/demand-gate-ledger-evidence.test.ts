@@ -1,10 +1,21 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
+
+function tempStateDir() {
+  const root = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+  mkdirSync(join(root, "keys"), { recursive: true });
+  writeFileSync(join(root, "keys", "ledger.hmac"), "demand-gate-test-ledger-key", "utf8");
+  return join(root, "state");
+}
+
+function tempUnsignedStateDir() {
+  return join(mkdtempSync(join(tmpdir(), "yolo-ledger-unsigned-")), "state");
+}
 
 describe("demand gate ledger evidence integration", () => {
   test("without stateDir, evidence_grounded is false", () => {
@@ -17,7 +28,7 @@ describe("demand gate ledger evidence integration", () => {
   });
 
   test("with stateDir having no ledger file, evidence_grounded is false", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempStateDir();
     try {
       const result = inspectDemandQuality({ tasks: [] }, { stateDir: dir });
       assert.ok(result !== null);
@@ -25,12 +36,12 @@ describe("demand gate ledger evidence integration", () => {
       assert.ok(factDim !== undefined);
       assert.equal(factDim.evidence_grounded, false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 
   test("with unrelated valid ledger chain, evidence_grounded is false", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempStateDir();
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
       appendJsonlRecord(ledgerPath, { event: "project_read", file: "src/foo.ts", ledger: "state" });
@@ -40,27 +51,29 @@ describe("demand gate ledger evidence integration", () => {
       assert.ok(factDim !== undefined);
       assert.equal(factDim.evidence_grounded, false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 
   test("with unsigned approved demand ledger chain, evidence_grounded is false", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempUnsignedStateDir();
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
-      appendJsonlRecord(ledgerPath, { event: "demand.approved", demand_id: "DEMAND-1", ledger: "state" });
+      appendJsonlRecord(ledgerPath, { event: "demand.approved", demand_id: "DEMAND-1", ledger: "state" }, {
+        allowUnsignedDevelopment: true,
+      });
       const result = inspectDemandQuality({ id: "DEMAND-1", tasks: [] }, { stateDir: dir });
       assert.ok(result !== null);
       const factDim = result.dimensions?.find((d) => d.code === "project_fact_grounding");
       assert.ok(factDim !== undefined);
       assert.equal(factDim.evidence_grounded, false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 
   test("with broken ledger chain, evidence_grounded is false", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempStateDir();
     try {
       mkdirSync(join(dir, "evidence"), { recursive: true });
       // Write a malformed record that won't pass validateLedgerChain
@@ -74,12 +87,12 @@ describe("demand gate ledger evidence integration", () => {
       assert.ok(factDim !== undefined);
       assert.equal(factDim.evidence_grounded, false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 
   test("R6 in deep mode, missing evidence_grounded becomes readiness blocker", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempStateDir();
     try {
       // No ledger present — evidence_grounded is false
       const result = inspectDemandReadiness({
@@ -91,12 +104,12 @@ describe("demand gate ledger evidence integration", () => {
       assert.ok(result.blockers.some((b) => b.code === "EVIDENCE_GROUNDED"),
         `Expected EVIDENCE_GROUNDED blocker, got: ${JSON.stringify(result.blockers.map(b => b.code))}`);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 
   test("R6 with valid ledger passes evidence_grounded readiness check", () => {
-    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    const dir = tempStateDir();
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
       appendJsonlRecord(ledgerPath, { event: "demand.discuss", demand_id: "DEMAND-1", ledger: "state" });
@@ -111,7 +124,7 @@ describe("demand gate ledger evidence integration", () => {
       const blocker = result.blockers.find((b) => b.code === "EVIDENCE_GROUNDED");
       assert.equal(blocker, undefined, `EVIDENCE_GROUNDED should not block when ledger is valid, got blocker`);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(resolve(dir, ".."), { recursive: true, force: true });
     }
   });
 });
