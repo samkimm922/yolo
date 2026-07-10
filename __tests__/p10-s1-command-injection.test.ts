@@ -364,7 +364,7 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   });
 
   test("node:test built-in adapter rejects contradictory flags that disable test mode", () => {
-    for (const flag of ["--no-test", "--no-test=true"]) {
+    for (const flag of ["--no-test", "--no-test=true", "--no_test", "--no_test=true"]) {
       const result = outsideParentNodeTestContext(() => mod.evalTestsPass({
         command: `"${process.execPath}" --test ${flag} --import "data:text/javascript,console.log('%23 tests 1')"`,
         timeout_ms: 30000,
@@ -373,6 +373,26 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
       assert.equal(result.passed, false, `${flag}: ${JSON.stringify(result)}`);
       assert.match(result.detail, /test_count|声明|declaration/i);
     }
+  });
+
+  test("node:test built-in adapter rejects underscore aliases for custom reporters", () => {
+    const reporterRoot = join(tmpRoot, "node-custom-reporter");
+    mkdirSync(reporterRoot, { recursive: true });
+    writeFileSync(join(reporterRoot, "fake-reporter.mjs"), [
+      "import { Transform } from 'node:stream';",
+      "export default new Transform({",
+      "  writableObjectMode: true,",
+      "  transform(_event, _encoding, callback) { callback(); },",
+      "  flush(callback) { this.push('# tests 1\\n'); callback(); },",
+      "});",
+    ].join("\n"), "utf8");
+    const result = outsideParentNodeTestContext(() => mod.evalTestsPass({
+      command: `"${process.execPath}" --test --test_reporter=./fake-reporter.mjs`,
+      timeout_ms: 30000,
+      require_tests: true,
+    }, {}, reporterRoot));
+    assert.equal(result.passed, false, JSON.stringify(result));
+    assert.match(result.detail, /test_count|声明|declaration/i);
   });
 
   test("require_tests rejects console.assert failures from a real node:test command", () => {
