@@ -637,7 +637,7 @@ describe("runner review fix execution flow", () => {
     assert.doesNotMatch(runnerSource, /filter\(t => t\.status === 'done' \|\| t\.status === 'skipped'\)/);
     assert.match(postPrecheckSource, /expected_zero_business_code:\s*true/);
     assert.match(postPrecheckSource, /code_contains/);
-    assert.match(postPrecheckSource, /target_tsc_errors/);
+    assert.match(postPrecheckSource, /target_type_check_errors/);
     assert.match(preSessionFlowSource, /buildPrecheckValidSkipOutcome\(\{/);
     assert.match(preSessionFlowSource, /postPrecheckInspector = inspectPostPrecheckSkip/);
     assert.match(preSessionFlowSource, /postPrecheckInspector\(\{/);

@@ -8,16 +8,25 @@ import { join } from "node:path";
 import { safeExecSync as defaultExecSync, safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { buildCommandEnv, commandUnavailableDetail, resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
+import { commandOutputSnapshotKeys } from "../gates/error-output-policy.js";
 
-export const BASELINE_TOOLS = ["tsc", "eslint"];
+export const BASELINE_KINDS = ["type_check", "lint"] as const;
+export const BASELINE_TOOLS = BASELINE_KINDS;
 export const BASELINE_FILE_NAMES = {
-  tsc: "tsc-baseline.json",
-  eslint: "eslint-baseline.json",
+  type_check: "tsc-baseline.json",
+  lint: "eslint-baseline.json",
 };
-export const BASELINE_RUNTIME_FILES = Object.values(BASELINE_FILE_NAMES);
+export const BASELINE_RUNTIME_FILES = BASELINE_KINDS.map((kind) => BASELINE_FILE_NAMES[kind]);
 
-export function baselineFileName(tool) {
-  return BASELINE_FILE_NAMES[tool] || `${tool}-baseline.json`;
+function normalizeBaselineKind(kind) {
+  if (kind === "tsc") return "type_check";
+  if (kind === "eslint") return "lint";
+  return kind;
+}
+
+export function baselineFileName(kind) {
+  const normalized = normalizeBaselineKind(kind);
+  return BASELINE_FILE_NAMES[normalized] || `${normalized}-baseline.json`;
 }
 
 function stableJson(value) {
@@ -30,68 +39,16 @@ function sha256(value) {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
-export function parseTscBaselineKeys(output = "") {
-  return [...new Set(
-    String(output).split("\n")
-      .map((line) => {
-        const match = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/);
-        return match ? `${match[1]}:${match[2]}:${match[3]}` : null;
-      })
-      .filter(Boolean),
-  )];
+export function snapshotCommandOutput(output = "", ...declarations) {
+  return commandOutputSnapshotKeys(output, ...declarations);
 }
 
-// H12: Fail-closed baseline parsing. Tool output that is non-empty but not
-// parseable as JSON is CORRUPT — treating it as "zero issues" would silently
-// establish a clean baseline (fail-open). Empty output legitimately means zero
-// issues. On corrupt output we throw BASELINE_CORRUPT so callers block.
-export class BaselineParseError extends Error {
-  code = "BASELINE_CORRUPT";
-}
-
-function parseEslintJsonArray(output = "") {
-  const text = String(output || "");
-  const jsonStart = text.indexOf("[");
-  if (jsonStart < 0) {
-    // No array start: only acceptable if there is genuinely no diagnostic output.
-    if (text.trim() === "") return [];
-    throw new BaselineParseError("eslint output has no JSON array");
-  }
-  let results;
-  try {
-    results = JSON.parse(text.slice(jsonStart));
-  } catch {
-    throw new BaselineParseError("eslint output is not valid JSON");
-  }
-  if (!Array.isArray(results)) throw new BaselineParseError("eslint output JSON is not an array");
-  return results;
-}
-
-export function parseEslintBaselineKeys(output = "", rootDir = "") {
-  const results = parseEslintJsonArray(output);
-  const keys = [];
-  for (const result of results) {
-    const file = result.filePath?.replace(`${rootDir}/`, "") || "";
-    for (const message of result.messages || []) {
-      if (message.ruleId) keys.push(`${file}:${message.line}:${message.ruleId}`);
-    }
-  }
-  return [...new Set(keys)];
-}
-
-export function parseEslintBaselineErrorKeys(output = "", rootDir = "") {
-  const results = parseEslintJsonArray(output);
-  const keys = [];
-  for (const result of results) {
-    const file = result.filePath?.replace(`${rootDir}/`, "") || "";
-    for (const message of result.messages || []) {
-      if (message.ruleId && message.severity >= 2) {
-        keys.push(`${file}:${message.line}:${message.ruleId}`);
-      }
-    }
-  }
-  return [...new Set(keys)];
-}
+// Compatibility aliases for callers that used the old helper names. The
+// implementation is intentionally tool-agnostic; the names only identify the
+// legacy API, not an output schema.
+export const parseTscBaselineKeys = snapshotCommandOutput;
+export const parseEslintBaselineKeys = snapshotCommandOutput;
+export const parseEslintBaselineErrorKeys = snapshotCommandOutput;
 
 export function normalizeBaselineIssueKey(key = "", rootDir = "") {
   return String(key || "").replace(`${rootDir}/`, "").replace(/^\.\//, "");
@@ -177,6 +134,7 @@ export function buildBaselineArtifact({
     meta: Object.assign(Object(), {
       schema: "yolo.execution.baseline.v1",
       tool,
+      output_schema: "yolo.execution.output_snapshot.v1",
       command,
       exit_code: exitCode,
       status,
@@ -294,81 +252,43 @@ export function restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync = def
   }
 }
 
-export function captureTscBaseline({
+export function captureCommandBaseline({
+  kind,
   rootDir,
   command,
   timeout = 60000,
   baselinePath,
+  config = Object(),
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const run = runBaselineCommand({ rootDir, command, execSync, timeout });
-  let keys = [];
-  let status = run.status;
-  let reason = run.reason;
-  try {
-    keys = parseTscBaselineKeys(run.output);
-  } catch (error) {
-    // H12: corrupt tool output must not establish a clean baseline.
-    status = "blocked";
-    reason = (error instanceof BaselineParseError && error.code) || "BASELINE_CORRUPT";
-  }
+  const keys = run.output.trim() ? snapshotCommandOutput(run.output, config) : [];
   const baseline = buildBaselineArtifact({
-    tool: "tsc",
+    tool: kind,
     keys,
     command,
     exitCode: run.exit_code,
     stdout: run.stdout || run.output,
     stderr: run.stderr,
     commit: currentCommit(rootDir, execSync),
-    status,
-    reason,
+    status: run.status,
+    reason: run.reason,
     createdAt: nowIso(),
     updatedAt: nowIso(),
   });
   return writeBaseline(baselinePath, baseline, writeFileSync);
 }
 
-export function captureEslintBaseline({
-  rootDir,
-  command,
-  timeout = 60000,
-  baselinePath,
-  execSync = defaultExecSync,
-  writeFileSync = defaultWriteFileSync,
-  nowIso = () => new Date().toISOString(),
-} = Object()) {
-  const run = runBaselineCommand({ rootDir, command, execSync, timeout });
-  let keys = [];
-  let status = run.status;
-  let reason = run.reason;
-  try {
-    keys = parseEslintBaselineKeys(run.output, rootDir);
-  } catch (error) {
-    // H12: corrupt tool output must not establish a clean baseline.
-    status = "blocked";
-    reason = (error instanceof BaselineParseError && error.code) || "BASELINE_CORRUPT";
-  }
-  const baseline = buildBaselineArtifact({
-    tool: "eslint",
-    keys,
-    command,
-    exitCode: run.exit_code,
-    stdout: run.stdout || run.output,
-    stderr: run.stderr,
-    commit: currentCommit(rootDir, execSync),
-    status,
-    reason,
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-  });
-  return writeBaseline(baselinePath, baseline, writeFileSync);
-}
+export const captureTscBaseline = (options = Object()) => captureCommandBaseline({ ...options, kind: "type_check" });
+export const captureEslintBaseline = (options = Object()) => captureCommandBaseline({ ...options, kind: "lint" });
 
 export function captureExecutionBaselines({
   rootDir,
   config,
+  typeCheckBaselinePath,
+  lintBaselinePath,
   tscBaselinePath,
   eslintBaselinePath,
   execSync = defaultExecSync,
@@ -378,32 +298,37 @@ export function captureExecutionBaselines({
   const stashRef = createDirtyWorktreeSnapshot({ rootDir, execSync });
   const typeCheckCommand = resolveBuildCommand("type_check", config, rootDir);
   const lintCommand = resolveBuildCommand("lint", config, rootDir);
-  const tscBaseline = captureTscBaseline({
+  const typeCheckBaseline = captureCommandBaseline({
+    kind: "type_check",
     rootDir,
     command: typeCheckCommand,
     timeout: resolveGateTimeout("type_check", config),
-    baselinePath: tscBaselinePath,
+    baselinePath: typeCheckBaselinePath || tscBaselinePath,
+    config,
     execSync,
     writeFileSync,
     nowIso,
   });
-  const eslintBaseline = captureEslintBaseline({
+  const lintBaseline = captureCommandBaseline({
+    kind: "lint",
     rootDir,
     command: lintCommand,
     timeout: resolveGateTimeout("lint", config),
-    baselinePath: eslintBaselinePath,
+    baselinePath: lintBaselinePath || eslintBaselinePath,
+    config,
     execSync,
     writeFileSync,
     nowIso,
   });
   const restored = restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync });
   const baselineResults = [
-    { tool: "tsc", baseline: tscBaseline },
-    { tool: "eslint", baseline: eslintBaseline },
+    { kind: "type_check", tool: "type_check", baseline: typeCheckBaseline },
+    { kind: "lint", tool: "lint", baseline: lintBaseline },
   ];
   const blocked = baselineResults
     .filter((result) => result.baseline.meta?.status === "blocked")
     .map((result) => ({
+      kind: result.kind,
       tool: result.tool,
       reason: result.baseline.meta?.reason || "baseline_capture_failed",
       command: result.baseline.meta?.command || "",
@@ -415,10 +340,15 @@ export function captureExecutionBaselines({
     blockers: blocked,
     stash_ref: stashRef,
     restored,
-    tsc_keys: tscBaseline.keys,
-    eslint_keys: eslintBaseline.keys,
-    tsc_baseline: tscBaseline,
-    eslint_baseline: eslintBaseline,
+    type_check_keys: typeCheckBaseline.keys,
+    lint_keys: lintBaseline.keys,
+    type_check_baseline: typeCheckBaseline,
+    lint_baseline: lintBaseline,
+    // Legacy result aliases; their contents are the generic line snapshot.
+    tsc_keys: typeCheckBaseline.keys,
+    eslint_keys: lintBaseline.keys,
+    tsc_baseline: typeCheckBaseline,
+    eslint_baseline: lintBaseline,
   };
 }
 
@@ -433,17 +363,16 @@ export function refreshBaselineAfterCommit({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const results = [];
-  for (const tool of ["tsc", "eslint"]) {
-    const baselinePath = join(runtimeDir, `${tool}-baseline.json`);
+  for (const kind of BASELINE_KINDS) {
+    const baselinePath = join(runtimeDir, baselineFileName(kind));
     if (!existsSync(baselinePath)) {
-      results.push({ tool, skipped: true, reason: "missing_baseline" });
+      results.push({ kind, tool: kind, skipped: true, reason: "missing_baseline" });
       continue;
     }
     try {
-      const kind = tool === "tsc" ? "type_check" : "lint";
       const command = resolveBuildCommand(kind, config, rootDir);
       if (!String(command).trim()) {
-        results.push({ tool, skipped: true, reason: "baseline_command_not_configured" });
+        results.push({ kind, tool: kind, skipped: true, reason: "baseline_command_not_configured" });
         continue;
       }
       // P12.I1: parse config command to argv, route through execFileSync DI
@@ -477,7 +406,8 @@ export function refreshBaselineAfterCommit({
       }
       if (blocked) {
         results.push({
-          tool,
+          kind,
+          tool: kind,
           skipped: true,
           reason: "refresh_failed",
           exit_code: exitCode,
@@ -486,9 +416,7 @@ export function refreshBaselineAfterCommit({
         });
         continue;
       }
-      const currentKeys = tool === "tsc"
-        ? parseTscBaselineKeys(output)
-        : parseEslintBaselineErrorKeys(output, rootDir);
+      const currentKeys = output.trim() ? snapshotCommandOutput(output, config) : [];
       const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
       const oldKeys = baseline.keys || [];
       baseline.keys = pruneResolvedBaselineKeys(oldKeys, currentKeys, rootDir);
@@ -500,7 +428,8 @@ export function refreshBaselineAfterCommit({
       baseline.meta.artifact_hash = baselineArtifactHash(baseline);
       writeFileSync(baselinePath, JSON.stringify(baseline, null, 2));
       results.push({
-        tool,
+        kind,
+        tool: kind,
         skipped: false,
         before: oldKeys.length,
         after: baseline.keys.length,
@@ -508,7 +437,7 @@ export function refreshBaselineAfterCommit({
         baseline_path: baselinePath,
       });
     } catch (error) {
-      results.push({ tool, skipped: true, reason: "refresh_failed", error: error.message });
+      results.push({ kind, tool: kind, skipped: true, reason: "refresh_failed", error: error.message });
     }
   }
   return results;

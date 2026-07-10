@@ -407,11 +407,12 @@ describe("worktree execution session helpers", () => {
     assert.ok(mkdirs.includes("/repo/.yolo-worktrees"));
     const tscBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/tsc-baseline.json"));
     const eslintBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/eslint-baseline.json"));
-    assert.deepEqual(tscBaseline.keys, ["src/a.ts:1:TS1000"]);
+    assert.deepEqual(tscBaseline.keys, ["line:src/a.ts(1,1): error TS1000: bad"]);
     assert.equal(tscBaseline.meta.command, "tsc");
     assert.equal(tscBaseline.meta.exit_code, 0);
     assert.equal(tscBaseline.meta.artifact_hash, baselineArtifactHash(tscBaseline));
-    assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
+    assert.equal(eslintBaseline.keys.length, 1);
+    assert.match(eslintBaseline.keys[0], /^line:/);
     assert.equal(eslintBaseline.meta.command, "eslint");
     assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
   });

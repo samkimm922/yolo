@@ -1,7 +1,11 @@
+import { safeRegExp } from "../../lib/security/regex-guard.js";
+
 export type ErrorOutputRule = {
   id?: unknown;
   type?: unknown;
   contains?: unknown;
+  pattern?: unknown;
+  flags?: unknown;
   detail?: unknown;
 };
 
@@ -29,6 +33,18 @@ function asArray(value: unknown): unknown[] {
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function ruleMatchesText(rule: ErrorOutputRule, value: string): boolean {
+  const needles = asArray(rule.contains)
+    .map(text)
+    .filter(Boolean);
+  if (needles.some((needle) => value.includes(needle))) return true;
+
+  const pattern = text(rule.pattern);
+  if (!pattern) return false;
+  const regex = safeRegExp(pattern, text(rule.flags));
+  return regex ? regex.test(value) : false;
 }
 
 function declarationNodes(source: unknown): Record<string, unknown>[] {
@@ -69,6 +85,10 @@ function matchingLine(output: string, needles: string[]): string {
   return output.split(/\r?\n/).find((line) => needles.some((needle) => line.includes(needle)))?.trim() || "";
 }
 
+function matchingLineForRule(output: string, rule: ErrorOutputRule): string {
+  return output.split(/\r?\n/).find((line) => ruleMatchesText(rule, line))?.trim() || "";
+}
+
 function exitCode(value: unknown): number | null {
   const number = Number(value);
   return Number.isInteger(number) ? number : null;
@@ -93,12 +113,32 @@ export function matchDeclaredErrorOutput(output: string, ...sources: unknown[]):
 }> {
   return declaredErrorOutputRules(...sources).flatMap((rule, index) => {
     const needles = ruleNeedles(rule);
-    if (!needles.length || !needles.some((needle) => output.includes(needle))) return [];
+    if (!needles.length && !text(rule.pattern)) return [];
+    if (!ruleMatchesText(rule, output)) return [];
     const id = text(rule.id) || `declared-output-${index + 1}`;
     const type = text(rule.type) || "command";
-    const detail = text(rule.detail) || matchingLine(output, needles) || output;
+    const detail = text(rule.detail) || matchingLineForRule(output, rule) || matchingLine(output, needles) || output;
     return [{ id, type, detail: detail.slice(0, 300), rules: [id] }];
   });
+}
+
+export function commandOutputSnapshotKeys(output = "", ...sources: unknown[]): string[] {
+  const rules = declaredErrorOutputRules(...sources);
+  const lines = String(output || "")
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const keys = lines.map((line) => {
+    const matchingRules = rules.flatMap((rule, index) => {
+      if (!ruleMatchesText(rule, line)) return [];
+      return [text(rule.id) || `declared-output-${index + 1}`];
+    });
+    return matchingRules.length > 0
+      ? `rule:${matchingRules.join(",")}:${line}`
+      : `line:${line}`;
+  });
+  return [...new Set(keys)];
 }
 
 function hasFailureSignal(context: CommandFailureContext, code: number | null): boolean {

@@ -63,22 +63,18 @@ export function explicitCodePostconditionsPass({
   return { passed: true };
 }
 
-export function parseTscErrorFiles(tscOutput = "") {
-  const errorLines = String(tscOutput)
+export function commandOutputLines(output = "") {
+  return String(output)
     .split("\n")
-    .filter((line) => /error TS\d+:/.test(line));
-  const files = new Set(
-    errorLines
-      .map((line) => line.split("(")[0].trim())
-      .filter((file) => file.endsWith(".ts") || file.endsWith(".tsx")),
-  );
-  return { errorLines, files };
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
-export function targetFilesHaveTscErrors(targetFiles = [], errorFiles = new Set()) {
+export function targetFilesHaveCommandOutput(targetFiles = [], output: string | string[] = "") {
+  const text = Array.isArray(output) ? output.join("\n") : String(output || "");
   return targetFiles.some((file) => {
     const rel = String(file || "").replace(/^\.\//, "");
-    return errorFiles.has(rel) || [...errorFiles].some((errorFile) => String(errorFile).endsWith(rel) || rel.endsWith(String(errorFile)));
+    return Boolean(rel) && text.includes(rel);
   });
 }
 
@@ -134,13 +130,13 @@ export function inspectPostPrecheckSkip({
         env: buildCommandEnv(rootDir),
       });
     } catch (error) {
-      const tscOutput = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
-      const { errorLines, files } = parseTscErrorFiles(tscOutput);
-      if (errorLines.length > 0 && targetFilesHaveTscErrors(targetFiles, files)) {
+      const commandOutput = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
+      const outputLines = commandOutputLines(commandOutput);
+      if (outputLines.length > 0 && targetFilesHaveCommandOutput(targetFiles, outputLines)) {
         return {
           shouldSkip: false,
-          reason: "target_tsc_errors",
-          logMessage: `[precheck] TSC 编译错误仍涉及目标文件（${errorLines.length} 条错误中有目标文件），不跳过`,
+          reason: "target_type_check_errors",
+          logMessage: `[precheck] type_check 输出仍涉及目标文件（${outputLines.length} 条输出中有目标文件），不跳过`,
         };
       }
     }

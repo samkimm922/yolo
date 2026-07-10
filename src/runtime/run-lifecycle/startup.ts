@@ -15,11 +15,10 @@ import {
 } from "node:fs";
 import { basename, delimiter, join, resolve, sep } from "node:path";
 import {
-  BASELINE_TOOLS,
+  BASELINE_KINDS,
   baselineFileName,
   buildBaselineArtifact,
-  parseEslintBaselineErrorKeys,
-  parseTscBaselineKeys,
+  snapshotCommandOutput,
 } from "../execution/baselines.js";
 import { trimJsonlWithArchive } from "../memory/retention.js";
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
@@ -375,17 +374,16 @@ export function initializeMissingBaselines({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const initialized = [];
-  for (const tool of BASELINE_TOOLS) {
-    const baselinePath = join(runtimeDir, baselineFileName(tool));
+  for (const kind of BASELINE_KINDS) {
+    const baselinePath = join(runtimeDir, baselineFileName(kind));
     if (existsSync(baselinePath)) continue;
-    log("BASELINE", "init", `初始化 ${tool} baseline...`);
+    log("BASELINE", "init", `初始化 ${kind} baseline...`);
     try {
-      const kind = tool === "tsc" ? "type_check" : "lint";
       const rawCommand = resolveBuildCommand(kind, config, rootDir);
       if (!rawCommand) {
         const createdAt = nowIso();
         const baseline = buildBaselineArtifact({
-          tool,
+          tool: kind,
           keys: [],
           command: rawCommand,
           exitCode: 0,
@@ -397,8 +395,8 @@ export function initializeMissingBaselines({
           updatedAt: createdAt,
         });
         writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8");
-        log("BASELINE", "skip", `${tool} baseline: 未配置命令，跳过`);
-        initialized.push({ tool, keys: [], status: "skipped", skipped: true, blocked: false, baseline });
+        log("BASELINE", "skip", `${kind} baseline: 未配置命令，跳过`);
+        initialized.push({ kind, tool: kind, keys: [], status: "skipped", skipped: true, blocked: false, baseline });
         continue;
       }
       // P12.I1: parse config command to argv, route through execFileSync DI
@@ -439,12 +437,10 @@ export function initializeMissingBaselines({
           }
         }
       }
-      const keys = tool === "tsc"
-        ? parseTscBaselineKeys(output)
-        : parseEslintBaselineErrorKeys(output, rootDir);
+      const keys = output.trim() ? snapshotCommandOutput(output, config) : [];
       const createdAt = nowIso();
       const baseline = buildBaselineArtifact({
-        tool,
+        tool: kind,
         keys,
         command: rawCommand,
         exitCode,
@@ -456,14 +452,14 @@ export function initializeMissingBaselines({
         updatedAt: createdAt,
       });
       writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8");
-      log("BASELINE", status === "blocked" ? "BLOCK" : "init", `${tool} baseline: ${keys.length} 个条目`);
-      initialized.push({ tool, keys, status, blocked: status === "blocked", baseline });
+      log("BASELINE", status === "blocked" ? "BLOCK" : "init", `${kind} baseline: ${keys.length} 个条目`);
+      initialized.push({ kind, tool: kind, keys, status, blocked: status === "blocked", baseline });
     } catch (error) {
       const createdAt = nowIso();
       const baseline = buildBaselineArtifact({
-        tool,
+        tool: kind,
         keys: [],
-        command: tool === "tsc" ? config.build?.type_check || "" : config.build?.lint || "",
+        command: kind === "type_check" ? config.build?.type_check || "" : config.build?.lint || "",
         exitCode: 1,
         stderr: error?.message || String(error),
         status: "blocked",
@@ -472,8 +468,8 @@ export function initializeMissingBaselines({
         updatedAt: createdAt,
       });
       try { writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8"); } catch (_) {}
-      log("BASELINE", "BLOCK", `${tool} baseline 初始化失败: ${error.message}`);
-      initialized.push({ tool, keys: [], status: "blocked", blocked: true, error: error.message, baseline });
+      log("BASELINE", "BLOCK", `${kind} baseline 初始化失败: ${error.message}`);
+      initialized.push({ kind, tool: kind, keys: [], status: "blocked", blocked: true, error: error.message, baseline });
     }
   }
   return initialized;

@@ -444,7 +444,7 @@ describe("run lifecycle startup helpers", () => {
     }
   });
 
-  test("initializeMissingBaselines creates tsc and eslint error baselines", () => {
+  test("initializeMissingBaselines creates generic command output baselines", () => {
     const writes = new Map();
     const logs = [];
     const result = initializeMissingBaselines({
@@ -464,16 +464,20 @@ describe("run lifecycle startup helpers", () => {
       nowIso: () => "2026-05-24T00:00:00.000Z",
     });
 
-    assert.deepEqual(result.map((item) => [item.tool, item.keys]), [
-      ["tsc", ["src/a.ts:1:TS1000"]],
-      ["eslint", ["src/a.ts:2:semi"]],
+    assert.deepEqual(result.map((item) => [item.kind, item.keys]), [
+      ["type_check", ["line:src/a.ts(1,1): error TS1000: bad"]],
+      ["lint", [`line:${JSON.stringify([{ filePath: "/repo/src/a.ts", messages: [
+        { line: 2, ruleId: "semi", severity: 2 },
+        { line: 3, ruleId: "no-alert", severity: 1 },
+      ] }])}`]],
     ]);
     const eslintBaseline = JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json"));
-    assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
+    assert.equal(eslintBaseline.keys.length, 1);
+    assert.match(eslintBaseline.keys[0], /^line:/);
     assert.equal(eslintBaseline.meta.command, "eslint .");
     assert.equal(eslintBaseline.meta.exit_code, 0);
     assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
-    assert.match(logs.at(-1)[2], /eslint baseline: 1 个条目/);
+    assert.match(logs.at(-1)[2], /lint baseline: 1 个条目/);
   });
 
   test("initializeMissingBaselines records blocked required baseline command failures", () => {
@@ -497,7 +501,7 @@ describe("run lifecycle startup helpers", () => {
       nowIso: () => "2026-05-24T00:00:00.000Z",
     });
 
-    assert.equal(result[0].tool, "tsc");
+    assert.equal(result[0].kind, "type_check");
     assert.equal(result[0].blocked, true);
     const baseline = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
     assert.equal(baseline.meta.status, "blocked");
@@ -533,9 +537,9 @@ describe("run lifecycle startup helpers", () => {
     });
 
     assert.equal(calls.length, 1);
-    assert.deepEqual(result.map((item) => [item.tool, item.status, item.blocked, item.skipped || false]), [
-      ["tsc", "pass", false, false],
-      ["eslint", "skipped", false, true],
+    assert.deepEqual(result.map((item) => [item.kind, item.status, item.blocked, item.skipped || false]), [
+      ["type_check", "pass", false, false],
+      ["lint", "skipped", false, true],
     ]);
     const tscBaseline = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
     const eslintBaseline = JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json"));
