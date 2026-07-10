@@ -444,6 +444,7 @@ export function writeLifecycleStageReport(stageId: string, report: StageReportEn
     learning = appendLearningRecord({
       type: "failure",
       source: options.source || "lifecycle-progress",
+      source_outcome: "failure",
       gate: stageId,
       lesson: inputReport.summary || stageReport.blockers[0]?.message || `${stageId} blocked`,
       prevention: stageReport.next_actions[0] || "Fix the blocker before advancing the lifecycle.",

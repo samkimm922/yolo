@@ -2,6 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { appendLearningRecord, retrieveRelevantLearningRecords } from "../runtime/learning/center.js";
+import { registerGeneratedArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
+import { appendStateEvent, provisionLedgerHmacKey } from "../runtime/evidence/ledger.js";
 import { generatePrompt } from "../cli/prompt.js";
 import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
@@ -61,7 +63,8 @@ export function buildExperiencePackEffectivenessAuditPlan(options: ExperiencePac
     spawns_provider: false,
     executes_billable_provider: false,
     required_evidence: [
-      "a relevant failure learning record is written to the fixture ledger",
+      "a relevant verified-success learning record is linked to signed acceptance and delivery evidence",
+      "a relevant failure learning record is retained but not injected",
       "unrelated learning records are present but not injected",
       "the next prompt includes only relevant experience records",
       "experience injection stays bounded and never blocks prompt generation",
@@ -104,25 +107,48 @@ function writeAuditFixture(projectRoot: string): string {
 
 function seedLearning(projectRoot: string, stateRoot: string) {
   const now = new Date("2026-05-25T00:00:00.000Z");
+  const stateDir = join(stateRoot, "state");
+  const acceptancePath = join(stateRoot, "lifecycle", "acceptance-report.json");
+  const deliveryPath = join(stateRoot, "lifecycle", "delivery-report.json");
+  provisionLedgerHmacKey(stateRoot);
+  write(acceptancePath, JSON.stringify({ status: "completed", report: { status: "pass" } }));
+  registerGeneratedArtifactIntegrity([acceptancePath], { rootDir: projectRoot, stateRoot, source: "experience-pack-audit" });
+  appendStateEvent(stateDir, "lifecycle.acceptance.report", {
+    stage: "acceptance",
+    status: "pass",
+    artifact: acceptancePath,
+  }, { stateRoot, source: "experience-pack-audit", now: now.toISOString() });
+  write(deliveryPath, JSON.stringify({
+    status: "completed",
+    report: { status: "success", acceptance_report_path: acceptancePath },
+  }));
+  registerGeneratedArtifactIntegrity([deliveryPath], { rootDir: projectRoot, stateRoot, source: "experience-pack-audit" });
+  appendStateEvent(stateDir, "lifecycle.delivery.report", {
+    stage: "delivery",
+    status: "success",
+    artifact: deliveryPath,
+  }, { stateRoot, source: "experience-pack-audit", now: now.toISOString() });
   const relevant = appendLearningRecord({
-    type: "failure",
+    type: "retrospective",
     source: "experience_pack_audit",
+    source_outcome: "success",
     gate: "tsc",
-    lesson: "TS2352 category service failure happened when src/services/category.ts used as unknown as.",
+    lesson: "Verified TS2352 category service fix narrowed unknown values before casting.",
     prevention: "Narrow unknown values before casting; do not use double assertions.",
     files: ["src/services/category.ts"],
     confidence: 9,
     task_type: "bugfix",
+    evidence_refs: [deliveryPath],
   }, { projectRoot, stateRoot, now });
   const unrelated = appendLearningRecord({
     type: "failure",
     source: "experience_pack_audit",
-    gate: "eslint",
-    lesson: "Unrelated eslint import cleanup in src/other.ts should not appear.",
-    prevention: "Remove unused imports only in the matching file.",
-    files: ["src/other.ts"],
+    gate: "tsc",
+    lesson: "Unverified TS2352 failure in src/services/category.ts must not appear.",
+    prevention: "This failure remains available only for failure analysis.",
+    files: ["src/services/category.ts"],
     confidence: 9,
-    task_type: "cleanup",
+    task_type: "bugfix",
   }, { projectRoot, stateRoot, now: new Date("2026-05-25T00:00:01.000Z") });
   const noisy = appendLearningRecord({
     type: "failure",
@@ -180,8 +206,8 @@ export function runExperiencePackEffectivenessAudit(options: ExperiencePackAudit
   const itemCount = experienceItemCount(prompt);
   const checks = [
     check("EXPERIENCE_PACK_AUDIT_PROMPT_NON_BLOCKING", !promptError && prompt.length > 0, "prompt generation must not be blocked by learning retrieval", { error: promptError instanceof Error ? promptError.message : promptError ? String(promptError) : null }),
-    check("EXPERIENCE_PACK_AUDIT_RELEVANT_INCLUDED", /TS2352 category service failure/.test(prompt), "prompt must inject the relevant prior failure"),
-    check("EXPERIENCE_PACK_AUDIT_UNRELATED_EXCLUDED", !/Unrelated eslint import cleanup/.test(prompt) && !/Unrelated file length split/.test(prompt), "prompt must not inject unrelated learning records"),
+    check("EXPERIENCE_PACK_AUDIT_RELEVANT_INCLUDED", /Verified TS2352 category service fix/.test(prompt), "prompt must inject the relevant verified-success pattern"),
+    check("EXPERIENCE_PACK_AUDIT_UNRELATED_EXCLUDED", !/Unverified TS2352 failure/.test(prompt) && !/Unrelated file length split/.test(prompt), "prompt must not inject failure-derived or unrelated learning records"),
     check("EXPERIENCE_PACK_AUDIT_BOUNDED", retrieval.selected_count <= maxSelected && itemCount <= maxSelected, "experience pack must stay bounded", { selected_count: retrieval.selected_count, prompt_item_count: itemCount, max_selected: maxSelected }),
     check("EXPERIENCE_PACK_AUDIT_NO_PROVIDER", true, "audit must not execute providers or billable actions"),
   ];
@@ -201,8 +227,8 @@ export function runExperiencePackEffectivenessAudit(options: ExperiencePackAudit
       generated: !promptError,
       length: prompt.length,
       experience_item_count: itemCount,
-      contains_relevant: /TS2352 category service failure/.test(prompt),
-      contains_unrelated: /Unrelated eslint import cleanup|Unrelated file length split/.test(prompt),
+      contains_relevant: /Verified TS2352 category service fix/.test(prompt),
+      contains_unrelated: /Unverified TS2352 failure|Unrelated file length split/.test(prompt),
     },
     guarantees: {
       yolo_package_root_mutated: false,

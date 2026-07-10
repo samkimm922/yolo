@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { generatePrompt } from "../src/cli/prompt.js";
+import { registerGeneratedArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
+import { appendStateEvent, provisionLedgerHmacKey } from "../src/runtime/evidence/ledger.js";
 
 describe("prompt contract", () => {
   test("uses scope max_lines_per_file in prompt budget text", () => {
@@ -244,17 +246,35 @@ describe("prompt contract", () => {
     mkdirSync(join(root, "src"), { recursive: true });
     mkdirSync(join(stateRoot, "state"), { recursive: true });
     writeFileSync(join(root, "src/a.ts"), "export const value = 1;\n", "utf8");
+    const acceptancePath = join(stateRoot, "lifecycle", "acceptance-report.json");
+    const deliveryPath = join(stateRoot, "lifecycle", "delivery-report.json");
+    mkdirSync(join(stateRoot, "lifecycle"), { recursive: true });
+    provisionLedgerHmacKey(stateRoot);
+    writeFileSync(acceptancePath, JSON.stringify({ status: "completed", report: { status: "pass" } }), "utf8");
+    registerGeneratedArtifactIntegrity([acceptancePath], { rootDir: root, stateRoot, source: "test" });
+    appendStateEvent(join(stateRoot, "state"), "lifecycle.acceptance.report", {
+      stage: "acceptance", status: "pass", artifact: acceptancePath,
+    }, { stateRoot, source: "test" });
+    writeFileSync(deliveryPath, JSON.stringify({
+      status: "completed",
+      report: { status: "success", acceptance_report_path: acceptancePath },
+    }), "utf8");
+    registerGeneratedArtifactIntegrity([deliveryPath], { rootDir: root, stateRoot, source: "test" });
+    appendStateEvent(join(stateRoot, "state"), "lifecycle.delivery.report", {
+      stage: "delivery", status: "success", artifact: deliveryPath,
+    }, { stateRoot, source: "test" });
     writeFileSync(join(stateRoot, "state/learning.jsonl"), `${JSON.stringify({
       schema_version: "1.0",
       id: "learn_tsc_service",
       ts: "2026-05-25T00:00:00.000Z",
-      type: "failure",
+      type: "retrospective",
       source: "test",
+      source_outcome: "success",
       status: "advisory",
       confidence: 8,
       task_id: "FIX-OLD",
       gate: "tsc",
-      lesson: "TS2352 repeat failure in src/a.ts",
+      lesson: "Verified TS2352 narrowing pattern in src/a.ts",
       prevention: "Narrow the value before casting.",
       fingerprint: {
         type: "failure",
@@ -267,7 +287,7 @@ describe("prompt contract", () => {
       },
       fingerprint_key: "k1",
       occurrence_count: 1,
-      evidence_refs: ["src/a.ts"],
+      evidence_refs: [deliveryPath],
       tags: [],
       legacy_source: "",
       legacy_id: "",
@@ -311,7 +331,7 @@ describe("prompt contract", () => {
     });
 
     assert.match(output, /Relevant Experience Pack/);
-    assert.match(output, /TS2352 repeat failure/);
+    assert.match(output, /Verified TS2352 narrowing pattern/);
     assert.doesNotMatch(output, /前序知识/);
     rmSync(root, { recursive: true, force: true });
   });
