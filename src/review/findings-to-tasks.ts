@@ -41,8 +41,14 @@ export type ReviewPrdTask = {
   post_conditions: ReviewTaskCondition[];
   acceptance_criteria: string[];
   task_kind: "review_fix";
-  fix_type: "AUTO_FIX" | "CLAUDE_FIX";
+  fix_type: "CLAUDE_FIX";
   fix_rule: string;
+  recipe_hint?: {
+    source: "review_scanner";
+    rule_id: string;
+    suggested_fixes: string[];
+    locations: Array<{ file: string | null; line: number | null; match: string | null }>;
+  };
   fix_findings: NormalizedReviewFinding[];
   source_finding_ids: string[];
   source_findings: NormalizedReviewFinding[];
@@ -263,6 +269,76 @@ function preConditions(taskId: string, finding: ReviewFindingInput, files: strin
   }];
 }
 
+type ReviewFindingGroup = {
+  findings: NormalizedReviewFinding[];
+  files: string[];
+};
+
+function mechanicalGroupKey(finding: NormalizedReviewFinding, files: string[], index: number): string {
+  if (finding.fix_type !== "AUTO_FIX") return `single:${index}`;
+  const rule = cleanString(finding.scanner_id || finding.rule_id || finding.code);
+  return `mechanical:${rule}:${[...files].sort().join("|")}`;
+}
+
+function groupReviewFindings(
+  findings: ReviewFindingInput[],
+  skipped: ReviewConversionOmitted,
+): ReviewFindingGroup[] {
+  const groups = new Map<string, ReviewFindingGroup>();
+  for (const [index, rawFinding] of findings.entries()) {
+    const finding = normalizeReviewFinding(rawFinding, { source: "review-to-prd", index });
+    if (finding.fix_type === "INFO") continue;
+    const files = findingFiles(finding);
+    if (files.length === 0) {
+      skipped.push({
+        finding_id: findingId(finding, index),
+        code: "REVIEW_FINDING_MISSING_FILE",
+        detail: "review finding cannot be converted without at least one target file",
+      });
+      continue;
+    }
+    const key = mechanicalGroupKey(finding, files, index);
+    const existing = groups.get(key);
+    if (existing) existing.findings.push(finding);
+    else groups.set(key, { findings: [finding], files });
+  }
+  return [...groups.values()];
+}
+
+function groupedDescription(findings: NormalizedReviewFinding[], files: string[]): string {
+  if (findings.length === 1) {
+    const finding = findings[0];
+    return [
+      findingDescription(finding),
+      finding.recommendation ? `Recommendation: ${finding.recommendation}` : null,
+      finding.risk ? `Risk: ${finding.risk}` : null,
+    ].filter(Boolean).join("\n");
+  }
+  const rule = cleanString(findings[0]?.scanner_id || findings[0]?.rule_id || findings[0]?.code);
+  const locations = findings.map((finding) => {
+    const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
+    return `- ${location || files.join(", ")}: ${findingDescription(finding)}`;
+  });
+  return [`Fix ${findings.length} ${rule} review findings in ${files.join(", ")}.`, ...locations].join("\n");
+}
+
+function recipeHint(findings: NormalizedReviewFinding[], files: string[]): ReviewPrdTask["recipe_hint"] {
+  if (!findings.some((finding) => finding.fix_type === "AUTO_FIX")) return undefined;
+  const first = findings[0];
+  return {
+    source: "review_scanner",
+    rule_id: cleanString(first.scanner_id || first.rule_id || first.code),
+    suggested_fixes: [...new Set(findings
+      .map((finding) => cleanString(finding.suggested_fix || finding.recommendation))
+      .filter(Boolean))],
+    locations: findings.map((finding) => ({
+      file: finding.file || files[0] || null,
+      line: finding.line,
+      match: finding.match,
+    })),
+  };
+}
+
 export function reviewFindingsToPrdTasks(
   findings: ReviewFindingInput[] = [],
   options: ReviewFindingsToPrdTasksOptions = Object(),
@@ -277,71 +353,72 @@ export function reviewFindingsToPrdTasks(
   const reportPath = reviewReportPath(options);
   const tasks: ReviewPrdTask[] = [];
   const skipped: ReviewConversionOmitted = [];
-  let taskIndex = 0;
+  const groups = groupReviewFindings(findings, skipped);
 
-  for (const [index, rawFinding] of findings.entries()) {
-    const finding = normalizeReviewFinding(rawFinding, { source: "review-to-prd", index });
-    if (finding?.fix_type === "INFO") continue;
-
-    const files = findingFiles(finding);
-    if (!files.length) {
-      skipped.push({
-        finding_id: findingId(finding, index),
-        code: "REVIEW_FINDING_MISSING_FILE",
-        detail: "review finding cannot be converted without at least one target file",
-      });
-      continue;
-    }
-
+  for (const [taskIndex, group] of groups.entries()) {
+    const { findings: groupedFindings, files } = group;
+    const finding = groupedFindings[0];
     const taskId = taskIdForFinding(finding, round, taskIndex, existingIds);
-    taskIndex++;
-    const description = findingDescription(finding);
-    const sourceFindingId = findingId(finding, index);
-    const evidence = reviewFindingTraceEvidence({ finding, sourceFindingId, reportPath, round });
+    const description = groupedDescription(groupedFindings, files);
+    const sourceFindingIds = groupedFindings.map((item, index) => findingId(item, index));
+    const evidence = groupedFindings.map((item, index) => reviewFindingTraceEvidence({
+      finding: item,
+      sourceFindingId: sourceFindingIds[index],
+      reportPath,
+      round,
+    }));
+    const pre = groupedFindings.flatMap((item, index) => preConditions(`${taskId}-${index + 1}`, item, findingFiles(item)));
+    const absent = groupedFindings.flatMap((item, index) => absenceCondition(
+      `${taskId}-${index + 1}`,
+      item,
+      findingFiles(item),
+      sourceFindingIds[index],
+    ));
+    const hint = recipeHint(groupedFindings, files);
 
     tasks.push({
       id: taskId,
-      title: `[review] ${truncateText(description, 86)}`,
+      title: `[review] ${truncateText(findingDescription(finding), 86)}${groupedFindings.length > 1 ? ` (${groupedFindings.length} findings)` : ""}`,
       type: taskTypeForFinding(finding),
-      priority: String(severityToPriority(finding?.severity)),
+      priority: String(severityToPriority(groupedFindings.reduce((highest, item) => {
+        const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"];
+        return order.indexOf(item.severity) < order.indexOf(highest.severity) ? item : highest;
+      }, finding).severity)),
       status: "pending",
-      description: [
-        description,
-        finding?.recommendation ? `Recommendation: ${finding.recommendation}` : null,
-        finding?.risk ? `Risk: ${finding.risk}` : null,
-      ].filter(Boolean).join("\n"),
+      description,
       depends_on: [],
       scope: {
         targets: files.map((file) => ({ file })),
         max_files: Math.max(files.length + 1, 2),
         max_lines_per_file: 220,
       },
-      pre_conditions: preConditions(taskId, finding, files),
+      pre_conditions: pre,
       post_conditions: [
         ...targetConditions(taskId, files),
-        ...absenceCondition(taskId, finding, files, sourceFindingId),
+        ...absent,
         typecheckCondition(taskId, { config: buildConfig, projectRoot }),
       ],
       acceptance_criteria: [
-        description,
-        "Related review finding is fixed and does not reappear in the next review scan.",
+        ...groupedFindings.map(findingDescription),
+        "Related review findings are fixed and do not reappear in the next review scan.",
       ],
       task_kind: "review_fix",
-      fix_type: finding?.fix_type === "AUTO_FIX" ? "AUTO_FIX" : "CLAUDE_FIX",
-      fix_rule: finding?.scanner_id || finding?.rule_id || finding?.code || sourceFindingId,
-      fix_findings: [finding],
-      source_finding_ids: [sourceFindingId],
-      source_findings: [finding],
-      evidence_files: [reviewFindingEvidenceRef(reportPath, sourceFindingId)],
+      fix_type: "CLAUDE_FIX",
+      fix_rule: finding?.scanner_id || finding?.rule_id || finding?.code || sourceFindingIds[0],
+      ...(hint ? { recipe_hint: hint } : {}),
+      fix_findings: groupedFindings,
+      source_finding_ids: sourceFindingIds,
+      source_findings: groupedFindings,
+      evidence_files: sourceFindingIds.map((sourceFindingId) => reviewFindingEvidenceRef(reportPath, sourceFindingId)),
       trace: {
         source: "review_finding",
         review_round: round,
         review_report_path: reportPath,
-        source_finding_ids: [sourceFindingId],
-        evidence: [evidence],
+        source_finding_ids: sourceFindingIds,
+        evidence,
       },
-      dedupe_key: `review:${sourceFindingId}:${files.join(",")}`,
-      must_fix_before_ship: finding?.must_fix_before_ship === true || ["CRITICAL", "HIGH"].includes(String(finding?.severity || "").toUpperCase()),
+      dedupe_key: `review:${sourceFindingIds.join("+")}:${files.join(",")}`,
+      must_fix_before_ship: groupedFindings.some((item) => item.must_fix_before_ship === true || ["CRITICAL", "HIGH"].includes(String(item.severity || "").toUpperCase())),
     });
   }
 

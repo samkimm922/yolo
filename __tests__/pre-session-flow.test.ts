@@ -124,18 +124,22 @@ describe("pre-session flow", () => {
     assert.deepEqual(record.done[0], ["CHECK-PRE", "completed", 100, "deterministic_check"]);
   });
 
-  test("auto-fix tasks return deterministic auto-fix results when available", async () => {
+  test("legacy auto-fix routes cannot bypass atomic doctor or provider execution", async () => {
     const record = logs();
+    let doctorRuns = 0;
     const result = await handlePreSessionFlow(baseOptions(record, {
       taskRoute: { route: "auto_fix" },
-      deterministicAutoFix: async (options) => {
-        assert.equal(options.startedAtMs, 100);
-        assert.equal(options.projectRoot, "/repo");
-        return { status: "completed", reason: "deterministic_auto_fix" };
+      deterministicAutoFix: async () => {
+        throw new Error("deterministic auto-fix must not run");
+      },
+      atomicDoctorGate: () => {
+        doctorRuns++;
+        return { ok: true };
       },
     }));
 
-    assert.deepEqual(result, { action: "return", result: { status: "completed", reason: "deterministic_auto_fix" } });
+    assert.deepEqual(result, { action: "continue" });
+    assert.equal(doctorRuns, 1);
   });
 
   test("atomic doctor blockers apply split suggestions and write task state", async () => {

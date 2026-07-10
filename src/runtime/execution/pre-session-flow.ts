@@ -1,6 +1,5 @@
 import { buildAtomicDoctorBlockOutcome } from "./atomic-doctor-outcome.js";
 import { completeDryRunArtifactTask } from "./dry-run-artifact.js";
-import { tryDeterministicAutoFixTask } from "./deterministic-auto-fix.js";
 import { buildEngineSelfModificationBlockOutcome } from "./engine-scope-outcome.js";
 import {
   buildPrecheckValidSkipOutcome,
@@ -29,19 +28,16 @@ export async function handlePreSessionFlow({
   shouldRunPrecheck = () => false,
   skippedTaskPostconditionsPass,
   taskPostconditionsPass,
-  commitTask,
   recordTaskTransition,
   writeTaskResult,
   updatePrdTaskStatus,
   applySplitSuggestionsToPrd,
-  isBusinessFile,
   logProgress = (..._args) => {},
   logTaskBash = (..._args) => {},
   logTaskDone = (..._args) => {},
   nowMs = () => Date.now(),
   engineBlockBuilder = buildEngineSelfModificationBlockOutcome,
   dryRunTaskCompleter = completeDryRunArtifactTask,
-  deterministicAutoFix = tryDeterministicAutoFixTask,
   atomicDoctorGate = runAtomicTaskDoctorGate,
   atomicDoctorBlockBuilder = buildAtomicDoctorBlockOutcome,
   postPrecheckInspector = inspectPostPrecheckSkip,
@@ -125,24 +121,6 @@ export async function handlePreSessionFlow({
     }));
     logTaskDone(task.id, "completed", nowMs(), "deterministic_check");
     return { action: "return", result: { status: "completed", deterministic_check: true } };
-  }
-
-  if (taskRoute.route === "auto_fix") {
-    const autoFixResult = await deterministicAutoFix({
-      task,
-      prdPath,
-      startedAtMs: nowMs(),
-      projectRoot,
-      loadPRD,
-      taskPostconditionsPass,
-      commitTask,
-      recordTaskTransition: (_path, transition) => recordTaskTransition(transition),
-      logProgress,
-      logTaskBash,
-      logTaskDone,
-      isBusinessFile,
-    });
-    if (autoFixResult) return { action: "return", result: autoFixResult };
   }
 
   const atomicGate = atomicDoctorGate({

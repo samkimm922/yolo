@@ -56,7 +56,6 @@ const reviewOrchestratorSource = readFileSync(resolve(YOLO_DIR, "src/runtime/rev
 const providerAdapterSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/provider-adapter.ts"), "utf8");
 const executionChangeSetSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/change-set.ts"), "utf8");
 const executionCommitFlowSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/commit-flow.ts"), "utf8");
-const deterministicAutoFixSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/deterministic-auto-fix.ts"), "utf8");
 const dryRunArtifactSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/dry-run-artifact.ts"), "utf8");
 const executionBaselinesSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/baselines.ts"), "utf8");
 const gateFailureFlowSource = readFileSync(resolve(YOLO_DIR, "src/runtime/execution/gate-failure-flow.ts"), "utf8");
@@ -469,7 +468,7 @@ describe("runner review fix execution flow", () => {
   });
 
   test("review loop wiring: scanner loops until no findings remain", () => {
-    assert.match(reviewOrchestratorSource, /AUTO_FIX 已处理，继续下一轮 review 扫描/);
+    assert.match(reviewOrchestratorSource, /执行 provider executor 任务/);
     assert.match(reviewTaskApplicationSource, /本轮 review 任务已处理，继续下一轮扫描/);
     assert.match(reviewOrchestratorSource, /review fix 未全部完成/);
     assert.match(reviewOrchestratorSource, /无新发现，review 完成/);
@@ -503,7 +502,7 @@ describe("runner review fix execution flow", () => {
 
   test("review loop wiring: hard task limit before PRD mutation", () => {
     assert.match(runnerSource, /MAX_REVIEW_TASKS_PER_ROUND/);
-    assert.match(reviewOrchestratorSource, /shouldBlockReviewTaskLimit\(allClaudeTasks\.length,\s*maxReviewTasksPerRound\)/);
+    assert.match(reviewOrchestratorSource, /shouldBlockReviewTaskLimit\(executorTasks\.length,\s*maxReviewTasksPerRound\)/);
     assert.match(reviewTaskApplicationSource, /REVIEW_TASK_LIMIT_BLOCKED/);
     assert.match(reviewTaskApplicationSource, /拒绝写入 PRD/);
   });
@@ -516,20 +515,15 @@ describe("runner review fix execution flow", () => {
     assert.match(preSessionFlowSource, /attempt === 0 && shouldRunPrecheck\(task\)/);
   });
 
-  test("pre-session wiring: atomic doctor, engine scope, deterministic producers", () => {
+  test("pre-session wiring: atomic doctor, engine scope, and read-only deterministic producers", () => {
     assert.match(taskRunnerSource, /handlePreSessionFlow\(\{/);
     assert.match(preSessionFlowSource, /atomicDoctorBlockBuilder = buildAtomicDoctorBlockOutcome/);
     assert.match(preSessionFlowSource, /engineBlockBuilder = buildEngineSelfModificationBlockOutcome/);
     assert.match(preSessionFlowSource, /dryRunTaskCompleter = completeDryRunArtifactTask/);
     assert.match(preSessionFlowSource, /dryRunTaskCompleter\(\{/);
-    assert.match(preSessionFlowSource, /deterministicAutoFix = tryDeterministicAutoFixTask/);
-    assert.match(preSessionFlowSource, /deterministicAutoFix\(\{/);
+    assert.doesNotMatch(preSessionFlowSource, /deterministicAutoFix|tryDeterministicAutoFixTask/);
     assert.match(preSessionFlowSource, /config\.runner\?\.deterministic_dry_run_artifacts !== false/);
     assert.match(dryRunArtifactSource, /deterministic dry_run_artifact producer/);
-    assert.match(deterministicAutoFixSource, /normalizeAutoFixTask/);
-    assert.match(deterministicAutoFixSource, /applyAutoFixTasks/);
-    assert.match(deterministicAutoFixSource, /deterministic_auto_fix/);
-    assert.match(deterministicAutoFixSource, /回退 provider/);
   });
 
   test("commit-flow wiring: scope audit, out-of-scope, and dry-run blocks", () => {

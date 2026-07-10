@@ -39,7 +39,6 @@ const INVENTORY = [
   ["src/discovery/gate.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
   ["src/discovery/runtime.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/eval/benchmark.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],
-  ["src/lib/auto-fix.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/lib/evaluators/file-check.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/lib/evaluators/quality-check.ts", { WARN: 1, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/guard.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
@@ -57,7 +56,7 @@ const INVENTORY = [
   ["src/release/decision-gate.ts", { WARN: 0, warning: 34, "best-effort": 0, skip: 0 }],
   ["src/release/dogfood-matrix.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
   ["src/release/hardening-drill.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
-  ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
+  ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 5 }],
   ["src/review/fix-loop.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   // PR-13: skip count 2 -> 1 after replacing while-no-cursor keyword scanning comments with condition-variable analysis.
   ["src/review/scanner.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
@@ -118,7 +117,7 @@ const INVENTORY = [
 ];
 
 const COVERAGE_RULES = [
-  { prefix: "src/lib/", rationale: "Legacy evaluator/autofix warnings are allowed only as non-blocking diagnostics.", coveredBy: ["__tests__/engine.test.ts", "__tests__/deterministic-auto-fix.test.ts"] },
+  { prefix: "src/lib/", rationale: "Legacy evaluator warnings are allowed only as non-blocking diagnostics.", coveredBy: ["__tests__/engine.test.ts"] },
   { prefix: "src/cli/", rationale: "CLI warning and support-entry paths must remain visible through public CLI smoke tests.", coveredBy: ["__tests__/public-entrypoints.test.ts", "__tests__/command-registry.test.ts"] },
   { prefix: "src/core/setup.ts", rationale: "Project setup may skip already-present scaffolding while reporting the plan.", coveredBy: ["__tests__/project-setup.test.ts"] },
   { prefix: "src/core/bootstrap.ts", rationale: "Bootstrap may skip existing project files but must report skipped paths.", coveredBy: ["__tests__/project-bootstrap.test.ts"] },

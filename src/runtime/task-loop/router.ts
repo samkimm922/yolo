@@ -1,11 +1,5 @@
 // task-router.js — deterministic route selection before spending provider time
 
-const AUTO_FIX_RECIPES = new Set([
-  "debug-console-log",
-  "debug-debugger",
-  "raw-collection",
-]);
-
 function scannerIds(task = Object()) {
   return (task.source_findings || task.fix_findings || [])
     .map((finding) => finding.scanner_id || finding.rule_id)
@@ -23,35 +17,6 @@ export function isSplitOrStructuralRefactorTask(task = Object()) {
   return task.scope?.allow_new_files === true ||
     ids.includes("R9-file-length") ||
     /拆分|split|提取|文件.*行|file-length|超过\s*\d+\s*行/.test(text);
-}
-
-export function hasAutoFixRecipe(task = Object()) {
-  const rule = task.fix_rule || scannerIds(task)[0] || "";
-  return AUTO_FIX_RECIPES.has(rule);
-}
-
-function sourceFindings(task = Object()) {
-  return task.source_findings || task.fix_findings || [];
-}
-
-function isTestFile(filePath = "") {
-  return filePath.includes("/__tests__/") || /\.(test|spec)\.[tj]sx?$/.test(filePath);
-}
-
-export function hasSafeR6UnknownAsRecipe(task = Object()) {
-  const targets = task.scope?.targets || [];
-  if (!hasOnlyScanner(task, "R6-as-unknown-as") || targets.length !== 1) return false;
-  const targetFile = targets[0]?.file || "";
-  if (!isTestFile(targetFile)) return false;
-  const findings = sourceFindings(task);
-  if (findings.length === 0) return false;
-  return findings.every((finding) => {
-    const findingFile = finding.file || targetFile;
-    const text = `${finding.context || ""}\n${finding.match || ""}`;
-    return findingFile === targetFile &&
-      /as unknown as/.test(text) &&
-      /mockReturnValue|vi\.mocked|TypedCollection<unknown>/.test(text);
-  });
 }
 
 export function classifyTaskExecution(task = Object()) {
@@ -73,28 +38,11 @@ export function classifyTaskExecution(task = Object()) {
     };
   }
 
-  if (hasSafeR6UnknownAsRecipe(task)) {
-    return {
-      route: "auto_fix",
-      reason: "safe_r6_test_mock_cast_recipe",
-      quality_profile: "deterministic_recipe",
-      provider_required: false,
-    };
-  }
-
   if (task.fix_type === "AUTO_FIX") {
-    if (hasAutoFixRecipe(task)) {
-      return {
-        route: "auto_fix",
-        reason: "known_deterministic_recipe",
-        quality_profile: "deterministic_recipe",
-        provider_required: false,
-      };
-    }
     return {
       route: "provider",
-      reason: "auto_fix_requested_but_no_recipe",
-      quality_profile: "default",
+      reason: "mechanical_fix_requires_executor",
+      quality_profile: hasOnlyScanner(task, "R6-as-unknown-as") ? "single_line_mechanical" : "default",
       provider_required: true,
     };
   }

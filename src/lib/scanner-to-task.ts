@@ -7,15 +7,14 @@ import type { ReviewPrdTask } from "../review/findings-to-tasks.js";
 import type { ReviewFindingInput } from "../review/findings.js";
 
 interface ScannerToTasksResult {
-  autoFixTasks: ReviewPrdTask[];
-  claudeFixTasks: ReviewPrdTask[];
+  executorTasks: ReviewPrdTask[];
   infoCount: number;
 }
 
 /**
  * @param findings - review-scanner.js findings
  * @param [round=1] - review round
- * @returns {{ autoFixTasks: Array, claudeFixTasks: Array, infoCount: number }}
+ * @returns {{ executorTasks: Array, infoCount: number }}
  */
 export function scannerToTasks(
   findings: ReviewFindingInput[] = [],
@@ -24,20 +23,9 @@ export function scannerToTasks(
 ): ScannerToTasksResult {
   const infoCount = findings.filter((finding) => finding?.fix_type === "INFO").length;
   const converted = reviewFindingsToPrdTasks(findings, { ...options, round });
-  const autoFixTasks: ReviewPrdTask[] = [];
-  const claudeFixTasks: ReviewPrdTask[] = [];
-
-  for (const task of converted.tasks) {
-    if (task.fix_type === "AUTO_FIX") {
-      autoFixTasks.push(task);
-    } else {
-      claudeFixTasks.push(task);
-    }
-  }
 
   return {
-    autoFixTasks,
-    claudeFixTasks,
+    executorTasks: converted.tasks,
     infoCount,
   };
 }
