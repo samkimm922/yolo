@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectDemandReadiness } from "../../src/demand/gate.js";
-import { appendJsonlRecord, readLedgerJsonl, validateLedgerChain } from "../../src/runtime/evidence/ledger.js";
+import { appendJsonlRecord, provisionLedgerHmacKey, readLedgerJsonl, validateLedgerChain } from "../../src/runtime/evidence/ledger.js";
 
 type EvidenceBatteryCase = {
   id: string;
@@ -72,8 +72,10 @@ export const EVIDENCE_BATTERY: EvidenceBatteryCase[] = [
 
 export function runEvidenceBattery(): EvidenceBatteryResult[] {
   const demandResults: EvidenceBatteryResult[] = EVIDENCE_BATTERY.map((testCase) => {
-    const stateDir = mkdtempSync(join(tmpdir(), "yolo-evidence-battery-"));
+    const stateRoot = mkdtempSync(join(tmpdir(), "yolo-evidence-battery-"));
+    const stateDir = join(stateRoot, "state");
     try {
+      provisionLedgerHmacKey(stateRoot);
       testCase.seed(stateDir);
       const result = inspectDemandReadiness(testCase.session, { phase: testCase.phase, stateDir }) as { blockers?: Array<Record<string, unknown>> };
       const hasEvidenceBlocker = result.blockers?.some((blocker) => blocker.code === "EVIDENCE_GROUNDED") === true;
@@ -88,17 +90,18 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
         correct,
       };
     } finally {
-      rmSync(stateDir, { recursive: true, force: true });
+      rmSync(stateRoot, { recursive: true, force: true });
     }
   });
   const ledgerRoot = mkdtempSync(join(tmpdir(), "yolo-evidence-ledger-battery-"));
   try {
+    provisionLedgerHmacKey(ledgerRoot);
     const ledgerPath = join(ledgerRoot, "evidence", "ledger.jsonl");
     appendJsonlRecord(ledgerPath, { event: "first", ledger: "state" });
     writeFileSync(ledgerPath, "{malformed jsonl line\n", { flag: "a" });
     appendJsonlRecord(ledgerPath, { event: "second", ledger: "state" });
 
-    const validation = validateLedgerChain(readLedgerJsonl(ledgerPath));
+    const validation = validateLedgerChain(readLedgerJsonl(ledgerPath), { stateRoot: ledgerRoot });
     const status = validation.status === "fail" ? "blocked" : "pass";
     demandResults.push({
       id: "jsonl_malformed_line_blocks_integrity_pass",
@@ -125,6 +128,7 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
   });
   const lockRoot = mkdtempSync(join(tmpdir(), "yolo-ledger-lock-battery-"));
   try {
+    provisionLedgerHmacKey(lockRoot);
     const ledgerPath = join(lockRoot, "events.jsonl");
     mkdirSync(`${ledgerPath}.lock`, { recursive: true });
     const startMs = Date.now();
