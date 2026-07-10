@@ -1,5 +1,6 @@
 import {
   closeSync as defaultCloseSync,
+  cpSync as defaultCpSync,
   copyFileSync as defaultCopyFileSync,
   existsSync as defaultExistsSync,
   mkdirSync as defaultMkdirSync,
@@ -27,6 +28,7 @@ import { readJsonFileBounded } from "../../lib/bounded-read.js";
 import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 import { requireLedgerHmacKey, UNSIGNED_DEVELOPMENT_WARNING } from "../evidence/ledger.js";
+import { archiveRawRunEvidence } from "./finalize.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -299,16 +301,33 @@ export function rotateTaskResults({
 }
 
 export function initializeRuntimeState({
+  stateDir,
   runtimeDir,
   expandedTasksFile,
+  runMetadata = null,
+  now = new Date(),
   existsSync = defaultExistsSync,
   mkdirSync = defaultMkdirSync,
   readdirSync = defaultReaddirSync,
+  cpSync = defaultCpSync,
   rmSync = defaultRmSync,
   unlinkSync = defaultUnlinkSync,
+  writeFileSync = defaultWriteFileSync,
   consoleLog = (...args) => console.log(...args),
   consoleError = (...args) => console.error(...args),
 } = Object()) {
+  const rawEvidenceArchive = archiveRawRunEvidence({
+    stateDir,
+    runtimeDir,
+    completionStatus: runMetadata?.status || "interrupted",
+    runMetadata,
+    now,
+    existsSync,
+    readdirSync,
+    mkdirSync,
+    cpSync,
+    writeFileSync,
+  });
   try {
     if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
     for (const file of readdirSync(runtimeDir)) {
@@ -320,7 +339,7 @@ export function initializeRuntimeState({
       try { unlinkSync(expandedTasksFile); } catch (_) {}
     }
     consoleLog("[yolo-runner] state/runtime/ 已初始化");
-    return { initialized: true };
+    return { initialized: true, rawEvidenceArchive };
   } catch (error) {
     consoleError(`[yolo-runner] state/runtime/ 初始化失败: ${error.message}`);
     return { initialized: false, error };
@@ -656,8 +675,17 @@ export function prepareRunStartup({
     processKill,
     processExit,
   });
+  initializeRuntimeState({
+    stateDir: paths.stateDir,
+    runtimeDir: paths.runtimeDir,
+    expandedTasksFile: paths.expandedTasksFile,
+    runMetadata: {
+      status: "interrupted",
+      failure_reason: "stale runtime recovered before the next run",
+      recovered_before_run_id: runId,
+    },
+  });
   rotateTaskResults({ resultsFile: paths.resultsFile });
-  initializeRuntimeState({ runtimeDir: paths.runtimeDir, expandedTasksFile: paths.expandedTasksFile });
   initTaskLogs({ runId });
   const archiveDir = join(paths.stateDir, "archive", "jsonl", new Date().toISOString().slice(0, 7));
   truncateJsonlFile({ filePath: join(paths.stateDir, "events.jsonl"), maxLines: config.state.max_events, archiveDir, log: logProgress });

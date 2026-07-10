@@ -375,7 +375,7 @@ describe("run lifecycle startup helpers", () => {
     assert.deepEqual(unlinked, ["/state/task-results.jsonl"]);
   });
 
-  test("initializeRuntimeState removes stale runtime files and directories", () => {
+  test("initializeRuntimeState archives stale failed-run evidence before removing it", () => {
     const root = tempDir();
     try {
       const runtimeDir = join(root, "state/runtime");
@@ -385,20 +385,54 @@ describe("run lifecycle startup helpers", () => {
       writeFileSync(expandedTasksFile, "{}", "utf8");
       writeFileSync(join(taskLogDir, "old.jsonl"), "old", "utf8");
       writeFileSync(join(runtimeDir, "codex-output-old.txt"), "old", "utf8");
+      writeFileSync(join(root, "state/yolo-output.log"), "previous run timed out", "utf8");
 
       const result = initializeRuntimeState({
+        stateDir: join(root, "state"),
         runtimeDir,
         expandedTasksFile,
+        runMetadata: {
+          status: "interrupted",
+          failure_reason: "stale runtime recovered before next run",
+        },
+        now: new Date("2026-05-26T00:00:00.000Z"),
         consoleLog: () => {},
       });
 
       assert.equal(result.initialized, true);
+      assert.equal(result.rawEvidenceArchive.archived, true);
+      const archiveDir = join(root, "state/archive/raw-runtime/20260526T000000Z");
+      assert.equal(readFileSync(join(archiveDir, "runtime/task-logs/old.jsonl"), "utf8"), "old");
+      assert.equal(readFileSync(join(archiveDir, "runtime/codex-output-old.txt"), "utf8"), "old");
+      assert.equal(readFileSync(join(archiveDir, "state/yolo-output.log"), "utf8"), "previous run timed out");
+      assert.deepEqual(JSON.parse(readFileSync(join(archiveDir, "run-metadata.json"), "utf8")), {
+        status: "interrupted",
+        failure_reason: "stale runtime recovered before next run",
+      });
       assert.equal(existsSync(join(taskLogDir, "old.jsonl")), false);
       assert.equal(existsSync(join(runtimeDir, "codex-output-old.txt")), false);
       assert.equal(existsSync(expandedTasksFile), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("initializeRuntimeState fails closed and preserves stale runtime when archiving fails", () => {
+    const removed = [];
+    assert.throws(() => initializeRuntimeState({
+      stateDir: "/repo/.yolo/state",
+      runtimeDir: "/repo/.yolo/state/runtime",
+      expandedTasksFile: "/repo/.yolo/state/expanded-tasks.json",
+      runMetadata: { status: "interrupted", failure_reason: "previous run incomplete" },
+      existsSync: () => true,
+      readdirSync: (path) => path.endsWith("/runtime") ? ["provider.log"] : [],
+      mkdirSync: () => {},
+      cpSync: () => { throw new Error("archive disk full"); },
+      rmSync: (path) => { removed.push(path); },
+      unlinkSync: (path) => { removed.push(path); },
+      consoleLog: () => {},
+    }), /archive disk full/);
+    assert.deepEqual(removed, []);
   });
 
   test("prepareRunStartup exposes the embedded progress server handle for lifecycle cleanup", () => {

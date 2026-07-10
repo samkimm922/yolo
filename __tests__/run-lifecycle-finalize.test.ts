@@ -228,6 +228,75 @@ describe("run lifecycle finalization helpers", () => {
     }
   });
 
+  test("cleanupRunArtifacts archives complete failed-run evidence before cleanup", () => {
+    const root = tempDir();
+    try {
+      const stateDir = join(root, "state");
+      const runtimeDir = join(stateDir, "runtime");
+      mkdirSync(join(runtimeDir, "task-logs"), { recursive: true });
+      touch(join(runtimeDir, "codex-output-failed.txt"), "provider failure");
+      touch(join(runtimeDir, "task-results.jsonl"), '{"status":"failed"}\n');
+      touch(join(runtimeDir, "task-logs", "FAIL-1.jsonl"), '{"error":"boom"}\n');
+      touch(join(stateDir, "yolo-output.log"), "run failed: boom\n");
+      touch(join(stateDir, "review-log.jsonl"), '{"verdict":"blocked"}\n');
+
+      const result = cleanupRunArtifacts({
+        yoloRoot: root,
+        stateDir,
+        runtimeDir,
+        prdPath: join(root, "data", "prd.json"),
+        completionStatus: "error",
+        runMetadata: {
+          run_id: "run-failed-1",
+          status: "error",
+          failure_reason: "provider exited with code 1",
+          final_verdict: { status: "error", issues: [{ code: "FAILED_TASKS" }] },
+        },
+        consoleLog: () => {},
+        now: new Date("2026-05-25T00:00:00.000Z"),
+      });
+
+      const archiveDir = join(stateDir, "archive", "raw-runtime", "20260525T000000Z");
+      assert.equal(result.rawEvidenceArchive.archived, true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "codex-output-failed.txt")), true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "task-results.jsonl")), true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "task-logs", "FAIL-1.jsonl")), true);
+      assert.equal(existsSync(join(archiveDir, "state", "yolo-output.log")), true);
+      assert.equal(existsSync(join(archiveDir, "state", "review-log.jsonl")), true);
+      assert.deepEqual(JSON.parse(readFileSync(join(archiveDir, "run-metadata.json"), "utf8")), {
+        run_id: "run-failed-1",
+        status: "error",
+        failure_reason: "provider exited with code 1",
+        final_verdict: { status: "error", issues: [{ code: "FAILED_TASKS" }] },
+      });
+      assert.equal(existsSync(join(runtimeDir, "codex-output-failed.txt")), false);
+      assert.equal(existsSync(join(runtimeDir, "task-results.jsonl")), true);
+      assert.equal(existsSync(join(runtimeDir, "task-logs")), true);
+      assert.equal(existsSync(join(stateDir, "yolo-output.log")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("cleanupRunArtifacts fails closed without deleting evidence when failed-run archiving fails", () => {
+    const removed = [];
+    assert.throws(() => cleanupRunArtifacts({
+      yoloRoot: "/repo/.yolo",
+      stateDir: "/repo/.yolo/state",
+      runtimeDir: "/repo/.yolo/state/runtime",
+      prdPath: "/repo/.yolo/data/prd.json",
+      completionStatus: "error",
+      runMetadata: { run_id: "run-failed", status: "error", failure_reason: "timeout" },
+      existsSync: () => true,
+      readdirSync: (path) => path.endsWith("/runtime") ? ["provider.log"] : [],
+      mkdirSync: () => {},
+      cpSync: () => { throw new Error("disk full"); },
+      rmSync: (path) => { removed.push(path); },
+      consoleLog: () => {},
+    }), /disk full/);
+    assert.deepEqual(removed, []);
+  });
+
   test("cleanupWorktreeRoot refuses unsafe paths", () => {
     assert.deepEqual(cleanupWorktreeRoot({ worktreeRoot: "/tmp/not-yolo-worktrees" }), {
       skipped: true,
