@@ -327,6 +327,12 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
     ), {}, options);
     assert.equal(nonzero.allPass, true, JSON.stringify(nonzero.results));
     assert.equal(nonzero.results[0].found, 2);
+
+    const ambiguous = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.log('2 passed'); console.log('0 passed')"`,
+    ), {}, options);
+    assert.equal(ambiguous.allPass, false, JSON.stringify(ambiguous.results));
+    assert.match(ambiguous.results[0].detail, /multiple|多个|歧义/i);
   });
 
   test("node:test built-in adapter rejects an empty suite and accepts a real test", () => {
@@ -355,6 +361,16 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
       require_tests: true,
     }, {}, testRoot));
     assert.equal(nonzero.passed, true, JSON.stringify(nonzero));
+  });
+
+  test("node:test built-in adapter rejects contradictory flags that disable test mode", () => {
+    const result = outsideParentNodeTestContext(() => mod.evalTestsPass({
+      command: `"${process.execPath}" --test --no-test -e "console.log('# tests 1')"`,
+      timeout_ms: 30000,
+      require_tests: true,
+    }, {}, tmpRoot));
+    assert.equal(result.passed, false, JSON.stringify(result));
+    assert.match(result.detail, /test_count|声明|declaration/i);
   });
 
   test("require_tests rejects console.assert failures from a real node:test command", () => {

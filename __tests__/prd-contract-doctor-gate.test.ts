@@ -270,46 +270,48 @@ describe("prd contract doctor gate", () => {
   test("blocks test-backed runner PRDs without a declared authenticity contract", () => {
     const paths = makePaths();
     try {
-      const result = inspectPrdContractDoctorGate({
-        prd: {
-          version: "2.0",
-          id: "PRD-TRUTH-CONTRACT-MISSING",
-          ...strictDemandFields("src/a.ts"),
-          tasks: [{
-            id: "FIX-GATE-TRUTH-001",
-            title: "Strict task with tests",
-            priority: "P1",
-            type: "bugfix",
-            status: "pending",
-            requirement_ids: ["REQ-GATE-1"],
-            scope: { targets: [{ file: "src/a.ts" }] },
-            acceptance_criteria: ["Behavior is covered by a real test."],
-            post_conditions: [
-              {
-                id: "POST-TARGET",
-                type: "target_file_modified",
-                severity: "FAIL",
-                params: { file: "src/a.ts" },
-              },
-              {
-                id: "POST-TESTS",
-                type: "tests_pass",
-                severity: "FAIL",
-                params: { command: "project test command", require_tests: true },
-              },
-            ],
-          }],
-        },
-        prdPath: paths.prdPath,
-        stateDir: paths.stateDir,
-        projectRoot: paths.projectRoot,
-      });
+      for (const conditionType of ["tests_pass", "test_file_passes"]) {
+        const result = inspectPrdContractDoctorGate({
+          prd: {
+            version: "2.0",
+            id: `PRD-TRUTH-CONTRACT-MISSING-${conditionType}`,
+            ...strictDemandFields("src/a.ts"),
+            tasks: [{
+              id: "FIX-GATE-TRUTH-001",
+              title: "Strict task with tests",
+              priority: "P1",
+              type: "bugfix",
+              status: "pending",
+              requirement_ids: ["REQ-GATE-1"],
+              scope: { targets: [{ file: "src/a.ts" }] },
+              acceptance_criteria: ["Behavior is covered by a real test."],
+              post_conditions: [
+                {
+                  id: "POST-TARGET",
+                  type: "target_file_modified",
+                  severity: "FAIL",
+                  params: { file: "src/a.ts" },
+                },
+                {
+                  id: "POST-TESTS",
+                  type: conditionType,
+                  severity: "FAIL",
+                  params: { command: "project test command", require_tests: true },
+                },
+              ],
+            }],
+          },
+          prdPath: paths.prdPath,
+          stateDir: paths.stateDir,
+          projectRoot: paths.projectRoot,
+        });
 
-      assert.equal(result.status, "blocked");
-      assert.ok(result.doctor.failures.some((finding) =>
-        finding.code === "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_MISSING" &&
-        finding.task_id === "FIX-GATE-TRUTH-001"
-      ));
+        assert.equal(result.status, "blocked", conditionType);
+        assert.ok(result.doctor.failures.some((finding) =>
+          finding.code === "TASK_VERIFICATION_AUTHENTICITY_CONTRACT_MISSING" &&
+          finding.task_id === "FIX-GATE-TRUTH-001"
+        ), conditionType);
+      }
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

@@ -314,11 +314,11 @@ describe("test generation validator", () => {
     }
   });
 
-  test("require_tests task blocks console.assert in node:test targets", () => {
+  test("require_tests test_file_passes alias blocks console.assert in node:test targets", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-console-assert-"));
     const task = {
       scope: { allow_new_files: true, targets: [{ file: "test/git-weekly-cli.test.ts" }] },
-      post_conditions: [{ type: "tests_pass", params: { command: "npm test", require_tests: true } }],
+      post_conditions: [{ type: "test_file_passes", params: { command: "npm test", require_tests: true } }],
       test_generation: {
         mode: "add_minimal",
         reason: "Synthetic acceptance coverage.",
