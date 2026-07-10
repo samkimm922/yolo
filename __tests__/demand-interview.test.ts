@@ -188,7 +188,7 @@ describe("demand interview", () => {
     }
   }));
 
-  test("caps missing-detail follow-ups and records an accepted assumption", () => withRoot((root) => {
+  test("fails closed after repeated vague answers instead of accepting an assumption", () => withRoot((root) => {
     const session = newSession(root);
 
     answer(session, "success_criteria", "做好一点");
@@ -200,14 +200,15 @@ describe("demand interview", () => {
     assert.equal(session.follow_up_counts.success_criteria.count, 2);
 
     answer(session, "success_criteria", "做好一点");
-    assert.equal(session.answers.success_criteria.quality.level, "accepted_with_assumption");
+    assert.equal(session.answers.success_criteria.quality.level, "blocked_needs_clarification");
     assert.ok(session.answers.success_criteria.quality.reasons.includes("vague"));
-    assert.deepEqual(session.answers.success_criteria.quality.follow_up_questions, []);
+    assert.equal(session.answers.success_criteria.quality.follow_up_questions.length, 1);
+    assert.equal(session.answers.success_criteria.quality.follow_up_questions[0].severity, "error");
+    assert.match(session.answers.success_criteria.quality.follow_up_questions[0].code, /HUMAN_CLARIFICATION_REQUIRED/);
     assert.equal(session.follow_up_counts.success_criteria.count, 3);
-    assert.equal(session.accepted_assumptions.length, 1);
-    assert.equal(session.accepted_assumptions[0].slot, "success_criteria");
-    assert.match(session.accepted_assumptions[0].message, /以原文接受，未通过结构判定/);
-    assert.equal(session.follow_up_plan.status, "clear");
+    assert.equal(session.accepted_assumptions.length, 0);
+    assert.equal(session.follow_up_plan.status, "needs_follow_up");
+    assert.equal(session.coverage.ready_for_prd_intake, false);
   }));
 
   test("follow-up prompts disclose concrete missing signal categories", () => withRoot((root) => {
@@ -222,7 +223,7 @@ describe("demand interview", () => {
     assert.doesNotMatch(prompt, /请补充更具体的回答/);
   }));
 
-  test("accepted assumptions pass through demand artifacts without blocking interview completion", () => withRoot((root) => {
+  test("repeated vague answers remain blocking after explicit execution approval", () => withRoot((root) => {
     const session = answerAllRequired(newSession(root));
     answer(session, "success_criteria", "做好一点");
     answer(session, "success_criteria", "做好一点");
@@ -230,20 +231,19 @@ describe("demand interview", () => {
     answer(session, "execution_approval", true);
 
     const coverage = inspectDemandInterviewCoverage(session);
-    assert.equal(coverage.ready_for_prd_intake, true);
-    assert.equal(coverage.assumptions.length, 1);
-    assert.equal(coverage.follow_up_plan.status, "clear");
+    assert.equal(coverage.ready_for_prd_intake, false);
+    assert.equal(coverage.assumptions.length, 0);
+    assert.equal(coverage.follow_up_plan.status, "needs_follow_up");
+    assert.ok(coverage.readiness.blockers.some((blocker) => /HUMAN_CLARIFICATION_REQUIRED/.test(blocker.code)));
 
     const input = demandInterviewToDemandInput(session);
-    assert.ok(Array.isArray(input.assumptions));
-    assert.ok(input.assumptions.some((item) => /success_criteria 以原文接受，未通过结构判定/.test(item)));
-    assert.equal(input.open_questions.length, 0);
+    assert.equal(input.open_questions.length, 1);
     const interviewCoverage = input.interview.coverage as { assumptions?: unknown[] };
-    assert.equal(interviewCoverage.assumptions?.length, 1);
+    assert.equal(interviewCoverage.assumptions?.length, 0);
 
     const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
-    assert.ok(demandSession.project_facts.assumptions.some((item) => /success_criteria 以原文接受/.test(item.text)));
-    assert.equal(demandSession.interview.coverage.assumptions.length, 1);
+    assert.equal(demandSession.interview.coverage.assumptions.length, 0);
+    assert.equal(demandSession.interview.coverage.ready_for_prd_intake, false);
   }));
 
   test("does not mark detailed MVP tradeoffs vague only because they mention automation", () => withRoot((root) => {
