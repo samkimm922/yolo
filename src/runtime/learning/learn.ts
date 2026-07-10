@@ -170,6 +170,7 @@ function record(args: LearnArgs, paths: LearnPaths): void {
       appendLearningRecord({
         type: 'failure',
         source: 'learn_cli',
+        source_outcome: 'failure',
         task_id: args.task,
         gate: args.gate,
         lesson: args.message,

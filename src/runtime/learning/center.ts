@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve } from "node:path";
+import { filterVerifiedSuccessLearningRecords } from "./verified-success.js";
 
 export const LEARNING_CENTER_SCHEMA_VERSION = "1.0";
 
@@ -42,6 +43,7 @@ export interface LearningRecord extends JsonRecord {
   ts: string;
   type: string;
   source: string;
+  source_outcome: string;
   status: string;
   confidence: number;
   task_id: string;
@@ -201,6 +203,14 @@ function normalizedType(type: unknown = ""): string {
   return value || "lesson";
 }
 
+function normalizedSourceOutcome(input: JsonRecord, type: string): string {
+  const outcome = String(input.source_outcome || input.sourceOutcome || input.result || "").trim().toLowerCase();
+  if (["pass", "passed", "success", "succeeded", "completed", "done"].includes(outcome)) return "success";
+  if (["fail", "failed", "failure", "error", "blocked", "timeout", "timed_out"].includes(outcome)) return "failure";
+  if (["failure", "pitfall"].includes(type)) return "failure";
+  return "unverified";
+}
+
 function defaultPrevention(input: JsonRecord = Object()): string {
   if (input.prevention) return String(input.prevention);
   if (input.strategy) return String(input.strategy);
@@ -237,6 +247,7 @@ export function createLearningRecord(input: JsonRecord = Object(), options: Json
     ...extractRiskPatterns(prevention),
   ]);
   const type = normalizedType(input.type || input.knowledge_type || input.result);
+  const sourceOutcome = normalizedSourceOutcome(input, type);
   const status = String(input.status || (input.promoted ? "promoted" : "advisory")).toLowerCase();
   const confidence = Number.isFinite(Number(input.confidence))
     ? Math.max(0, Math.min(10, Number(input.confidence)))
@@ -260,6 +271,7 @@ export function createLearningRecord(input: JsonRecord = Object(), options: Json
     ts: String(input.ts || input.timestamp || input.learned_at || input.last_used || now),
     type,
     source: String(input.source || input.legacy_source || "learning_center"),
+    source_outcome: sourceOutcome,
     status,
     confidence,
     task_id: String(input.task_id || input.source_task || ""),
@@ -303,6 +315,7 @@ function mergeRecord(base: LearningRecord, next: LearningRecord): LearningRecord
     lesson: base.lesson || next.lesson,
     prevention: base.prevention || next.prevention,
     status: base.status === "promoted" || next.status === "promoted" ? "promoted" : (base.status || next.status || "advisory"),
+    source_outcome: base.source_outcome && base.source_outcome === next.source_outcome ? base.source_outcome : "mixed",
   };
 }
 
@@ -649,7 +662,12 @@ export function selectRelevantLearningRecords(records: LearningRecord[] = [], in
 export function retrieveRelevantLearningRecords(options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const records = readLearningRecords(paths.learningFile);
-  const selected = selectRelevantLearningRecords(records, options, options);
+  const eligibleRecords = filterVerifiedSuccessLearningRecords(records, {
+    ...options,
+    projectRoot: paths.projectRoot,
+    stateRoot: paths.stateRoot,
+  });
+  const selected = selectRelevantLearningRecords(eligibleRecords, options, options);
   return {
     schema_version: LEARNING_CENTER_SCHEMA_VERSION,
     status: "ok",

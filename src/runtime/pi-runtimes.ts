@@ -409,6 +409,7 @@ function runLearnRuntime(params = Object()) {
   const record = appendLearningRecord({
     type: "retrospective",
     source: "pi-agent",
+    source_outcome: "success",
     gate: "learn",
     lesson,
     prevention: params.prevention || "Reuse the PI lifecycle path for similar work.",
