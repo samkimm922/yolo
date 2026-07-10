@@ -177,14 +177,20 @@ function packageTestScript(command: string, ROOT: string): string {
 const NODE_TEST_REPORTERS = new Set(["spec", "tap"]);
 
 function nodeTestArgsUseFixedSchema(args: string[]): boolean {
-  if (!args.includes("--test") || args.some((arg) => arg === "--no-test" || arg.startsWith("--no-test="))) return false;
-  if (args.some((arg) => ["-c", "--check", "-e", "--eval", "-p", "--print"].includes(arg) || /^-(?:e|p).+/.test(arg) || /^--(?:eval|print)=/.test(arg))) {
+  const normalizedArgs = args.map((arg) => {
+    if (!arg.startsWith("--")) return arg;
+    const separator = arg.indexOf("=");
+    const nameEnd = separator >= 0 ? separator : arg.length;
+    return `${arg.slice(0, nameEnd).replaceAll("_", "-")}${arg.slice(nameEnd)}`;
+  });
+  if (!normalizedArgs.includes("--test") || normalizedArgs.some((arg) => arg === "--no-test" || arg.startsWith("--no-test="))) return false;
+  if (normalizedArgs.some((arg) => ["-c", "--check", "-e", "--eval", "-p", "--print"].includes(arg) || /^-(?:e|p).+/.test(arg) || /^--(?:eval|print)=/.test(arg))) {
     return false;
   }
   const reporters: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--test-reporter") reporters.push(args[index + 1] || "");
+  for (let index = 0; index < normalizedArgs.length; index += 1) {
+    const arg = normalizedArgs[index];
+    if (arg === "--test-reporter") reporters.push(normalizedArgs[index + 1] || "");
     else if (arg.startsWith("--test-reporter=")) reporters.push(arg.slice("--test-reporter=".length));
   }
   return reporters.length <= 1 && reporters.every((reporter) => NODE_TEST_REPORTERS.has(reporter));
