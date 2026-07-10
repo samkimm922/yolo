@@ -67,6 +67,40 @@ function baseStartupOptions({
 }
 
 describe("run lifecycle startup helpers", () => {
+  test("prepareRunStartup fails before side effects when the ledger HMAC key is missing", () => {
+    const root = tempDir();
+    const logs = [];
+    try {
+      const stateRoot = join(root, ".yolo");
+      const stateDir = join(stateRoot, "state");
+      const runtimeDir = join(stateDir, "runtime");
+      const expandedTasksFile = join(stateDir, "expanded-tasks.json");
+      const resultsFile = join(runtimeDir, "task-results.jsonl");
+      const prdPath = join(stateRoot, "data", "prd.json");
+      mkdirSync(join(stateRoot, "data"), { recursive: true });
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(prdPath, JSON.stringify({ tasks: [] }), "utf8");
+
+      assert.throws(
+        () => prepareRunStartup(baseStartupOptions({
+          root,
+          stateRoot,
+          stateDir,
+          runtimeDir,
+          expandedTasksFile,
+          resultsFile,
+          prdPath,
+          logs,
+        })),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_HMAC_KEY_REQUIRED"),
+      );
+      assert.equal(existsSync(join(stateDir, "runner.pid")), false);
+      assert.equal(existsSync(expandedTasksFile), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("ensureRunGitBaseline creates a transparent initial commit for unborn git repos", () => {
     const root = tempDir();
     const logs = [];

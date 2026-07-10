@@ -44,7 +44,7 @@ describe("demand gate ledger evidence integration", () => {
     }
   });
 
-  test("with valid approved demand ledger chain, evidence_grounded is true", () => {
+  test("with unsigned approved demand ledger chain, evidence_grounded is false", () => {
     const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
@@ -53,7 +53,7 @@ describe("demand gate ledger evidence integration", () => {
       assert.ok(result !== null);
       const factDim = result.dimensions?.find((d) => d.code === "project_fact_grounding");
       assert.ok(factDim !== undefined);
-      assert.equal(factDim.evidence_grounded, true);
+      assert.equal(factDim.evidence_grounded, false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

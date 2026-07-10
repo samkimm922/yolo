@@ -83,6 +83,58 @@ function runConcurrentAppendWorker(filePath, worker) {
 }
 
 describe("evidence ledger", () => {
+  test("formal ledger append fails closed when the HMAC key is missing", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "formal-evidence" }, { stateRoot: root }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_HMAC_KEY_REQUIRED"),
+      );
+      assert.equal(existsSync(filePath), false, "missing-key failure must happen before an unsigned record is written");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("formal chain validation rejects unsigned records when no HMAC key is configured", () => {
+    const unsigned = buildLedgerRecord("unsigned-evidence", {}, {
+      now: "2026-05-24T15:00:00.000Z",
+      ledger: "state",
+      source: "test",
+    });
+
+    const validation = validateLedgerChain([unsigned]);
+    assert.equal(validation.ok, false);
+    assert.equal(validation.status, "fail");
+    assert.ok(validation.errors.some((error) => error.code === "LEDGER_HMAC_KEY_REQUIRED"));
+  });
+
+  test("explicit unsigned development mode is visibly non-production", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const record = appendJsonlRecord(filePath, { event: "local-debug" }, {
+        stateRoot: root,
+        allowUnsignedDevelopment: true,
+        now: "2026-05-24T15:00:00.000Z",
+      });
+
+      assert.deepEqual(record.evidence_security, {
+        mode: "development_unsigned",
+        production_ready: false,
+        warning: "UNSIGNED EVIDENCE: NOT VALID FOR PRODUCTION ACCEPTANCE",
+      });
+      const validation = validateLedgerChain([record], { allowUnsignedDevelopment: true });
+      assert.equal(validation.ok, true);
+      assert.equal(validation.status, "non_production");
+      assert.equal(validation.production_ready, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("appendJsonlRecord appends timestamped records", () => {
     const root = tempDir();
     try {
