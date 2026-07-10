@@ -195,10 +195,23 @@ describe("P10.S1 contract acceptance_criteria verify_command", () => {
 
 describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
   let mod: any;
+  let engine: any;
   let tmpRoot: string;
+
+  function outsideParentNodeTestContext<T>(run: () => T): T {
+    const parentContext = process.env.NODE_TEST_CONTEXT;
+    delete process.env.NODE_TEST_CONTEXT;
+    try {
+      return run();
+    } finally {
+      if (parentContext === undefined) delete process.env.NODE_TEST_CONTEXT;
+      else process.env.NODE_TEST_CONTEXT = parentContext;
+    }
+  }
 
   test.before(async () => {
     mod = await import("../src/lib/evaluators/runtime-check.js");
+    engine = await import("../src/prd/contract.js");
     tmpRoot = mkdtempSync(join(tmpdir(), "yolo-p10-s1-runtime-"));
   });
 
@@ -214,32 +227,151 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
     assert.equal(result.passed, true);
   });
 
-  test("require_tests rejects successful empty node:test output", () => {
+  test("require_tests fails closed for successful unittest output with zero tests and no declaration", () => {
     const result = mod.evalTestsPass({
-      command: `"${process.execPath}" -e "console.log('# tests 0')"`,
+      command: `"${process.execPath}" -e "console.error('Ran 0 tests in 0.000s'); console.error('OK')"`,
       timeout_ms: 30000,
       require_tests: true,
     }, {}, tmpRoot);
-    assert.equal(result.passed, false);
-    assert.match(result.detail, /empty test suite|0 tests/i);
+    assert.equal(result.passed, false, JSON.stringify(result));
+    assert.match(result.detail, /test_count|声明|declaration/i);
   });
 
-  test("require_tests ignores business stdout that mentions 0 tests when runner summary is non-empty", () => {
+  test("require_tests fails closed for successful pytest output with no executed tests and no declaration", () => {
     const result = mod.evalTestsPass({
-      command: `"${process.execPath}" -e "console.log('business summary: 0 tests commits'); console.log('# tests 2')"`,
+      command: `"${process.execPath}" -e "console.log('no tests ran in 0.01s')"`,
       timeout_ms: 30000,
       require_tests: true,
     }, {}, tmpRoot);
-    assert.equal(result.passed, true);
+    assert.equal(result.passed, false, JSON.stringify(result));
+    assert.match(result.detail, /test_count|声明|declaration/i);
   });
 
-  test("require_tests rejects console.assert failures even when the command exits 0", () => {
-    const result = mod.evalTestsPass({
-      command: `"${process.execPath}" -e "console.error('Assertion failed: should have author name'); console.log('# tests 3')"`,
+  test("task authenticity test_count rejects zero, accepts a real count, and fails extraction closed", () => {
+    const testCount = {
+      type: "test_count",
+      minimum: 1,
+      pattern: String.raw`^Ran\s+(?<count>\d+)\s+tests?`,
+      flags: "m",
+    };
+    const task = (command: string) => ({
+      id: "T-TEST-COUNT",
+      scope: { expected_zero_business_code: true },
+      verification_contract: {
+        authenticity: {
+          required: true,
+          methods: [
+            { type: "required_marker", files: ["tests/example.test"], markers: [{ text: "behavior" }] },
+            testCount,
+          ],
+        },
+      },
+      post_conditions: [{
+        id: "POST-TEST-COUNT",
+        type: "tests_pass",
+        severity: "FAIL",
+        params: { command, timeout_ms: 30000, require_tests: true },
+      }],
+    });
+
+    const zero = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.error('Ran 0 tests in 0.000s'); console.error('OK')"`,
+    ), {}, { root: tmpRoot });
+    assert.equal(zero.allPass, false, JSON.stringify(zero.results));
+    assert.equal(zero.results[0].found, 0);
+
+    const nonzero = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.error('Ran 2 tests in 0.001s'); console.error('OK')"`,
+    ), {}, { root: tmpRoot });
+    assert.equal(nonzero.allPass, true, JSON.stringify(nonzero.results));
+    assert.equal(nonzero.results[0].found, 2);
+
+    const missing = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.log('no tests ran in 0.01s')"`,
+    ), {}, { root: tmpRoot });
+    assert.equal(missing.allPass, false, JSON.stringify(missing.results));
+    assert.match(missing.results[0].detail, /提取|extract/i);
+  });
+
+  test("project config test_count applies the same fail-closed extraction contract", () => {
+    const task = (command: string) => ({
+      id: "T-CONFIG-TEST-COUNT",
+      scope: { expected_zero_business_code: true },
+      post_conditions: [{
+        id: "POST-CONFIG-TEST-COUNT",
+        type: "tests_pass",
+        severity: "FAIL",
+        params: { command, timeout_ms: 30000, require_tests: true },
+      }],
+    });
+    const options = {
+      root: tmpRoot,
+      config: {
+        build: {
+          test_count: {
+            minimum: 1,
+            pattern: String.raw`^(?<count>\d+)\s+passed`,
+            flags: "m",
+          },
+        },
+      },
+    };
+
+    const missing = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.log('no tests ran in 0.01s')"`,
+    ), {}, options);
+    assert.equal(missing.allPass, false, JSON.stringify(missing.results));
+
+    const nonzero = engine.evaluatePostConditions(task(
+      `"${process.execPath}" -e "console.log('2 passed in 0.01s')"`,
+    ), {}, options);
+    assert.equal(nonzero.allPass, true, JSON.stringify(nonzero.results));
+    assert.equal(nonzero.results[0].found, 2);
+  });
+
+  test("node:test built-in adapter rejects an empty suite and accepts a real test", () => {
+    const emptyRoot = join(tmpRoot, "node-empty");
+    mkdirSync(emptyRoot, { recursive: true });
+    const empty = outsideParentNodeTestContext(() => mod.evalTestsPass({
+      command: `"${process.execPath}" --test`,
       timeout_ms: 30000,
       require_tests: true,
-    }, {}, tmpRoot);
-    assert.equal(result.passed, false);
+    }, {}, emptyRoot));
+    assert.equal(empty.passed, false, JSON.stringify(empty));
+
+    const testRoot = join(tmpRoot, "node-positive");
+    mkdirSync(testRoot, { recursive: true });
+    writeFileSync(join(testRoot, "sample.test.mjs"), [
+      "import test from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "test('real node test', () => {",
+      "  console.log('business summary: 0 tests commits');",
+      "  assert.equal(1, 1);",
+      "});",
+    ].join("\n"), "utf8");
+    const nonzero = outsideParentNodeTestContext(() => mod.evalTestsPass({
+      command: `"${process.execPath}" --test sample.test.mjs`,
+      timeout_ms: 30000,
+      require_tests: true,
+    }, {}, testRoot));
+    assert.equal(nonzero.passed, true, JSON.stringify(nonzero));
+  });
+
+  test("require_tests rejects console.assert failures from a real node:test command", () => {
+    const testRoot = join(tmpRoot, "node-console-assert");
+    mkdirSync(testRoot, { recursive: true });
+    writeFileSync(join(testRoot, "console-assert.test.mjs"), [
+      "import test from 'node:test';",
+      "test('console assert is not a test failure', () => {",
+      "  console.assert(false, 'should have author name');",
+      "});",
+    ].join("\n"), "utf8");
+    const result = outsideParentNodeTestContext(() => mod.evalTestsPass({
+      command: `"${process.execPath}" --test console-assert.test.mjs`,
+      timeout_ms: 30000,
+      require_tests: true,
+    }, {}, testRoot));
+    assert.equal(result.passed, false, JSON.stringify(result));
     assert.match(result.detail, /Assertion failed/);
   });
 

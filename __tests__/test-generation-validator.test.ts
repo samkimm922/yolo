@@ -183,6 +183,12 @@ describe("test generation validator", () => {
               files: ["tests/acceptance.test.js"],
               patterns: [{ text: "tests.length > 0" }],
             },
+            {
+              type: "test_count",
+              minimum: 1,
+              pattern: String.raw`^Ran\s+(?<count>\d+)\s+tests?`,
+              flags: "m",
+            },
           ],
         },
       },

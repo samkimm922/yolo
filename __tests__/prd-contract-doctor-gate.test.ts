@@ -315,6 +315,72 @@ describe("prd contract doctor gate", () => {
     }
   });
 
+  test("accepts a declared runtime test_count proof and rejects a rule without a count capture", () => {
+    const paths = makePaths();
+    const prdWithPattern = (pattern) => ({
+      version: "2.0",
+      id: "PRD-TRUTH-TEST-COUNT",
+      ...strictDemandFields("tests/a.test.ts"),
+      tasks: [{
+        id: "FIX-GATE-TRUTH-COUNT",
+        title: "Strict task with runtime test count proof",
+        priority: "P1",
+        type: "bugfix",
+        status: "pending",
+        requirement_ids: ["REQ-GATE-1"],
+        scope: { targets: [{ file: "tests/a.test.ts" }] },
+        acceptance_criteria: ["A real test is executed."],
+        verification_contract: {
+          authenticity: {
+            required: true,
+            methods: [
+              { type: "required_marker", files: ["tests/a.test.ts"], markers: [{ text: "behavior" }] },
+              { type: "test_count", minimum: 1, pattern, flags: "m" },
+            ],
+          },
+        },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "tests/a.test.ts" },
+          },
+          {
+            id: "POST-TESTS",
+            type: "tests_pass",
+            severity: "FAIL",
+            params: { command: "project test command", require_tests: true },
+          },
+        ],
+      }],
+    });
+    try {
+      const valid = inspectPrdContractDoctorGate({
+        prd: prdWithPattern(String.raw`^Ran\s+(?<count>\d+)\s+tests?`),
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+      assert.equal(valid.doctor.failures.some((finding) =>
+        finding.code === "TASK_VERIFICATION_AUTHENTICITY_METHOD_UNSUPPORTED" ||
+        finding.code.startsWith("TASK_VERIFICATION_AUTHENTICITY_TEST_COUNT_")), false,
+      JSON.stringify(valid.doctor.failures, null, 2));
+
+      const invalid = inspectPrdContractDoctorGate({
+        prd: prdWithPattern(String.raw`^Ran\s+\d+\s+tests?`),
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+      assert.ok(invalid.doctor.failures.some((finding) =>
+        finding.code === "TASK_VERIFICATION_AUTHENTICITY_TEST_COUNT_CAPTURE_MISSING"
+      ), JSON.stringify(invalid.doctor.failures, null, 2));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("does not treat specs directory documents as test targets", () => {
     const paths = makePaths();
     try {
