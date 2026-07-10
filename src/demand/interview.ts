@@ -750,34 +750,22 @@ function cappedFollowUpReason(quality: DemandInterviewAnswerQuality): string {
   return CAPPED_FOLLOW_UP_REASONS.has(reason) ? reason : "";
 }
 
-function assumptionMessage(slot: string, answer: string): string {
-  return `${slot} 以原文接受，未通过结构判定：${answer}`;
-}
-
-function acceptWithAssumption(
+function blockAfterGuidedFollowUps(
   question: DemandInterviewQuestion,
-  answer: unknown,
   quality: DemandInterviewAnswerQuality,
   counter: DemandInterviewFollowUpCounter,
-  acceptedAt: string,
 ): DemandInterviewAnswerQuality {
-  const answerText = textFromValue(answer);
-  const assumption = {
-    slot: clean(question.slot || question.id),
-    question_id: clean(question.id || question.question_id || question.slot),
-    answer: answerText,
-    reasons: quality.reasons,
-    message: assumptionMessage(clean(question.slot || question.id), answerText),
-    follow_up_count: counter.count,
-    accepted_at: acceptedAt,
-  };
+  const followUp = quality.follow_up_questions[0];
+  if (!followUp) return quality;
   return {
     ...quality,
-    original_score: quality.original_score || quality.score,
-    score: Math.max(75, quality.score),
-    level: "accepted_with_assumption",
-    follow_up_questions: [],
-    assumption,
+    level: "blocked_needs_clarification",
+    follow_up_questions: [{
+      ...followUp,
+      severity: "error",
+      code: `${followUp.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`}_HUMAN_CLARIFICATION_REQUIRED`,
+      plain_language_prompt: `${followUp.plain_language_prompt} 已连续 ${counter.count} 次未得到明确答案；为避免错误放行，请人工澄清后再继续。`,
+    }],
   };
 }
 
@@ -885,6 +873,7 @@ function qualityForAnsweredRecord(question?: DemandInterviewQuestion, record?: D
   if (!question || !hasAnswer(record)) return null;
   const stored = record.quality || record.answer_quality;
   if (stored && typeof stored === "object" && Number.isFinite(Number(stored.score))) {
+    if (clean(stored.level) === "accepted_with_assumption") return answerQualityFor(question, record.answer);
     return {
       score: Number(stored.score),
       level: clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")),
@@ -961,7 +950,7 @@ function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
     };
   }
   const score = Math.round(items.reduce((total, item) => total + Number(item.score || 0), 0) / items.length);
-  const lowQuality = items.filter((item) => item.level === "needs_follow_up" || item.level === "missing");
+  const lowQuality = items.filter((item) => ["needs_follow_up", "blocked_needs_clarification", "missing"].includes(item.level));
   const acceptedWithAssumption = items.filter((item) => item.level === "accepted_with_assumption");
   return {
     score,
@@ -1215,7 +1204,7 @@ export function answerDemandInterviewQuestion(
     };
     followUpCounts[slot] = nextCounter;
     if (nextCounter.count > MAX_GUIDED_FOLLOW_UPS_PER_SLOT) {
-      quality = acceptWithAssumption(question, answer, baseQuality, nextCounter, answeredAt);
+      quality = blockAfterGuidedFollowUps(question, baseQuality, nextCounter);
     }
   }
   session.follow_up_counts = followUpCounts;
@@ -1232,6 +1221,17 @@ export function answerDemandInterviewQuestion(
     },
   };
   session.updated_at = answeredAt;
+  const playback = session.playback && typeof session.playback === "object"
+    ? session.playback as DemandRecord & { confirmed?: boolean }
+    : null;
+  if (playback?.confirmed === true) {
+    session.playback = {
+      ...playback,
+      confirmed: false,
+      invalidated_at: answeredAt,
+      invalidation_reason: "interview_answer_changed",
+    };
+  }
   return refreshSession(session as DemandInterviewSession);
 }
 

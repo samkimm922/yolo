@@ -55,6 +55,37 @@ async function answer(root, sessionPath, question, value) {
   return out.json();
 }
 
+async function generatePlayback(root, sessionPath) {
+  const out = capture();
+  const exitCode = await runYoloInterviewCli([
+    "playback",
+    "--session",
+    sessionPath,
+    "--json",
+  ], { cwd: root, stdout: out.stream });
+  assert.equal(exitCode, 0);
+  return out.json();
+}
+
+async function confirmCurrentPlayback(root, sessionPath) {
+  const generated = await generatePlayback(root, sessionPath);
+  const playback = generated.outputs[0].playback;
+  const contentHash = playback.content_hash || "legacy-red-current-snapshot";
+  const out = capture();
+  const exitCode = await runYoloInterviewCli([
+    "playback",
+    "--session",
+    sessionPath,
+    "--confirm",
+    contentHash,
+    "--json",
+  ], { cwd: root, stdout: out.stream });
+  assert.equal(exitCode, 0);
+  const result = out.json();
+  assert.equal(result.code, "PLAYBACK_CONFIRMED");
+  return result;
+}
+
 describe("yolo interview CLI", () => {
   test("parses supported interview subcommands", () => {
     const start = parseYoloInterviewArgs(["start", "inventory alerts", "--cwd", "/tmp/project", "--id", "inv", "--title", "Inventory", "--json", "--no-write"]);
@@ -79,10 +110,16 @@ describe("yolo interview CLI", () => {
     assert.equal(playbackText.input.confirm, "Looks right");
   });
 
-  test("playback --confirm accepts a value-less boolean flag and records confirmation", async () => {
+  test("playback rejects a value-less --confirm that is not bound to the current content", async () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
       const out = capture();
       const exitCode = await runYoloInterviewCli([
         "playback",
@@ -92,23 +129,28 @@ describe("yolo interview CLI", () => {
         "--json",
       ], { cwd: root, stdout: out.stream });
 
-      assert.equal(exitCode, 0);
+      assert.equal(exitCode, 2);
       const result = out.json();
-      assert.equal(result.status, "success");
-      assert.equal(result.code, "PLAYBACK_CONFIRMED");
+      assert.equal(result.status, "error");
+      assert.equal(result.code, "PLAYBACK_CONFIRMATION_MISMATCH");
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
-      assert.equal(saved.playback.confirmed, true);
-      assert.equal(saved.playback.answer, "true");
+      assert.notEqual(saved.playback?.confirmed, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("playback --confirm keeps explicit confirmation text", async () => {
+  test("playback rejects arbitrary confirmation text that does not identify the current snapshot", async () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
       const out = capture();
       const exitCode = await runYoloInterviewCli([
         "playback",
@@ -119,13 +161,72 @@ describe("yolo interview CLI", () => {
         "--json",
       ], { cwd: root, stdout: out.stream });
 
-      assert.equal(exitCode, 0);
+      assert.equal(exitCode, 2);
       const result = out.json();
-      assert.equal(result.code, "PLAYBACK_CONFIRMED");
+      assert.equal(result.code, "PLAYBACK_CONFIRMATION_MISMATCH");
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
-      assert.equal(saved.playback.confirmed, true);
-      assert.equal(saved.playback.answer, "Confirmed after review");
+      assert.notEqual(saved.playback?.confirmed, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("answer changes automatically invalidate confirmation for the previous snapshot", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
+      await confirmCurrentPlayback(root, started.session_path);
+
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Warehouse supervisors review inventory every afternoon and decide which locations receive replenishment.",
+      );
+
+      const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
+      assert.equal(saved.playback.confirmed, false);
+      assert.equal(saved.playback.invalidation_reason, "interview_answer_changed");
+      assert.equal(typeof saved.playback.invalidated_at, "string");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("to-demand rejects a persisted confirmation when answers no longer match its snapshot", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
+      await confirmCurrentPlayback(root, started.session_path);
+
+      const tampered = JSON.parse(readFileSync(started.session_path, "utf8"));
+      tampered.answers.target_users.answer = "Warehouse supervisors review a different replenishment workflow.";
+      tampered.answers.target_users.normalized.text = tampered.answers.target_users.answer;
+      writeFileSync(started.session_path, JSON.stringify(tampered), "utf8");
+
+      const out = capture();
+      const exitCode = await runYoloInterviewCli([
+        "to-demand",
+        "--session",
+        started.session_path,
+        "--json",
+      ], { cwd: root, stdout: out.stream });
+
+      assert.equal(exitCode, 2);
+      assert.equal(out.json().code, "PLAYBACK_CONFIRMATION_STALE");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -257,7 +358,7 @@ describe("yolo interview CLI", () => {
     }
   });
 
-  test("text output shows capped follow-up assumptions", async () => {
+  test("text output shows fail-closed guidance after repeated vague answers", async () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
@@ -276,14 +377,13 @@ describe("yolo interview CLI", () => {
       ], { cwd: root, stdout: out.stream });
 
       assert.equal(exitCode, 0);
-      assert.match(out.text(), /assumptions:/);
-      assert.match(out.text(), /success_criteria 以原文接受，未通过结构判定/);
-      assert.doesNotMatch(out.text(), /follow_up:/);
+      assert.match(out.text(), /follow_up:/);
+      assert.match(out.text(), /人工澄清/);
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
-      assert.equal(saved.answers.success_criteria.quality.level, "accepted_with_assumption");
+      assert.equal(saved.answers.success_criteria.quality.level, "blocked_needs_clarification");
       assert.equal(saved.follow_up_counts.success_criteria.count, 3);
-      assert.equal(saved.accepted_assumptions.length, 1);
+      assert.equal(saved.accepted_assumptions.length, 0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -339,10 +439,7 @@ describe("yolo interview CLI", () => {
       // P0.3: approval must come from real interview answer, not --approve flag
       await answer(root, started.session_path, "execution_approval", "Approved, proceed to PRD.");
 
-      // Simulate playback confirmation (P0.3: playback must be confirmed before to-demand)
-      const sessionData = JSON.parse(readFileSync(started.session_path, "utf8"));
-      sessionData.playback = { confirmed: true, confirmed_by: "test", items: [] };
-      writeFileSync(started.session_path, JSON.stringify(sessionData), "utf8");
+      await confirmCurrentPlayback(root, started.session_path);
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -402,10 +499,7 @@ describe("yolo interview CLI", () => {
       // P0.3: approval must come from real interview answer, not --approve flag
       await answer(root, started.session_path, "execution_approval", "Approved, proceed to PRD.");
 
-      // Simulate playback confirmation (P0.3)
-      const sessionData2 = JSON.parse(readFileSync(started.session_path, "utf8"));
-      sessionData2.playback = { confirmed: true, confirmed_by: "test", items: [] };
-      writeFileSync(started.session_path, JSON.stringify(sessionData2), "utf8");
+      await confirmCurrentPlayback(root, started.session_path);
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -448,10 +542,7 @@ describe("yolo interview CLI", () => {
       ];
       for (const [question, value] of answers) await answer(root, started.session_path, question, value);
 
-      // Simulate playback confirmation (P0.3)
-      const sessionData3 = JSON.parse(readFileSync(started.session_path, "utf8"));
-      sessionData3.playback = { confirmed: true, confirmed_by: "test", items: [] };
-      writeFileSync(started.session_path, JSON.stringify(sessionData3), "utf8");
+      await confirmCurrentPlayback(root, started.session_path);
 
       const out = capture();
       const exitCode = await runYoloCli([

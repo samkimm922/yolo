@@ -204,15 +204,37 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       if (!read.ok) return error("playback", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const state = read.state;
       const generated = buildUnderstandingPlayback(state);
-      const hasConfirm = cleanCliText(input.confirm).length > 0;
+      const confirmValue = cleanCliText(input.confirm);
+      const hasConfirm = confirmValue.length > 0;
       if (hasConfirm) {
+        if (generated.confirmation_required !== true) {
+          return error("playback", "PLAYBACK_NOTHING_TO_CONFIRM", "Understanding playback has no collected demand content to confirm.", 2);
+        }
+        if (confirmValue !== generated.content_hash) {
+          return emit("playback", interviewResult("playback", state, {
+            status: "error",
+            code: "PLAYBACK_CONFIRMATION_MISMATCH",
+            summary: "Confirmation does not identify the current understanding snapshot. Review the generated playback and confirm its exact content_hash.",
+            outputs: [{ playback: generated }],
+            next_actions: [
+              `Confirm this exact snapshot: yolo interview playback --session ${state.interview_path || ""} --confirm "${generated.content_hash}"`,
+            ],
+          }), 2);
+        }
         const now = new Date().toISOString();
         state.playback = {
           ...generated,
           confirmed: true,
           confirmed_by: "user",
-          answer: cleanCliText(input.confirm),
+          answer: confirmValue,
+          confirmed_content_hash: generated.content_hash,
           confirmed_at: now,
+          confirmation_evidence: {
+            schema: "yolo.demand.playback_confirmation_evidence.v1",
+            type: "user_provided_content_hash",
+            provided_content_hash: confirmValue,
+            matches_current_snapshot: true,
+          },
         };
         const interviewPath = state.interview_path || "";
         if (writeArtifacts) writeJsonFile(interviewPath, state);
@@ -229,11 +251,11 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       return emit("playback", interviewResult("playback", state, {
         status: "ready",
         code: "PLAYBACK_GENERATED",
-        summary: "Understanding playback generated. Review it, then confirm with --confirm '<your words>'.",
+        summary: "Understanding playback generated. Review it, then confirm with its exact content_hash.",
         artifacts: [],
         outputs: [{ playback: generated }],
         runtime_next_actions: [
-          `Confirm understanding: yolo interview playback --session ${confirmInterviewPath} --confirm "<your confirmation>"`,
+          `Confirm understanding: yolo interview playback --session ${confirmInterviewPath} --confirm "${generated.content_hash}"`,
         ],
       }));
     }
@@ -245,6 +267,13 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       const stateForDemand = decorateInterviewState(cloneJson(read.state));
       if (stateForDemand.playback?.confirmed !== true) {
         return error("to-demand", "PLAYBACK_UNCONFIRMED", "Understanding playback has not been confirmed by the user. Run playback confirmation before to-demand.", 2);
+      }
+      const currentPlayback = buildUnderstandingPlayback(stateForDemand);
+      const confirmedHash = cleanCliText(stateForDemand.playback.confirmed_content_hash);
+      const contractHash = cleanCliText((stateForDemand.playback.confirmation_contract as Record<string, unknown> | undefined)?.expected_content_hash);
+      const evidenceHash = cleanCliText((stateForDemand.playback.confirmation_evidence as Record<string, unknown> | undefined)?.provided_content_hash);
+      if (confirmedHash !== currentPlayback.content_hash || contractHash !== currentPlayback.content_hash || evidenceHash !== currentPlayback.content_hash) {
+        return error("to-demand", "PLAYBACK_CONFIRMATION_STALE", "Understanding playback confirmation does not match the current demand answers. Generate and confirm a new playback snapshot before to-demand.", 2);
       }
       if (stateForDemand.coverage?.ready_for_prd_intake !== true) {
         const blockers = stateForDemand.coverage?.readiness?.blockers || [];

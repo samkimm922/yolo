@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DEMAND_INTERVIEW_QUESTION_BANK } from "./interview.js";
 
 export const UNDERSTANDING_PLAYBACK_SCHEMA = "yolo.demand.understanding_playback.v1";
@@ -51,6 +52,19 @@ export interface UnderstandingPlayback {
   summary: string;
   confirmation_required: boolean;
   prompt: string;
+  content_hash: string;
+  confirmation_contract: {
+    schema: string;
+    subject: string;
+    algorithm: string;
+    expected_content_hash: string;
+    evidence_required: string;
+  };
+}
+
+function playbackContentHash(items: PlaybackItem[]): string {
+  const snapshot = JSON.stringify({ schema: UNDERSTANDING_PLAYBACK_SCHEMA, items });
+  return `sha256:${createHash("sha256").update(snapshot).digest("hex")}`;
 }
 
 // 在进入 PRD 前，把已收集的每个槽位复述成"我的理解"清单，要求用户逐项确认或纠正。
@@ -75,6 +89,7 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
     : "（尚未收集到任何需求信息）";
 
   const confirmationRequired = items.length > 0;
+  const contentHash = playbackContentHash(items);
   const prompt = confirmationRequired
     ? `以下是我目前对需求的理解，请逐项确认是否正确；如有偏差请直接纠正后我再更新，确认无误才进入 PRD：\n${summary}`
     : "目前还没有可复述的需求信息，请先回答前面的问题。";
@@ -85,5 +100,13 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
     summary,
     confirmation_required: confirmationRequired,
     prompt,
+    content_hash: contentHash,
+    confirmation_contract: {
+      schema: "yolo.demand.playback_confirmation_contract.v1",
+      subject: "playback.items",
+      algorithm: "sha256",
+      expected_content_hash: contentHash,
+      evidence_required: "user_provided_content_hash",
+    },
   };
 }
