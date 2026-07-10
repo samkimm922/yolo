@@ -23,6 +23,7 @@ const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set(BEHAVIOR_VERIFICATION_COND
 const TARGET_COVERAGE_CONDITION_TYPES = new Set(TARGET_COVERAGE_CONDITION_TYPE_LIST);
 
 const STRICT_EXECUTION_MODES = new Set(["runner", "release"]);
+const TEST_CONDITION_TYPES = new Set(["tests_pass", "test_file_passes"]);
 const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence", "test_count"]);
 const POSITIVE_AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "must_fail_probe", "red_green_sequence"]);
 
@@ -175,7 +176,7 @@ function isBehaviorVerificationGate(condition) {
 
 function conditionRequiresNonEmptyTests(condition = Object()) {
   const normalized = normalizeCondition(condition);
-  if (normalized.severity !== "FAIL" || normalized.type !== "tests_pass") return false;
+  if (normalized.severity !== "FAIL" || !TEST_CONDITION_TYPES.has(normalized.type)) return false;
   const params = condition.params || Object();
   return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
 }

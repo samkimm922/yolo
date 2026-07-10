@@ -138,9 +138,11 @@ function extractDeclaredTestCount(output: string, rule: TestCountRule, source: s
   if (!pattern.includes("(?<count>")) {
     return { passed: false, detail: `${source} pattern must declare a named (?<count>...) capture` };
   }
-  const regex = /^[imsu]*$/.test(flags) ? safeRegExp(pattern, flags) : null;
+  const regex = /^[imsu]*$/.test(flags) ? safeRegExp(pattern, `${flags}g`) : null;
   if (!regex) return { passed: false, detail: `${source} pattern or flags are invalid or unsafe` };
-  const captured = regex.exec(output)?.groups?.count;
+  const matches = [...output.matchAll(regex)];
+  if (matches.length > 1) return { passed: false, detail: `${source} 匹配到多个 test count，结果有歧义` };
+  const captured = matches[0]?.groups?.count;
   if (captured === undefined) return { passed: false, detail: `${source} 未能从测试输出提取 count` };
   if (!/^\d+$/.test(captured)) return { passed: false, detail: `${source} 提取的 count 不是非负整数: ${captured}` };
   const found = Number(captured);
@@ -160,8 +162,10 @@ function packageTestScript(command: string, ROOT: string): string {
   const [executable, ...args] = parsed.argv;
   if (!["npm", "pnpm", "yarn"].includes(executableName(executable))) return "";
   const first = args.findIndex((arg) => !arg.startsWith("-"));
-  const script = first >= 0 && args[first] === "run" ? args[first + 1] : args[first];
+  const scriptIndex = first >= 0 && args[first] === "run" ? first + 1 : first;
+  const script = scriptIndex >= 0 ? args[scriptIndex] : "";
   if (script !== "test") return "";
+  if (args.slice(scriptIndex + 1).some((arg) => arg !== "--")) return "";
   try {
     const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8"));
     return cleanString(pkg?.scripts?.test);
@@ -170,11 +174,27 @@ function packageTestScript(command: string, ROOT: string): string {
   }
 }
 
+const NODE_TEST_REPORTERS = new Set(["spec", "tap"]);
+
+function nodeTestArgsUseFixedSchema(args: string[]): boolean {
+  if (!args.includes("--test") || args.includes("--no-test")) return false;
+  if (args.some((arg) => ["-c", "--check", "-e", "--eval", "-p", "--print"].includes(arg) || /^-(?:e|p).+/.test(arg) || /^--(?:eval|print)=/.test(arg))) {
+    return false;
+  }
+  const reporters: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--test-reporter") reporters.push(args[index + 1] || "");
+    else if (arg.startsWith("--test-reporter=")) reporters.push(arg.slice("--test-reporter=".length));
+  }
+  return reporters.length <= 1 && reporters.every((reporter) => NODE_TEST_REPORTERS.has(reporter));
+}
+
 function commandUsesNodeTest(command: string, ROOT: string, nested = false): boolean {
   const parsed = parseCommandToArgv(command);
   if (!parsed.ok || !parsed.argv) return false;
   const [executable, ...args] = parsed.argv;
-  if (executableName(executable) === "node" && args.some((arg) => arg === "--test" || arg.startsWith("--test="))) return true;
+  if (executableName(executable) === "node" && nodeTestArgsUseFixedSchema(args)) return true;
   if (nested) return false;
   const script = packageTestScript(command, ROOT);
   return Boolean(script) && commandUsesNodeTest(script, ROOT, true);
@@ -232,7 +252,7 @@ export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, RO
   const commandWithFile = file && baseCommand.includes("{file}") ? baseCommand.replaceAll("{file}", file) : baseCommand;
   const availability = assertBuildCommandAvailable("test", commandConfig("test", commandWithFile, projectConfig), ROOT);
   if (!availability.ok) return { passed: false, detail: availability.message, type: "tests_pass" };
-  const result = runCommand(commandWithFile, ROOT, params.timeout_ms || resolveGateTimeout("test", config), "test");
+  const result = runCommand(commandWithFile, ROOT, params.timeout_ms || resolveGateTimeout("test", projectConfig), "test");
   if (result.ok && requiresNonEmptyTests(params) && testOutputHasAssertionFailure(result.out)) {
     return {
       passed: false,
