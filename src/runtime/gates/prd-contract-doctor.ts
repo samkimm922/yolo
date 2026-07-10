@@ -10,6 +10,7 @@ import {
 } from "../../prd/condition-catalog.js";
 import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolchain.js";
 import { resolveWithinRoot } from "../../lib/security/path-guard.js";
+import { safeRegExp } from "../../lib/security/regex-guard.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
 import { shouldInspectAtomicity } from "./readiness-policy.js";
@@ -22,7 +23,8 @@ const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set(BEHAVIOR_VERIFICATION_COND
 const TARGET_COVERAGE_CONDITION_TYPES = new Set(TARGET_COVERAGE_CONDITION_TYPE_LIST);
 
 const STRICT_EXECUTION_MODES = new Set(["runner", "release"]);
-const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence"]);
+const TEST_CONDITION_TYPES = new Set(["tests_pass", "test_file_passes"]);
+const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence", "test_count"]);
 const POSITIVE_AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "must_fail_probe", "red_green_sequence"]);
 
 function asArray(value) {
@@ -174,7 +176,7 @@ function isBehaviorVerificationGate(condition) {
 
 function conditionRequiresNonEmptyTests(condition = Object()) {
   const normalized = normalizeCondition(condition);
-  if (normalized.severity !== "FAIL" || normalized.type !== "tests_pass") return false;
+  if (normalized.severity !== "FAIL" || !TEST_CONDITION_TYPES.has(normalized.type)) return false;
   const params = condition.params || Object();
   return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
 }
@@ -310,6 +312,29 @@ function inspectAuthenticityContract(task = Object()) {
         code: "TASK_VERIFICATION_AUTHENTICITY_METHOD_UNSUPPORTED",
         detail: `unsupported authenticity method at index ${index}: ${type || "(missing)"}`,
       });
+      continue;
+    }
+    if (type === "test_count") {
+      const minimum = Number(method.minimum);
+      const pattern = cleanString(method.pattern);
+      const flags = cleanString(method.flags);
+      if (!Number.isInteger(minimum) || minimum < 1) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_TEST_COUNT_MINIMUM_INVALID",
+          detail: "test_count authenticity method must declare a positive integer minimum",
+        });
+      }
+      if (!pattern.includes("(?<count>")) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_TEST_COUNT_CAPTURE_MISSING",
+          detail: "test_count authenticity method pattern must declare a named (?<count>...) capture",
+        });
+      } else if (!/^[imsu]*$/.test(flags) || !safeRegExp(pattern, flags)) {
+        failures.push({
+          code: "TASK_VERIFICATION_AUTHENTICITY_TEST_COUNT_PATTERN_INVALID",
+          detail: "test_count authenticity method must declare a safe output pattern and flags",
+        });
+      }
       continue;
     }
     if (["assertion_count", "required_marker", "forbidden_pattern"].includes(type) && methodFiles(method, task).length === 0) {

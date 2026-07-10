@@ -13,7 +13,8 @@ const DETERMINISTIC_ACCEPTANCE_RULES = new Set([
   "fixture_ground_truth_statistics",
   "error_input_nonzero_exit",
 ]);
-const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence"]);
+const AUTHENTICITY_METHOD_TYPES = new Set(["assertion_count", "required_marker", "forbidden_pattern", "must_fail_probe", "red_green_sequence", "test_count"]);
+const TEST_CONDITION_TYPES = new Set(["tests_pass", "test_file_passes"]);
 
 function asArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -68,7 +69,7 @@ function fileAllowedByTaskScope(file, task) {
 
 function taskRequiresNonEmptyTests(task) {
   return asArray(task?.post_conditions).some((condition) => {
-    if (condition?.type !== "tests_pass") return false;
+    if (!TEST_CONDITION_TYPES.has(condition?.type)) return false;
     const params = condition.params || {};
     return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
   });
@@ -231,6 +232,29 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
       // checks source/evidence artifacts that exist after the executor session.
       continue;
     }
+    if (type === "test_count") {
+      const minimum = Number(method.minimum);
+      const pattern = clean(method.pattern);
+      const flags = clean(method.flags);
+      if (!Number.isInteger(minimum) || minimum < 1) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_MINIMUM_INVALID",
+          detail: "test_count authenticity method must declare a positive integer minimum.",
+        });
+      }
+      if (!pattern.includes("(?<count>")) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_CAPTURE_MISSING",
+          detail: "test_count authenticity method pattern must declare a named (?<count>...) capture.",
+        });
+      } else if (!/^[imsu]*$/.test(flags) || !safeRegExp(pattern, flags)) {
+        failures.push({
+          code: "AUTHENTICITY_TEST_COUNT_PATTERN_INVALID",
+          detail: "test_count authenticity method must declare a safe output pattern and flags.",
+        });
+      }
+      continue;
+    }
 
     const files = methodFiles(method, auth, task, changedTests);
     if (files.length === 0) {
@@ -336,7 +360,7 @@ function testOutputLooksEmpty(output = "") {
 }
 
 function taskUsesNodeTestRunner(task, cwd) {
-  const testCondition = asArray(task?.post_conditions).find((condition) => condition?.type === "tests_pass");
+  const testCondition = asArray(task?.post_conditions).find((condition) => TEST_CONDITION_TYPES.has(condition?.type));
   const command = String(testCondition?.params?.command || "");
   if (/\bnode\s+--test\b/.test(command)) return true;
   if (!/\bnpm\s+(?:run\s+)?test\b/.test(command)) return false;
