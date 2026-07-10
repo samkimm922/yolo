@@ -664,13 +664,29 @@ function createApprovedDemand(projectRoot: string, id: string, title: string, ta
     ], { expectedStatus: ["success"] });
   }
 
+  const playback = runYolo("L2/setup-demand", [
+    "interview",
+    "playback",
+    "--session",
+    sessionPath,
+    "--json",
+  ], { expectedStatus: ["ready"] });
+  const playbackHash = String(playback.json?.outputs?.[0]?.playback?.content_hash || "");
+  assertCondition(Boolean(playbackHash), {
+    cell: "L2/setup-demand",
+    command: playback.run.display,
+    actualExit: playback.run.exitCode,
+    detail: "interview playback did not return a content_hash.",
+    stdout: tail(playback.run.stdout),
+  });
+
   runYolo("L2/setup-demand", [
     "interview",
     "playback",
     "--session",
     sessionPath,
     "--confirm",
-    "Confirmed for deterministic matrix CI.",
+    playbackHash,
     "--json",
   ], { expectedStatus: ["success"] });
 

@@ -540,13 +540,39 @@ async function runRoundFixture({
       if (failures.length) return { reports, failures, commands };
     }
 
-    const playback = await step("interview-playback", [
+    const generatedPlayback = await step("interview-playback-generate", [
+      "interview",
+      "playback",
+      "--session",
+      sessionPath as string,
+      "--json",
+    ]);
+    if (failures.length) return { reports, failures, commands };
+    const generatedReport = asRecord(generatedPlayback.report);
+    const generatedOutput = asRecord(asArray<Record<string, unknown>>(generatedReport.outputs)[0]);
+    const playbackHash = clean(asRecord(generatedOutput.playback).content_hash);
+    if (!playbackHash) {
+      failures.push({
+        round,
+        fixture,
+        step: "interview-playback-generate",
+        command: generatedPlayback.command,
+        exit_code: generatedPlayback.exit_code,
+        expected_exit_codes: [0],
+        code: "SOAK_PLAYBACK_HASH_MISSING",
+        status: generatedPlayback.report?.status || null,
+        summary: "Playback generation did not return a content_hash.",
+      });
+      return { reports, failures, commands };
+    }
+
+    const playback = await step("interview-playback-confirm", [
       "interview",
       "playback",
       "--session",
       sessionPath as string,
       "--confirm",
-      "Confirmed for soak dry-run.",
+      playbackHash,
       "--json",
     ]);
     if (failures.length) return { reports, failures, commands };
@@ -555,7 +581,7 @@ async function runRoundFixture({
       failures.push({
         round,
         fixture,
-        step: "interview-playback",
+        step: "interview-playback-confirm",
         command: playback.command,
         exit_code: playback.exit_code,
         expected_exit_codes: [0],

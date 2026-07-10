@@ -234,7 +234,7 @@ describe("demand interview", () => {
     assert.equal(coverage.ready_for_prd_intake, false);
     assert.equal(coverage.assumptions.length, 0);
     assert.equal(coverage.follow_up_plan.status, "needs_follow_up");
-    assert.ok(coverage.readiness.blockers.some((blocker) => /HUMAN_CLARIFICATION_REQUIRED/.test(blocker.code)));
+    assert.ok(coverage.readiness.blockers.some((blocker) => /HUMAN_CLARIFICATION_REQUIRED/.test(String(blocker.code))));
 
     const input = demandInterviewToDemandInput(session);
     assert.equal(input.open_questions.length, 1);
