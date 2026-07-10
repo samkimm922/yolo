@@ -5,7 +5,6 @@ import {
   buildReviewPreCompletedSet,
   ensureReviewTaskShape,
   fallbackClassifyFindings,
-  mergeClaudeReviewTasks,
   mergeReviewResults,
   pendingReviewTasks as findPendingReviewTasks,
   reviewClassifierMeta,
@@ -14,10 +13,8 @@ import {
   shouldSkipReviewForPrd as shouldSkipReviewForPrdByPolicy,
 } from "./round-helpers.js";
 import {
-  autoFixErrorFallback,
   buildReviewScannerArgs,
   inspectReviewScannerCoverage,
-  normalizeAutoFixResult,
   parseReviewFindings,
   scannerFailureDiagnostic,
   shouldStopReviewAfterFailure,
@@ -36,10 +33,6 @@ import {
 } from "./task-application.js";
 import { resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
 import { circuitBreakerThreshold, hasRepeatedFailure } from "../recovery/retry-policy.js";
-import {
-  commitTaskChanges,
-  rollbackMergedTaskFiles,
-} from "../execution/commit-flow.js";
 
 type Prd = Record<string, unknown>;
 type Task = Record<string, unknown>;
@@ -79,16 +72,6 @@ type LogReviewIssueFn = (
 ) => void;
 type LogReviewDoneFn = (status: string, findings: number, fixed: number, meta: Record<string, unknown>) => void;
 type LogReviewErrorFn = (title: string, detail: unknown, meta: Record<string, unknown>) => void;
-type CommitAutoFixChangesFn = (payload: {
-  rootDir: string;
-  files: string[];
-  message: string;
-}) => Promise<Record<string, unknown>> | Record<string, unknown>;
-type RollbackAutoFixChangesFn = (payload: {
-  rootDir: string;
-  files: string[];
-  reason: string;
-}) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 function noop(): void {}
 
@@ -135,35 +118,6 @@ function defaultReviewReportPath(prdPath: string): string {
   return normalized.includes("/.yolo/") ? ".yolo/lifecycle/review-report.json" : "review-report.json";
 }
 
-function uniqueStrings(values: unknown[] = []): string[] {
-  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
-}
-
-function buildReviewAutoFixCommitMessage(round: number): string {
-  return `fix: REVIEW-AUTO-FIX-R${round} [code] apply review auto-fixes`;
-}
-
-function defaultCommitAutoFixChanges({ rootDir, files, message }: {
-  rootDir: string;
-  files: string[];
-  message: string;
-}): Record<string, unknown> {
-  return commitTaskChanges({
-    rootDir,
-    files,
-    docUpdateFiles: [],
-    message,
-  });
-}
-
-function defaultRollbackAutoFixChanges({ rootDir, files, reason }: {
-  rootDir: string;
-  files: string[];
-  reason: string;
-}): Record<string, unknown> {
-  return rollbackMergedTaskFiles({ rootDir, files, reason });
-}
-
 function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -197,7 +151,7 @@ function taskSourceFindingIds(task: Record<string, unknown> = Object()): string[
 
 type FindingFixHistoryItem = {
   round: number;
-  task_type: "AUTO_FIX" | "CLAUDE_FIX";
+  task_type: "EXECUTOR_FIX";
   task_ids: string[];
   review_report_path: string;
   prd_path: string;
@@ -382,7 +336,7 @@ function recordFixHistoryForTasks({
   persistence: Map<string, FindingPersistenceState>;
   tasks?: Array<Record<string, unknown>>;
   round: number;
-  taskType: "AUTO_FIX" | "CLAUDE_FIX";
+  taskType: "EXECUTOR_FIX";
   reviewReportPath: string;
   prdPath: string;
 }): void {
@@ -434,8 +388,6 @@ export async function runReviewLoop({
   config = Object(),
   execFileSync,
   processExecPath = process.execPath,
-  commitAutoFixChanges = defaultCommitAutoFixChanges,
-  rollbackAutoFixChanges = defaultRollbackAutoFixChanges,
   logProgress = noop as LogProgressFn,
   logReviewStart = noop as LogReviewStartFn,
   logReviewGate = noop as LogReviewGateFn,
@@ -461,8 +413,6 @@ export async function runReviewLoop({
   config?: Record<string, unknown>;
   execFileSync?: (file: string, args: string[], options: Record<string, unknown>) => string;
   processExecPath?: string;
-  commitAutoFixChanges?: CommitAutoFixChangesFn;
-  rollbackAutoFixChanges?: RollbackAutoFixChangesFn;
   logProgress?: LogProgressFn;
   logReviewStart?: LogReviewStartFn;
   logReviewGate?: LogReviewGateFn;
@@ -719,105 +669,32 @@ export async function runReviewLoop({
         break;
       }
 
-      let classified: { autoFixTasks: Array<Record<string, unknown>>; claudeFixTasks: Array<Record<string, unknown>>; infoCount: number };
+      let classified: { executorTasks: Array<Record<string, unknown>>; infoCount: number };
       try {
         const mod = await importFromRoot(yoloRoot, "src/lib/scanner-to-task.js");
         const scannerToTasks = mod.scannerToTasks as (
           findings: unknown[],
           round?: number,
           options?: Record<string, unknown>,
-        ) => { autoFixTasks: Array<Record<string, unknown>>; claudeFixTasks: Array<Record<string, unknown>>; infoCount: number };
+        ) => { executorTasks: Array<Record<string, unknown>>; infoCount: number };
         classified = scannerToTasks(activeFindings, round, { reviewReportPath });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
-        logProgress("REVIEW", "", `scanner-to-task 不可用 (${errMsg})，全部转为 CLAUDE_FIX`);
+        logProgress("REVIEW", "", `scanner-to-task 不可用 (${errMsg})，使用内置 executor task 转换`);
         classified = fallbackClassifyFindings(activeFindings, round, { reviewReportPath }) as typeof classified;
       }
 
-      const { autoFixTasks, claudeFixTasks, infoCount } = classified;
+      const { executorTasks, infoCount } = classified;
 
-      logProgress("REVIEW", "", `${autoFixTasks.length} AUTO_FIX, ${claudeFixTasks.length} CLAUDE_FIX, ${infoCount} INFO`);
+      logProgress("REVIEW", "", `${executorTasks.length} EXECUTOR_FIX, ${infoCount} INFO`);
       logReviewGate("review-classifier", "pass", reviewLogMeta(
         {
-          ...reviewClassifierMeta({ round, findings: activeFindings, autoFixTasks, claudeFixTasks, infoCount }),
+          ...reviewClassifierMeta({ round, findings: activeFindings, executorTasks, infoCount }),
           skipped_unresolvable: unresolvable.length,
         },
       ));
 
-      let escalatedFromAuto: Array<Record<string, unknown>> = [];
-      let autoFixedCount = 0;
-      if (autoFixTasks.length > 0) {
-        recordFixHistoryForTasks({
-          findings: activeFindings,
-          persistence: findingPersistence,
-          tasks: autoFixTasks,
-          round,
-          taskType: "AUTO_FIX",
-          reviewReportPath,
-          prdPath,
-        });
-        logProgress("REVIEW", "", `执行 ${autoFixTasks.length} 个 AUTO_FIX 任务...`);
-        try {
-          const mod = await importFromRoot(yoloRoot, "lib/auto-fix.js");
-          const applyAutoFixTasks = mod.applyAutoFixTasks as (
-            tasks: Array<Record<string, unknown>>,
-            rootDir: string,
-            options: Record<string, unknown>,
-          ) => Promise<Record<string, unknown>>;
-          const autoResult = await applyAutoFixTasks(autoFixTasks, rootDir, {
-            logP: (id: string, phase: string, detail?: string) => logProgress(id || "AUTO-FIX", phase, detail),
-            prdPath,
-          });
-          const normalized = normalizeAutoFixResult(autoResult);
-          escalatedFromAuto = normalized.escalatedFromAuto;
-          autoFixedCount = normalized.autoFixedCount;
-          const autoModifiedFiles = uniqueStrings(Array.isArray(autoResult.modifiedFiles) ? autoResult.modifiedFiles : []);
-          if (autoFixedCount > 0) {
-            if (autoModifiedFiles.length === 0) {
-              throw new Error("AUTO_FIX reported fixed files but returned no modifiedFiles");
-            }
-            const message = buildReviewAutoFixCommitMessage(round);
-            const commitResult = await commitAutoFixChanges({
-              rootDir,
-              files: autoModifiedFiles,
-              message,
-            });
-            if (!commitResult?.committed) {
-              const reason = String(commitResult?.reason || commitResult?.commitWarning || "unknown");
-              await rollbackAutoFixChanges({
-                rootDir,
-                files: autoModifiedFiles,
-                reason: `auto_fix_commit_failed: ${reason}`,
-              });
-              throw new Error(`AUTO_FIX commit failed: ${reason}`);
-            }
-            logReviewGate("AUTO_FIX_COMMIT", "pass", reviewLogMeta({
-              round,
-              files: autoModifiedFiles,
-              commit: commitResult?.commit ?? null,
-            }));
-          }
-          logProgress("REVIEW", "", normalized.summary);
-          logReviewGate("AUTO_FIX", "pass", reviewLogMeta({
-            round,
-            ...normalized.gateMeta,
-          }));
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          logProgress("REVIEW", "", `auto-fix 模块异常: ${errMsg}，全部升级为 CLAUDE_FIX`);
-          logReviewError("AUTO_FIX 异常", errMsg, reviewLogMeta({ round, phase: "AUTO_FIX_ERROR" }));
-          ({ escalatedFromAuto, autoFixedCount } = autoFixErrorFallback(autoFixTasks));
-        }
-      }
-
-      const allClaudeTasks = mergeClaudeReviewTasks({ claudeFixTasks, escalatedFromAuto });
-
-      if (allClaudeTasks.length === 0) {
-        if (autoFixedCount > 0) {
-          logProgress("REVIEW", "", "AUTO_FIX 已处理，继续下一轮 review 扫描");
-          logReviewDone("auto_fix_applied", findings.length, autoFixedCount, reviewLogMeta({ round, status: "auto_fix_applied" }));
-          continue;
-        }
+      if (executorTasks.length === 0) {
         const recorded = Array.isArray(taskResults.review_unresolvable_findings)
           ? taskResults.review_unresolvable_findings as AutoFixUnresolvableFinding[]
           : [];
@@ -827,18 +704,18 @@ export async function runReviewLoop({
           recordReviewOutcome(outcome);
           break;
         }
-        logProgress("REVIEW", "", "无 CLAUDE_FIX 任务且无 AUTO_FIX 改动，review 完成");
+        logProgress("REVIEW", "", "无 executor 修复任务，review 完成");
         logReviewDone("pass", findings.length, 0, reviewLogMeta({ round, status: "clean" }));
         reviewCompleted = true;
         break;
       }
 
-      if (shouldBlockReviewTaskLimit(allClaudeTasks.length, maxReviewTasksPerRound)) {
+      if (shouldBlockReviewTaskLimit(executorTasks.length, maxReviewTasksPerRound)) {
         const taskLimitBlock = buildReviewTaskLimitBlock({
           round,
-          taskCount: allClaudeTasks.length,
+          taskCount: executorTasks.length,
           maxTasks: maxReviewTasksPerRound,
-          taskIds: allClaudeTasks.map((task) => String(task.id ?? "")),
+          taskIds: executorTasks.map((task) => String(task.id ?? "")),
         });
         logProgress("REVIEW", "BLOCKED", taskLimitBlock.message);
         logReviewError(taskLimitBlock.errorTitle, taskLimitBlock.errorDetail, reviewLogMeta(taskLimitBlock.meta));
@@ -854,21 +731,21 @@ export async function runReviewLoop({
         break;
       }
 
-      logProgress("REVIEW", "", `处理 ${allClaudeTasks.length} 个 CLAUDE_FIX 任务...`);
+      logProgress("REVIEW", "", `处理 ${executorTasks.length} 个 executor 修复任务...`);
 
       prd = loadLatestPrd();
       const addedReviewTasks = appendReviewTasksToPrd({
         prd,
         progress,
-        tasks: allClaudeTasks,
+        tasks: executorTasks,
         ensureTaskShape: ensureReviewTaskShape,
       });
       recordFixHistoryForTasks({
         findings: activeFindings,
         persistence: findingPersistence,
-        tasks: allClaudeTasks,
+        tasks: executorTasks,
         round,
-        taskType: "CLAUDE_FIX",
+        taskType: "EXECUTOR_FIX",
         reviewReportPath,
         prdPath,
       });
@@ -878,9 +755,9 @@ export async function runReviewLoop({
 
       writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
 
-      const reviewTaskIds = reviewTaskIdSet(allClaudeTasks);
+      const reviewTaskIds = reviewTaskIdSet(executorTasks);
       if (typeof mainLoop === "function" && taskResults) {
-        logProgress("REVIEW", "", "执行 CLAUDE_FIX 任务...");
+        logProgress("REVIEW", "", "执行 provider executor 任务...");
         try {
           const preCompleted = buildReviewPreCompletedSet({
             resumeCompleted,
@@ -927,7 +804,7 @@ export async function runReviewLoop({
 
       if (pendingDecision.action === "continue") {
         logProgress("REVIEW", "", pendingDecision.message ?? "");
-        logReviewDone("round_done", findings.length, autoFixedCount, reviewLogMeta({ round, status: "round_done" }));
+        logReviewDone("round_done", findings.length, 0, reviewLogMeta({ round, status: "round_done" }));
         continue;
       }
 

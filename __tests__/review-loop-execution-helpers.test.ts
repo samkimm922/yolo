@@ -5,10 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanProject } from "../src/review/scanner.js";
 import {
-  autoFixErrorFallback,
   buildReviewScannerArgs,
   inspectReviewScannerCoverage,
-  normalizeAutoFixResult,
   parseReviewFindings,
   scannerFailureDiagnostic,
   scannerStdoutFromError,
@@ -191,28 +189,4 @@ describe("review-loop execution helpers", () => {
     assert.equal(shouldStopReviewAfterFailure(5, 5), true);
   });
 
-  test("normalizeAutoFixResult returns escalations, count, summary, and gate metadata", () => {
-    const task = { id: "FIX-R1-001" };
-    assert.deepEqual(normalizeAutoFixResult({
-      escalatedTasks: [task],
-      stats: { fixed: 2, skipped: 1 },
-    }), {
-      escalatedFromAuto: [task],
-      autoFixedCount: 2,
-      summary: "AUTO_FIX 完成: 2 已修复, 1 升级为 CLAUDE_FIX",
-      gateMeta: {
-        phase: "AUTO_FIX_RESULT",
-        stats: { fixed: 2, skipped: 1 },
-        escalated: ["FIX-R1-001"],
-      },
-    });
-  });
-
-  test("autoFixErrorFallback escalates all auto-fix tasks", () => {
-    const tasks = [{ id: "AUTO-FIX-R1-001" }];
-    assert.deepEqual(autoFixErrorFallback(tasks), {
-      escalatedFromAuto: tasks,
-      autoFixedCount: 0,
-    });
-  });
 });

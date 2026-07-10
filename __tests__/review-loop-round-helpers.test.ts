@@ -6,7 +6,6 @@ import {
   ensureReviewTaskShape,
   fallbackClassifyFindings,
   isDryRunPrd,
-  mergeClaudeReviewTasks,
   mergeReviewResults,
   pendingReviewTasks,
   reviewClassifierMeta,
@@ -40,7 +39,7 @@ describe("review-loop round helpers", () => {
     assert.deepEqual(reviewScopeFilesForPrd({ ...prd, review_policy: { scope: "full" } }), []);
   });
 
-  test("fallbackClassifyFindings turns each non-info finding into one review_fix task", () => {
+  test("fallbackClassifyFindings turns findings into provider executor tasks", () => {
     const classified = fallbackClassifyFindings([
       { fix_type: "INFO", description: "FYI" },
       { finding_id: "F-A", fix_type: "CLAUDE_FIX", description: "Fix this", severity: "HIGH", files: ["src/a.ts:10"], match: "badA" },
@@ -48,19 +47,44 @@ describe("review-loop round helpers", () => {
     ], 2);
 
     assert.equal(classified.infoCount, 1);
-    assert.deepEqual(classified.autoFixTasks, []);
-    assert.equal(classified.claudeFixTasks.length, 2);
-    assert.equal(classified.claudeFixTasks[0].id, "FIX-R2-001");
-    assert.equal(classified.claudeFixTasks[0].task_kind, "review_fix");
-    assert.deepEqual(classified.claudeFixTasks[0].source_finding_ids, ["F-A"]);
-    assert.deepEqual(classified.claudeFixTasks[0].scope.targets, [{ file: "src/a.ts" }]);
-    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) => condition.type === "target_file_modified" && condition.severity === "FAIL"));
-    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) =>
+    assert.equal(classified.executorTasks.length, 2);
+    assert.equal(classified.executorTasks[0].id, "FIX-R2-001");
+    assert.equal(classified.executorTasks[0].task_kind, "review_fix");
+    assert.equal(classified.executorTasks[0].fix_type, "CLAUDE_FIX");
+    assert.deepEqual(classified.executorTasks[0].source_finding_ids, ["F-A"]);
+    assert.deepEqual(classified.executorTasks[0].scope.targets, [{ file: "src/a.ts" }]);
+    assert.ok(classified.executorTasks[0].post_conditions.some((condition) => condition.type === "target_file_modified" && condition.severity === "FAIL"));
+    assert.ok(classified.executorTasks[0].post_conditions.some((condition) =>
       condition.type === "code_not_contains" &&
       condition.severity === "FAIL" &&
       condition.params.source_finding_id === "F-A"
     ));
-    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) => condition.type === "no_new_type_errors" && condition.severity === "FAIL"));
+    assert.ok(classified.executorTasks[0].post_conditions.some((condition) => condition.type === "no_new_type_errors" && condition.severity === "FAIL"));
+  });
+
+  test("groups same-file same-rule mechanical findings before applying the review task limit", () => {
+    const classified = fallbackClassifyFindings(
+      Array.from({ length: 8 }, (_, index) => ({
+        finding_id: `AUTO-${index + 1}`,
+        scanner_id: "debug-console-log",
+        fix_type: "AUTO_FIX",
+        severity: "LOW",
+        file: "src/a.ts",
+        line: index + 1,
+        match: `console.log(${index + 1})`,
+        description: `Remove console.log at line ${index + 1}`,
+        suggested_fix: "Remove the debug-only console call.",
+      })),
+      3,
+    );
+
+    assert.equal(classified.executorTasks.length, 1);
+    assert.equal(classified.executorTasks[0].fix_type, "CLAUDE_FIX");
+    assert.deepEqual(classified.executorTasks[0].source_finding_ids, [
+      "AUTO-1", "AUTO-2", "AUTO-3", "AUTO-4", "AUTO-5", "AUTO-6", "AUTO-7", "AUTO-8",
+    ]);
+    assert.equal(classified.executorTasks[0].source_findings.length, 8);
+    assert.equal(classified.executorTasks[0].recipe_hint.rule_id, "debug-console-log");
   });
 
   test("contractReviewFindings selects ship-blocking review findings", () => {
@@ -86,18 +110,14 @@ describe("review-loop round helpers", () => {
     assert.deepEqual(reviewClassifierMeta({
       round: 1,
       findings: [{}, {}],
-      autoFixTasks: [{ id: "AUTO-FIX-R1-001" }],
-      claudeFixTasks: [{ id: "FIX-R1-001" }],
-      reviewToPrdTasks: [{ id: "FIX-R1-002" }],
+      executorTasks: [{ id: "FIX-R1-001" }, { id: "FIX-R1-002" }],
       infoCount: 3,
     }), {
       round: 1,
       total_findings: 2,
-      auto_fix_tasks: 1,
-      claude_fix_tasks: 2,
+      executor_tasks: 2,
       info_count: 3,
-      auto_fix_ids: ["AUTO-FIX-R1-001"],
-      claude_fix_ids: ["FIX-R1-001", "FIX-R1-002"],
+      executor_task_ids: ["FIX-R1-001", "FIX-R1-002"],
     });
 
     assert.deepEqual(reviewIssueLogInput({
@@ -134,12 +154,6 @@ describe("review-loop round helpers", () => {
       post_conditions: [],
       acceptance_criteria: [],
     });
-
-    assert.deepEqual(mergeClaudeReviewTasks({
-      claudeFixTasks: [{ id: "A" }],
-      reviewToPrdTasks: [{ id: "B" }],
-      escalatedFromAuto: [{ id: "C" }],
-    }), [{ id: "A" }, { id: "B" }, { id: "C" }]);
 
     assert.deepEqual([...buildReviewPreCompletedSet({
       resumeCompleted: new Set(["A"]),

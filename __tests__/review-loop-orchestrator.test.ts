@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { runReviewLoop } from "../src/runtime/review-loop/orchestrator.js";
+import { classifyTaskExecution } from "../src/runtime/task-loop/router.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -529,11 +530,10 @@ test("runReviewLoop fallback classifier still writes canonical review_fix tasks 
   }
 });
 
-test("runReviewLoop loads auto-fix from dist src layout", async () => {
-  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-autofix-dist-src-"));
+test("runReviewLoop sends AUTO_FIX findings through mainLoop instead of direct commit", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-autofix-provider-"));
   const fakeYoloRoot = resolve(root, "fake-dist");
   const prdPath = resolve(root, "prd.json");
-  const reviewErrors = [];
   const prd = {
     id: "PRD-REVIEW-AUTOFIX-DIST-SRC",
     tasks: [{
@@ -555,7 +555,8 @@ test("runReviewLoop loads auto-fix from dist src layout", async () => {
     description: "Remove console.log",
   };
   let scanRuns = 0;
-  const commits = [];
+  const directCommits = [];
+  const executorTasks = [];
 
   try {
     mkdirSync(resolve(fakeYoloRoot, "src/lib"), { recursive: true });
@@ -581,25 +582,33 @@ test("runReviewLoop loads auto-fix from dist src layout", async () => {
         return scanRuns === 1 ? coveredScan([finding]) : emptyCoveredScan();
       },
       mainLoop: async () => {
-        throw new Error("mainLoop should not run after AUTO_FIX succeeds");
+        const latest = JSON.parse(readFileSync(prdPath, "utf8"));
+        const pending = latest.tasks.filter((task) => task.task_kind === "review_fix" && task.status === "pending");
+        executorTasks.push(...pending);
+        for (const task of pending) task.status = "completed";
+        writeFileSync(prdPath, JSON.stringify(latest, null, 2), "utf8");
+        return { ...emptyTaskResults(), completed: pending.map((task) => task.id) };
       },
       loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
       normalizeRepoPath: (value) => value,
       commitAutoFixChanges: async (payload) => {
-        commits.push(payload);
+        directCommits.push(payload);
         return { committed: true, commit: "abc123" };
       },
-      logReviewError: (...args) => reviewErrors.push(args),
-    });
+    } as any);
 
     assert.equal(scanRuns, 2);
     assert.deepEqual(result.failed, []);
-    assert.equal(reviewErrors.some(([title]) => title === "AUTO_FIX 异常"), false);
-    assert.deepEqual(commits, [{
-      rootDir: root,
-      files: ["src/app.js"],
-      message: "fix: REVIEW-AUTO-FIX-R1 [code] apply review auto-fixes",
-    }]);
+    assert.deepEqual(directCommits, []);
+    assert.equal(executorTasks.length, 1);
+    assert.equal(executorTasks[0].fix_type, "CLAUDE_FIX");
+    assert.equal(executorTasks[0].recipe_hint.rule_id, "R-console-log");
+    assert.deepEqual(classifyTaskExecution(executorTasks[0]), {
+      route: "provider",
+      reason: "requires_reasoning_or_unknown_recipe",
+      quality_profile: "default",
+      provider_required: true,
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

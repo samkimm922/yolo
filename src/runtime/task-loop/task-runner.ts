@@ -1,6 +1,5 @@
 import { safeExecSync as execSync } from "../../lib/security/safe-exec.js";
 import { classifyTaskExecution } from "./router.js";
-import { isBusinessFile } from "../execution/change-set.js";
 import { handleGatePassFlow } from "../execution/gate-pass-flow.js";
 import { handleGateFailureFlow } from "../execution/gate-failure-flow.js";
 import { handleRunTaskExceptionFlow } from "../execution/exception-flow.js";
@@ -75,9 +74,7 @@ export async function runTaskWithRuntime({
   logTaskStart(task.id, task.title || task.description || "");
   updatePrdTaskStatus(task.id, {
     status: "running",
-    phase: taskRoute.route === "auto_fix"
-      ? "auto_fix"
-      : taskRoute.route === "deterministic_check" ? "deterministic_check" : "claude",
+    phase: taskRoute.route === "deterministic_check" ? "deterministic_check" : "claude",
     updatedAt: new Date().toISOString(),
   });
 
@@ -95,12 +92,10 @@ export async function runTaskWithRuntime({
     shouldRunPrecheck,
     skippedTaskPostconditionsPass,
     taskPostconditionsPass,
-    commitTask,
     recordTaskTransition,
     writeTaskResult,
     updatePrdTaskStatus,
     applySplitSuggestionsToPrd,
-    isBusinessFile: (file: string) => isBusinessFile(file, { config }),
     logProgress,
     logTaskBash,
     logTaskDone,

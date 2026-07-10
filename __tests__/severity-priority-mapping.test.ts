@@ -37,7 +37,7 @@ describe("severity to priority mapping is unified across review pipelines", () =
         match: "pattern",
       }], { round: 1 });
 
-      const scannerPriority = scannerResult.claudeFixTasks[0]?.priority;
+      const scannerPriority = scannerResult.executorTasks[0]?.priority;
       const reviewPriority = reviewResult.tasks[0]?.priority;
       const canonical = severityToPriority(severity);
 
@@ -74,7 +74,7 @@ describe("severity to priority mapping is unified across review pipelines", () =
       description: "critical",
       match: "x",
     }], 1);
-    assert.equal(scannerCritical.claudeFixTasks[0].priority, "P0");
+    assert.equal(scannerCritical.executorTasks[0].priority, "P0");
 
     const reviewCritical = reviewFindingsToPrdTasks([{
       finding_id: "F-crit",
@@ -99,9 +99,8 @@ describe("severity to priority mapping is unified across review pipelines", () =
       match: "innerHTML",
     }], 3);
 
-    assert.equal(result.autoFixTasks.length, 0);
-    assert.equal(result.claudeFixTasks.length, 1);
-    const task = result.claudeFixTasks[0];
+    assert.equal(result.executorTasks.length, 1);
+    const task = result.executorTasks[0];
     assert.equal(task.id, "FIX-R3-001");
     assert.equal(task.task_kind, "review_fix");
     assert.deepEqual(task.source_finding_ids, ["REV-SINGLE-001"]);
@@ -111,5 +110,24 @@ describe("severity to priority mapping is unified across review pipelines", () =
       condition.severity === "FAIL" &&
       condition.params.source_finding_id === "REV-SINGLE-001"
     ));
+  });
+
+  test("scannerToTasks converts AUTO_FIX findings into executor tasks with recipe hints", () => {
+    const result = scannerToTasks([{
+      finding_id: "REV-AUTO-001",
+      scanner_id: "debug-console-log",
+      severity: "LOW",
+      fix_type: "AUTO_FIX",
+      file: "src/profile.ts",
+      line: 12,
+      description: "Remove debug console output",
+      match: "console.log(profile)",
+      suggested_fix: "Remove the debug-only call.",
+    }], 4);
+
+    assert.equal(result.executorTasks.length, 1);
+    assert.equal(result.executorTasks[0].fix_type, "CLAUDE_FIX");
+    assert.equal(result.executorTasks[0].recipe_hint?.rule_id, "debug-console-log");
+    assert.deepEqual(result.executorTasks[0].recipe_hint?.suggested_fixes, ["Remove the debug-only call."]);
   });
 });

@@ -55,8 +55,7 @@ export function reviewScopeFilesForPrd(
 }
 
 export type FallbackClassifierResult = {
-  autoFixTasks: ReviewPrdTask[];
-  claudeFixTasks: ReviewPrdTask[];
+  executorTasks: ReviewPrdTask[];
   infoCount: number;
 };
 
@@ -68,15 +67,8 @@ export function fallbackClassifyFindings(
   const normalizedFindings = normalizeReviewFindings(findings, { source: "review-classifier" });
   const infoCount = normalizedFindings.filter((finding) => finding.fix_type === "INFO").length;
   const converted = reviewFindingsToPrdTasks(normalizedFindings, { ...options, round });
-  const autoFixTasks: ReviewPrdTask[] = [];
-  const claudeFixTasks: ReviewPrdTask[] = [];
-  for (const task of converted.tasks) {
-    if (task.fix_type === "AUTO_FIX") autoFixTasks.push(task);
-    else claudeFixTasks.push(task);
-  }
   return {
-    autoFixTasks,
-    claudeFixTasks,
+    executorTasks: converted.tasks,
     infoCount,
   };
 }
@@ -89,42 +81,23 @@ export function contractReviewFindings(findings: ReviewFindingInput[] = []): Nor
     .map((finding, index) => normalizeReviewFinding(finding, { source: "review-contract", index }));
 }
 
-export function mergeClaudeReviewTasks<T extends { id?: unknown }>({
-  claudeFixTasks = [],
-  reviewToPrdTasks = [],
-  escalatedFromAuto = [],
-}: {
-  claudeFixTasks?: T[];
-  reviewToPrdTasks?: T[];
-  escalatedFromAuto?: T[];
-}): T[] {
-  return [...claudeFixTasks, ...reviewToPrdTasks, ...escalatedFromAuto];
-}
-
 export function reviewClassifierMeta({
   round,
   findings = [],
-  autoFixTasks = [],
-  claudeFixTasks = [],
-  reviewToPrdTasks = [],
+  executorTasks = [],
   infoCount = 0,
 }: {
   round?: number;
   findings?: unknown[];
-  autoFixTasks?: Array<{ id?: unknown }>;
-  claudeFixTasks?: Array<{ id?: unknown }>;
-  reviewToPrdTasks?: Array<{ id?: unknown }>;
+  executorTasks?: Array<{ id?: unknown }>;
   infoCount?: number;
 }) {
-  const allClaudeTasks = mergeClaudeReviewTasks({ claudeFixTasks, reviewToPrdTasks });
   return {
     round,
     total_findings: findings.length,
-    auto_fix_tasks: autoFixTasks.length,
-    claude_fix_tasks: allClaudeTasks.length,
+    executor_tasks: executorTasks.length,
     info_count: infoCount,
-    auto_fix_ids: autoFixTasks.map((task) => task.id),
-    claude_fix_ids: allClaudeTasks.map((task) => task.id),
+    executor_task_ids: executorTasks.map((task) => task.id),
   };
 }
 

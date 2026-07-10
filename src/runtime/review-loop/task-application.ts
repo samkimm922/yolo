@@ -211,7 +211,7 @@ export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds 
   const blockerId = `REVIEW-TASK-LIMIT-R${round}`;
   return {
     blockerId,
-    message: `本轮将生成 ${taskCount} 个 CLAUDE_FIX，超过上限 ${maxTasks}，拒绝写入 PRD`,
+    message: `本轮将生成 ${taskCount} 个 executor 修复任务，超过上限 ${maxTasks}，拒绝写入 PRD`,
     errorTitle: "REVIEW_TASK_LIMIT_BLOCKED",
     errorDetail: `generated=${taskCount}, max=${maxTasks}`,
     status: "blocked",

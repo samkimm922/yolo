@@ -25,7 +25,7 @@ describe("review-loop task application helpers", () => {
       taskIds: ["A", "B"],
     }), {
       blockerId: "REVIEW-TASK-LIMIT-R2",
-      message: "本轮将生成 7 个 CLAUDE_FIX，超过上限 5，拒绝写入 PRD",
+      message: "本轮将生成 7 个 executor 修复任务，超过上限 5，拒绝写入 PRD",
       errorTitle: "REVIEW_TASK_LIMIT_BLOCKED",
       errorDetail: "generated=7, max=5",
       status: "blocked",
