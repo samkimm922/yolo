@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { registerGeneratedArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
+import { appendStateEvent, provisionLedgerHmacKey } from "../src/runtime/evidence/ledger.js";
 import {
   appendLearningRecord,
   buildExperiencePackText,
@@ -14,6 +16,7 @@ import {
   retrieveRelevantLearningRecords,
   summarizeLearningCenter,
 } from "../src/runtime/learning/center.js";
+import { runLearnCli } from "../src/runtime/learning/learn.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-learning-center-"));
@@ -22,6 +25,32 @@ function tempProject() {
 function write(file, content) {
   mkdirSync(join(file, ".."), { recursive: true });
   writeFileSync(file, content, "utf8");
+}
+
+function writeVerifiedShipEvidence(root: string) {
+  const stateRoot = join(root, ".yolo");
+  const stateDir = join(stateRoot, "state");
+  const acceptancePath = join(stateRoot, "lifecycle", "acceptance-report.json");
+  const deliveryPath = join(stateRoot, "lifecycle", "delivery-report.json");
+  provisionLedgerHmacKey(stateRoot);
+  write(acceptancePath, JSON.stringify({ status: "completed", report: { status: "pass" } }));
+  registerGeneratedArtifactIntegrity([acceptancePath], { rootDir: root, stateRoot, source: "test-acceptance" });
+  appendStateEvent(stateDir, "lifecycle.acceptance.report", {
+    stage: "acceptance",
+    status: "pass",
+    artifact: acceptancePath,
+  }, { stateRoot, source: "test-acceptance" });
+  write(deliveryPath, JSON.stringify({
+    status: "completed",
+    report: { status: "success", acceptance_report_path: acceptancePath },
+  }));
+  registerGeneratedArtifactIntegrity([deliveryPath], { rootDir: root, stateRoot, source: "test-delivery" });
+  appendStateEvent(stateDir, "lifecycle.delivery.report", {
+    stage: "delivery",
+    status: "success",
+    artifact: deliveryPath,
+  }, { stateRoot, source: "test-delivery" });
+  return { stateRoot, acceptancePath, deliveryPath };
 }
 
 describe("learning center", () => {
@@ -172,15 +201,18 @@ describe("learning center", () => {
   test("retrieves a small relevant experience pack for the current task", () => {
     const root = tempProject();
     try {
+      const { stateRoot, deliveryPath } = writeVerifiedShipEvidence(root);
       appendLearningRecord({
-        type: "failure",
+        type: "retrospective",
         source: "test",
+        source_outcome: "success",
         gate: "tsc",
         lesson: "TS2352 happened when a service used as unknown as",
         prevention: "Narrow the value before casting.",
         files: ["src/services/category.ts"],
         confidence: 8,
-      }, { projectRoot: root, stateRoot: root, now: new Date("2026-05-25T00:00:00.000Z") });
+        evidence_refs: [deliveryPath],
+      }, { projectRoot: root, stateRoot, now: new Date("2026-05-25T00:00:00.000Z") });
       appendLearningRecord({
         type: "failure",
         source: "test",
@@ -189,7 +221,7 @@ describe("learning center", () => {
         prevention: "Remove unused imports.",
         files: ["src/other.ts"],
         confidence: 8,
-      }, { projectRoot: root, stateRoot: root, now: new Date("2026-05-25T00:00:01.000Z") });
+      }, { projectRoot: root, stateRoot, now: new Date("2026-05-25T00:00:01.000Z") });
 
       const task = {
         id: "FIX-LEARN-1",
@@ -200,14 +232,14 @@ describe("learning center", () => {
       };
       const result = retrieveRelevantLearningRecords({
         projectRoot: root,
-        stateRoot: root,
+        stateRoot,
         task,
         gate: "tsc",
         lastGateError: "src/services/category.ts error TS2352",
       });
       const pack = buildExperiencePackText({
         projectRoot: root,
-        stateRoot: root,
+        stateRoot,
         task,
         gate: "tsc",
         lastGateError: "src/services/category.ts error TS2352",
@@ -218,6 +250,96 @@ describe("learning center", () => {
       assert.match(pack, /Relevant Experience Pack/);
       assert.match(pack, /TS2352 happened/);
       assert.doesNotMatch(pack, /Unrelated eslint note/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not recommend a pattern recorded from a gate failure", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      runLearnCli([
+        "--record",
+        "--task=FIX-FAILED-RUN",
+        "--result=fail",
+        "--gate=gate-exit-1",
+        "--message=src/services/category.ts error TS2352 from as unknown as",
+        `--project-root=${root}`,
+        `--state-root=${stateRoot}`,
+      ]);
+
+      const stored = JSON.parse(readFileSync(join(stateRoot, "state/learning.jsonl"), "utf8").trim());
+      const result = retrieveRelevantLearningRecords({
+        projectRoot: root,
+        stateRoot,
+        gate: "gate-exit-1",
+        files: ["src/services/category.ts"],
+        error_codes: ["TS2352"],
+      });
+
+      assert.equal(result.selected_count, 0);
+      assert.equal(stored.source_outcome, "failure");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("fails closed when a claimed success has no signed ship evidence", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      appendLearningRecord({
+        type: "retrospective",
+        source: "test",
+        source_outcome: "success",
+        gate: "tsc",
+        lesson: "TS2352 narrowing pattern",
+        prevention: "Narrow before casting.",
+        files: ["src/services/category.ts"],
+        evidence_refs: [join(stateRoot, "lifecycle", "delivery-report.json")],
+      }, { projectRoot: root, stateRoot });
+
+      const result = retrieveRelevantLearningRecords({
+        projectRoot: root,
+        stateRoot,
+        gate: "tsc",
+        files: ["src/services/category.ts"],
+      });
+
+      assert.equal(result.selected_count, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("fails closed when signed ship evidence is modified after digest registration", () => {
+    const root = tempProject();
+    try {
+      const { stateRoot, deliveryPath } = writeVerifiedShipEvidence(root);
+      appendLearningRecord({
+        type: "retrospective",
+        source: "test",
+        source_outcome: "success",
+        gate: "tsc",
+        lesson: "TS2352 narrowing pattern",
+        prevention: "Narrow before casting.",
+        files: ["src/services/category.ts"],
+        evidence_refs: [deliveryPath],
+      }, { projectRoot: root, stateRoot });
+      write(deliveryPath, JSON.stringify({
+        status: "completed",
+        report: { status: "success", acceptance_report_path: "tampered" },
+      }));
+
+      const result = retrieveRelevantLearningRecords({
+        projectRoot: root,
+        stateRoot,
+        gate: "tsc",
+        files: ["src/services/category.ts"],
+      });
+
+      assert.equal(result.selected_count, 0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
