@@ -5,6 +5,7 @@ import {
   readdirSync as defaultReaddirSync,
   rmSync as defaultRmSync,
   unlinkSync as defaultUnlinkSync,
+  writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +28,7 @@ const RAW_STATE_LOG_FILES = [
   "yolo-output.log",
   "review-log.jsonl",
 ];
+const RAW_RUN_METADATA_FILE = "run-metadata.json";
 
 type StatusEntry = { field: string; status: string };
 type RemediationItem = {
@@ -94,15 +96,14 @@ export function archiveRawRunEvidence({
   stateDir,
   runtimeDir,
   completionStatus = "unknown",
+  runMetadata = null,
   now = new Date(),
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   mkdirSync = defaultMkdirSync,
   cpSync = defaultCpSync,
+  writeFileSync = defaultWriteFileSync,
 } = Object()) {
-  if (completionStatus !== "success") {
-    return { archived: false, reason: "non_success_run", archived_count: 0 };
-  }
   const archiveDir = join(stateDir, "archive", "raw-runtime", archiveStamp(now));
   let archivedCount = 0;
   const copy = (src, dst) => {
@@ -120,6 +121,12 @@ export function archiveRawRunEvidence({
   for (const file of RAW_STATE_LOG_FILES) {
     copy(join(stateDir, file), join(archiveDir, "state", file));
   }
+  if (archivedCount > 0) {
+    const metadata = runMetadata || { status: completionStatus };
+    mkdirSync(archiveDir, { recursive: true });
+    writeFileSync(join(archiveDir, RAW_RUN_METADATA_FILE), `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
+    archivedCount++;
+  }
 
   if (archivedCount === 0) {
     return { archived: false, reason: "no_raw_evidence", archived_count: 0, archive_dir: archiveDir };
@@ -136,11 +143,13 @@ export function cleanupRunArtifacts({
   runtimeDir,
   prdPath,
   completionStatus = "unknown",
+  runMetadata = null,
   normalizeRepoPath = (value) => value,
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   mkdirSync = defaultMkdirSync,
   cpSync = defaultCpSync,
+  writeFileSync = defaultWriteFileSync,
   rmSync = defaultRmSync,
   unlinkSync = defaultUnlinkSync,
   spawnSync = defaultSpawnSync,
@@ -153,11 +162,13 @@ export function cleanupRunArtifacts({
     stateDir,
     runtimeDir,
     completionStatus,
+    runMetadata,
     now,
     existsSync,
     readdirSync,
     mkdirSync,
     cpSync,
+    writeFileSync,
   });
   if (rawEvidenceArchive.archived) {
     consoleLog(`[cleanup] 原始运行证据已归档: ${rawEvidenceArchive.archive_dir}`);
@@ -652,6 +663,10 @@ export async function finalizeRun({
     runtimeDir,
     prdPath,
     completionStatus: result.status,
+    runMetadata: {
+      ...result,
+      failure_reason: result.status === "success" ? null : result.summary,
+    },
     normalizeRepoPath,
     spawnSync,
     consoleLog,
