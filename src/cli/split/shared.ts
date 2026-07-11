@@ -25,7 +25,7 @@ export function usage() {
     "`yolo status` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
     "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_intake_ready、executable_prd_ready 和 next_action。",
     "`yolo demand dispatch` 会把 evidence agent 协议接到实际 agent provider；默认 dry-run，只有同时传 --execute-agents 和 --allow-agent-dispatch 才执行。",
-    "`yolo demand --mode office-hours` 是精简 office-hours profile；`yolo office-hours` 仅保留为隐藏兼容 shim。",
+    "`yolo demand --mode office-hours` 是精简 office-hours profile。",
     "`yolo spec` 会生成 PRD/spec 产物；只写 spec JSON，不改业务代码。",
     "`yolo tasks` 会生成 discovery/plan/task-breakdown 产物；不改业务代码。",
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",

@@ -150,7 +150,7 @@ export function runDiscoveryRuntime(input: DiscoveryRuntimeRecord = Object(), op
     artifacts,
     outputs: artifacts.map((path) => ({ path, type: "discovery_artifact" })),
     next_actions: discovery.ready_for_plan
-      ? ["Use yolo plan --discovery <artifact> to create the execution plan artifact."]
+      ? ["Use yolo tasks --discovery <artifact> to create the execution plan artifact."]
       : discovery.open_questions,
   };
   const lifecycle = shouldWrite ? lifecycleFor("discovery", result, {
@@ -176,7 +176,7 @@ export function runDiscoveryPlanRuntime(input: DiscoveryRuntimeRecord = Object()
       state_root: stateRoot,
       artifacts: [],
       blockers: [{ code: "DISCOVERY_ARTIFACT_MISSING", message: read.error }],
-      next_actions: ["Run yolo discover first, or pass --discovery <path> to an existing discovery artifact."],
+      next_actions: ["Run yolo demand --stage discover first, or pass --discovery <path> to an existing discovery artifact."],
     };
   }
 
@@ -225,7 +225,7 @@ export function runDiscoveryPrdRuntime(input: DiscoveryRuntimeRecord = Object(),
       state_root: stateRoot,
       artifacts: [],
       blockers: [{ code: "DISCOVERY_ARTIFACT_MISSING", message: read.error }],
-      next_actions: ["Run yolo discover first, or pass --discovery <path> to an existing discovery artifact."],
+      next_actions: ["Run yolo demand --stage discover first, or pass --discovery <path> to an existing discovery artifact."],
     };
   }
 
