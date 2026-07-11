@@ -357,6 +357,7 @@ export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
 ];
 
 const DISCUSS_REQUIRED_SLOTS: string[] = ["target_users", "status_quo", "pain_points", "desired_outcome"];
+const FOLLOW_UP_SEVERITY = "warning";
 const PRD_REQUIRED_SLOTS: string[] = [
   "target_users",
   "status_quo",
@@ -720,7 +721,7 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
         question_id: question.id,
         slot: question.slot,
         category: question.category,
-        severity: "warning",
+        severity: FOLLOW_UP_SEVERITY,
         code: "FOLLOW_UP_UI_ACCEPTANCE_MISSING_DECLARATION",
         reason: "missing_declaration",
         plain_language_prompt: buildUiAcceptanceFollowUp().plain_language_prompt,
@@ -774,7 +775,7 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
     question_id: question.id,
     slot: question.slot,
     category: question.category,
-    severity: "warning",
+    severity: FOLLOW_UP_SEVERITY,
     code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_${String(followUpReason).toUpperCase()}`,
     reason: followUpReason,
     plain_language_prompt: followUpFor(question.slot, followUpReason),
