@@ -15,6 +15,7 @@ import { resolveLedgerHmacKey } from "../runtime/evidence/ledger.js";
 import { registerGeneratedArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { loadProjectToolchainConfig, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
+import { validatePackManifest } from "../packs/manifest.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -2548,6 +2549,16 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     }
     artifacts.push(prdPath);
     outputs.push({ path: prdPath, type: "prd" });
+    const declaredAdapter = read.session.acceptance_adapter;
+    if (declaredAdapter && typeof declaredAdapter === "object") {
+      const validation = validatePackManifest(declaredAdapter);
+      if (validation.valid) {
+        const adapterPath = join(stateRoot, "adapters", `${pathSafeId(validation.manifest.id, "ui-acceptance")}.manifest.json`);
+        if (!existsSync(adapterPath)) writeJson(adapterPath, declaredAdapter);
+        artifacts.push(adapterPath);
+        outputs.push({ path: adapterPath, type: "acceptance_adapter" });
+      }
+    }
   }
   if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
     const demandSessionPath = writeJson(read.path, compiled.grounded_session);

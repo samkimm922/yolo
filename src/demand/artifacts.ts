@@ -1527,6 +1527,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
     phase: clean(input.phase || options.phase || "discuss"),
     mode: clean(input.mode || options.mode || "standard"),
     source: clean(input.source || options.source || "yolo-demand"),
+    acceptance_adapter: input.acceptance_adapter || input.acceptanceAdapter || null,
     project: {
       title: clean(input.title || objective).slice(0, 160) || "Demand session",
       target_users: targetUsers,

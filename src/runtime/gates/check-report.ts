@@ -7,6 +7,7 @@ import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 import { inspectWorktreeDrift, writeSourceSnapshot } from "../../lifecycle/source-snapshot.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
+import { buildUiAcceptanceFollowUp } from "../../demand/ui-acceptance.js";
 import { preflightPrd } from "../../prd/preflight.js";
 import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
@@ -244,6 +245,7 @@ function cleanString(value) {
 const STRICT_EXECUTION_MODES = new Set(["runner", "release", "strict"]);
 const ADVISORY_WARNING_CODES = new Set([
   "ADAPTER_MANIFEST_MISSING",
+  "MANIFEST_DESCRIPTION_MISSING",
   "RESOLVER_UNKNOWN_CONTEXT",
   "STORY_ATOMICITY_CAPABILITY_NOUN",
 ]);
@@ -691,6 +693,7 @@ function resolverReadiness({ resolver }) {
     message: blocker.message || "Resolver blocked project context.",
     manifest_id: blocker.manifest_id || null,
     path: blocker.path || null,
+    follow_up: blocker.follow_up || null,
   }));
   const normalizedWarnings = asArray(resolver?.warnings).map((warning) => ({
     code: warning.code || "RESOLVER_WARNING",
@@ -842,8 +845,15 @@ function adapterReadiness({ prd, acceptanceManifest, options, resolver }) {
   const selectedAdapter = selectedAcceptanceAdapter(resolver);
   const adapterPresent = hasAcceptanceAdapter({ options, manifest: acceptanceManifest, resolver });
   if (uiTaskCount > 0 && !adapterPresent) {
+    const adapterPath = join(options.stateRoot || options.state_root || resolver?.state_root || ".yolo", "adapters");
     return checkRecord("adapter_readiness", "blocked", "UI acceptance requires an adapter manifest.", {
-      blockers: [{ code: "ADAPTER_UI_ACCEPTANCE_MISSING", message: "UI tasks need an acceptance adapter before execution." }],
+      blockers: [{
+        code: "ADAPTER_UI_ACCEPTANCE_MISSING",
+        message: "UI acceptance needs the user's declared acceptance method before execution.",
+        path: adapterPath,
+        manifest_id: "ui-acceptance",
+        follow_up: buildUiAcceptanceFollowUp(),
+      }],
       warnings: [],
       ui_task_count: uiTaskCount,
       adapter_present: false,

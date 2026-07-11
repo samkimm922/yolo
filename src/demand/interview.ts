@@ -6,6 +6,9 @@ import type {
   DemandStringListInput,
   DemandTextInput,
 } from "./graph.js";
+import { resolveProjectContext } from "../packs/resolver.js";
+import { validatePackManifest } from "../packs/manifest.js";
+import { buildUiAcceptanceFollowUp, UI_ACCEPTANCE_SLOT } from "./ui-acceptance.js";
 
 export const DEMAND_INTERVIEW_SCHEMA_VERSION = "1.0";
 export const DEMAND_INTERVIEW_SCHEMA = "yolo.demand.interview.v1";
@@ -321,6 +324,21 @@ export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
     required_for: ["prd_intake"],
   },
   {
+    id: UI_ACCEPTANCE_SLOT,
+    slot: UI_ACCEPTANCE_SLOT,
+    category: "UI 验收方式",
+    plain_language_prompt: "这个 UI 功能怎么算做对？请提供项目已有的验收入口或命令、要看到的结果和证据，并按 JSON 回答 acceptance_adapter manifest（id、commands、evidence、capabilities、applies_to）。",
+    why_it_matters: "UI 验收必须使用你或项目已经声明的方式，系统不会猜一个 adapter 来制造假绿。",
+    accepts: {
+      free_text: true,
+      examples: [
+        "{\"id\":\"inventory-ui\",\"kind\":\"acceptance_adapter\",\"inputs\":[\"url\"],\"outputs\":[\"report\"],\"commands\":[{\"command\":\"项目已声明的 UI smoke 命令\"}],\"evidence\":[\"截图路径\"],\"capabilities\":[\"ui\"],\"applies_to\":[\"ui\"]}",
+        "粘贴项目已有 acceptance_adapter manifest 的完整 JSON。",
+      ],
+    },
+    required_for: ["prd_intake"],
+  },
+  {
     id: "execution_approval",
     slot: "execution_approval",
     category: "执行批准",
@@ -339,6 +357,7 @@ export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
 ];
 
 const DISCUSS_REQUIRED_SLOTS: string[] = ["target_users", "status_quo", "pain_points", "desired_outcome"];
+const FOLLOW_UP_SEVERITY = "warning";
 const PRD_REQUIRED_SLOTS: string[] = [
   "target_users",
   "status_quo",
@@ -350,6 +369,22 @@ const PRD_REQUIRED_SLOTS: string[] = [
   "exceptions",
   "mvp_priority",
 ];
+
+function acceptanceAdapterDeclaration(value: unknown): DemandRecord | null {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as DemandRecord;
+  const manifest = record.acceptance_adapter && typeof record.acceptance_adapter === "object"
+    ? record.acceptance_adapter as DemandRecord
+    : record;
+  return validatePackManifest(manifest).valid ? manifest : null;
+}
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -673,6 +708,26 @@ const MAX_GUIDED_FOLLOW_UPS_PER_SLOT = 2;
 const CAPPED_FOLLOW_UP_REASONS = new Set(["missing_detail", "vague"]);
 
 function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): DemandInterviewAnswerQuality {
+  if (question.slot === "ui_acceptance" && acceptanceAdapterDeclaration(answer)) {
+    return { score: 100, level: "sufficient", reasons: [], follow_up_questions: [] };
+  }
+  if (question.slot === "ui_acceptance") {
+    return {
+      score: 0,
+      level: "needs_follow_up",
+      reasons: ["missing_declaration"],
+      follow_up_questions: [{
+        id: "FU-UI_ACCEPTANCE-MISSING_DECLARATION",
+        question_id: question.id,
+        slot: question.slot,
+        category: question.category,
+        severity: FOLLOW_UP_SEVERITY,
+        code: "FOLLOW_UP_UI_ACCEPTANCE_MISSING_DECLARATION",
+        reason: "missing_declaration",
+        plain_language_prompt: buildUiAcceptanceFollowUp().plain_language_prompt,
+      }],
+    };
+  }
   const text = textFromValue(answer);
   const normalized = clean(text);
   if (!normalized) {
@@ -720,7 +775,7 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
     question_id: question.id,
     slot: question.slot,
     category: question.category,
-    severity: "warning",
+    severity: FOLLOW_UP_SEVERITY,
     code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_${String(followUpReason).toUpperCase()}`,
     reason: followUpReason,
     plain_language_prompt: followUpFor(question.slot, followUpReason),
@@ -849,6 +904,13 @@ function normalizeAnswer(question: DemandInterviewQuestion, answer: unknown): De
     return {
       approved: parseApproval(answer),
       text: textFromValue(answer),
+    };
+  }
+  if (question.slot === "ui_acceptance") {
+    return {
+      text: textFromValue(answer),
+      items: splitList(answer),
+      acceptance_adapter: acceptanceAdapterDeclaration(answer),
     };
   }
   return {
@@ -1050,7 +1112,10 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
   const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
 
   const missingDiscuss = missingSlots(session, DISCUSS_REQUIRED_SLOTS);
-  const missingPrd = missingSlots(session, PRD_REQUIRED_SLOTS);
+  const requiredPrdSlots = questions.some((question) => question.slot === "ui_acceptance")
+    ? [...PRD_REQUIRED_SLOTS, "ui_acceptance"]
+    : PRD_REQUIRED_SLOTS;
+  const missingPrd = missingSlots(session, requiredPrdSlots);
   const approval = approvalState(session);
   const missingSlotsForQuestioning = [...new Set([
     ...missingDiscuss,
@@ -1094,8 +1159,8 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
     message: question.plain_language_prompt,
     reason: question.reason,
   }));
-  const totalRequired = PRD_REQUIRED_SLOTS.length + 1;
-  const answeredRequired = PRD_REQUIRED_SLOTS.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
+  const totalRequired = requiredPrdSlots.length + 1;
+  const answeredRequired = requiredPrdSlots.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
   const nextActionPrompt = followUpQuestions[0]?.plain_language_prompt
     || missing[0]?.plain_language_prompt
     || (readyForPrdIntake ? "Convert interview answers to demand input and run demand discuss/PRD intake." : "Review interview status before continuing.");
@@ -1152,6 +1217,9 @@ export function createDemandInterviewSession(input: DemandRuntimeInput = Object(
   const objective = clean(input.objective || input.idea || input.title);
   const id = makeId("DINT", input, now);
   const demandId = makeDemandId(input, now);
+  const uiRequested = input.ui === true || input.interface === "ui" || /\b(?:ui|page|screen|browser|frontend)\b|界面|页面|前端/i.test(objective);
+  const existingAdapter = uiRequested && resolveProjectContext({ projectRoot, stateRoot }).selected.acceptance_adapter.id !== "unknown/custom";
+  const questions = DEMAND_INTERVIEW_QUESTION_BANK.filter((question) => question.slot !== "ui_acceptance" || (uiRequested && !existingAdapter));
   const session = {
     schema_version: DEMAND_INTERVIEW_SCHEMA_VERSION,
     schema: DEMAND_INTERVIEW_SCHEMA,
@@ -1166,7 +1234,7 @@ export function createDemandInterviewSession(input: DemandRuntimeInput = Object(
     project_root: projectRoot,
     stateRoot,
     state_root: stateRoot,
-    questions: decorateQuestions(DEMAND_INTERVIEW_QUESTION_BANK, {}),
+    questions: decorateQuestions(questions, {}),
     answers: {},
     follow_up_counts: {},
     accepted_assumptions: [],
@@ -1294,6 +1362,7 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
   const exceptions = itemsForSlot(session, "exceptions");
   const roadmap = itemsForSlot(session, "mvp_priority");
   const approval = approvalState(session);
+  const acceptanceAdapter = answerRecordForSlot(session, "ui_acceptance")?.normalized?.acceptance_adapter;
   const objective = clean(session.objective || session.title || desiredOutcomes[0] || painPoints[0]);
 
   return {
@@ -1317,6 +1386,7 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
     constraints: scopeBoundaries,
     exceptions,
     roadmap,
+    acceptance_adapter: acceptanceAdapter || undefined,
     decisions: decisionLines(session),
     questions: answeredQuestionRounds(session),
     answers: answeredQuestionRounds(session).map((round) => round.answer),
