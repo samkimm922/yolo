@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts, groundDemandExecutionScope } from "./artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
@@ -126,6 +126,88 @@ export function demandStateDir(stateRoot, id = "") {
 
 export function defaultDemandSessionPath(stateRoot, id) {
   return join(demandStateDir(stateRoot, id), "session.json");
+}
+
+export const DEMAND_CONTINUATION_STAGES = ["brainstorm", "discuss", "office-hours", "plan", "discover", "prd"];
+
+function newestJsonBelow(root, fileName) {
+  if (!existsSync(root)) return null;
+  const matches = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = join(root, entry.name, fileName);
+    if (!existsSync(path)) continue;
+    try {
+      matches.push({ path, value: readJson(path), mtime: statSync(path).mtimeMs });
+    } catch {
+      // Invalid state is ignored here and reported by the selected runtime.
+    }
+  }
+  return matches.sort((left, right) => right.mtime - left.mtime)[0] || null;
+}
+
+function demandProgress(stage, completed = false) {
+  const index = DEMAND_CONTINUATION_STAGES.indexOf(stage);
+  const current = index >= 0 ? index : 0;
+  return {
+    schema: "yolo.demand.progress.v1",
+    current_step: completed ? DEMAND_CONTINUATION_STAGES.length : current + 1,
+    total_steps: DEMAND_CONTINUATION_STAGES.length,
+    remaining_steps: completed ? 0 : DEMAND_CONTINUATION_STAGES.length - current - 1,
+    current: completed ? "complete" : stage,
+    message: completed
+      ? "需求已整理完成，PRD 已生成。"
+      : `现在进行第 ${current + 1}/${DEMAND_CONTINUATION_STAGES.length} 步，完成后还剩 ${DEMAND_CONTINUATION_STAGES.length - current - 1} 步。`,
+  };
+}
+
+export function resolveDemandContinuation(input = Object(), options = Object()) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const latestDemand = newestJsonBelow(join(stateRoot, "demand"), "session.json");
+  const latestOfficeHours = newestJsonBelow(join(stateRoot, "demand", "office-hours"), "brief.json");
+  const discoveryPath = join(stateRoot, "discovery", "discovery.json");
+  const discoveryPrdPath = join(stateRoot, "discovery", "prd.json");
+  const demandPrdPath = latestDemand ? join(dirname(latestDemand.path), "prd.json") : "";
+  const taskPath = latestDemand ? join(dirname(latestDemand.path), "tasks.json") : "";
+
+  let stage = "brainstorm";
+  let completed = false;
+  if ((demandPrdPath && existsSync(demandPrdPath)) || existsSync(discoveryPrdPath)) {
+    stage = "prd";
+    completed = true;
+  } else if (existsSync(discoveryPath)) {
+    try {
+      stage = readJson(discoveryPath).ready_for_plan === true ? "prd" : "discover";
+    } catch {
+      stage = "discover";
+    }
+  } else if (taskPath && existsSync(taskPath)) {
+    try {
+      stage = readJson(taskPath).status === "success" ? "discover" : "plan";
+    } catch {
+      stage = "plan";
+    }
+  } else if (latestOfficeHours?.value?.selected_alternative) {
+    stage = "plan";
+  } else if (latestDemand && ["discuss", "prd_intake"].includes(clean(latestDemand.value?.phase))) {
+    stage = latestDemand.value?.readiness?.status === "blocked" ? "discuss" : "office-hours";
+  } else if (latestDemand) {
+    stage = latestDemand.value?.readiness?.status === "blocked" ? "brainstorm" : "discuss";
+  }
+
+  return {
+    stage,
+    completed,
+    project_root: projectRoot,
+    state_root: stateRoot,
+    demand_path: latestDemand?.path || null,
+    demand_session: latestDemand?.value || null,
+    office_hours_brief: latestOfficeHours?.value || null,
+    discovery_path: existsSync(discoveryPath) ? discoveryPath : null,
+    prd_path: demandPrdPath && existsSync(demandPrdPath) ? demandPrdPath : existsSync(discoveryPrdPath) ? discoveryPrdPath : null,
+    progress: demandProgress(stage, completed),
+  };
 }
 
 function outputDirFor(session, input = Object(), options = Object()) {

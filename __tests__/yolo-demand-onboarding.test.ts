@@ -1,12 +1,16 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runYoloCli } from "../src/cli/yolo.js";
+import { resolveDemandContinuation } from "../src/demand/runtime.js";
 
 function tempProject() {
-  return mkdtempSync(join(tmpdir(), "demand-onboard-"));
+  const root = mkdtempSync(join(tmpdir(), "demand-onboard-"));
+  mkdirSync(join(root, ".yolo", "keys"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "keys", "ledger.hmac"), "demand-onboarding-test-key", "utf8");
+  return root;
 }
 
 function capture() {
@@ -19,12 +23,9 @@ function capture() {
 }
 
 describe("yolo demand non-technical onboarding", () => {
-  // Soak finding: a non-technical user running `yolo demand "<idea>"` (no flags,
-  // no prior session) used to hit a blocked demand-intake snapshot with a
-  // free-text question and no runnable next step. The interview stage is the
-  // correct onboarding entry — it writes a session and hands back a
-  // copy-pasteable `yolo interview answer ...` command. Route bare ideas there.
-  test("bare `yolo demand \"<idea>\"` starts an interview session instead of blocking", async () => {
+  // A non-technical user starts with one command. Persisted artifacts decide
+  // every later step, while explicit stage selection remains an advanced path.
+  test("bare `yolo demand \"<idea>\"` starts the first automatic step", async () => {
     const root = tempProject();
     try {
       const out = capture();
@@ -34,27 +35,26 @@ describe("yolo demand non-technical onboarding", () => {
       );
 
       const result = out.json();
-      // Interview start is a success outcome (INTERVIEW_OK), not a blocked snapshot.
-      assert.equal(exitCode, 0, `exit=${exitCode} status=${result.status}`);
-      assert.equal(result.status, "success");
-      assert.equal(result.code, "INTERVIEW_OK");
+      assert.equal(result.progress.current_step, 1);
+      assert.equal(result.progress.total_steps, 6);
+      assert.equal(result.progress.current, "brainstorm");
+      assert.equal(result.progress.remaining_steps, 5);
+      assert.ok([0, 1, 2].includes(exitCode));
 
-      // A real session file must land on disk so the next `yolo interview answer`
-      // has somewhere to write.
-      const sessionPath: string | undefined = result.session_path || result.interview?.interview_path;
+      const sessionPath: string | undefined = result.artifacts?.find((path: string) => path.endsWith("session.json"));
       assert.ok(
         typeof sessionPath === "string" && sessionPath.length > 0,
-        "interview must return a session_path",
+        "brainstorm must return a session path",
       );
       assert.ok(
         existsSync(sessionPath),
-        `interview session file must exist on disk: ${sessionPath}`,
+        `brainstorm session file must exist on disk: ${sessionPath}`,
       );
 
       // The session must carry the user's original idea so the onboarding flow
       // is continuous, not a blank restart.
       const session = JSON.parse(readFileSync(sessionPath, "utf8"));
-      const ideaText = [session.idea, session.objective, session.title]
+      const ideaText = [session.vision?.idea, session.vision?.statement, session.project?.title]
         .filter((value) => typeof value === "string" && value.length > 0)
         .join(" ");
       assert.ok(
@@ -62,26 +62,6 @@ describe("yolo demand non-technical onboarding", () => {
         `session must preserve the user's idea; got idea=${JSON.stringify(session.idea)}, objective=${JSON.stringify(session.objective)}, title=${JSON.stringify(session.title)}`,
       );
 
-      // The first question must be surfaced so the user knows what to answer next.
-      assert.ok(
-        result.next_question || result.interview?.next_question,
-        "interview must surface a first question",
-      );
-
-      // Every next_action handed back must be runnable in a terminal — no slash forms.
-      const actions: string[] = result.next_actions || [];
-      assert.ok(actions.length > 0, "interview must hand back at least one next_action");
-      for (const action of actions) {
-        assert.ok(
-          !action.includes("/yolo-"),
-          `next_action must not reference slash commands: ${action}`,
-        );
-      }
-      // And at least one action must be a concrete `yolo interview answer ...`.
-      assert.ok(
-        actions.some((action) => action.includes("yolo interview answer")),
-        `expected a copy-pasteable 'yolo interview answer' action; got: ${actions.join(" | ")}`,
-      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -133,6 +113,56 @@ describe("yolo demand non-technical onboarding", () => {
         !existsSync(interviewsDir),
         "bare `yolo demand` with no idea must not write an interview session",
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("default continuation reads .yolo and advances from start through generated PRD", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const demandDir = join(stateRoot, "demand", "DEMAND-AUTO");
+    const officeDir = join(stateRoot, "demand", "office-hours", "OFFICE-AUTO");
+    try {
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "brainstorm");
+
+      mkdirSync(demandDir, { recursive: true });
+      writeFileSync(join(demandDir, "session.json"), JSON.stringify({ phase: "brainstorm", readiness: { status: "ready" } }));
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "discuss");
+
+      writeFileSync(join(demandDir, "session.json"), JSON.stringify({ phase: "discuss", readiness: { status: "ready" } }));
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "office-hours");
+
+      mkdirSync(officeDir, { recursive: true });
+      writeFileSync(join(officeDir, "brief.json"), JSON.stringify({ selected_alternative: { id: "A" } }));
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "plan");
+
+      writeFileSync(join(demandDir, "tasks.json"), JSON.stringify({ status: "success", tasks: [] }));
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "discover");
+
+      mkdirSync(join(stateRoot, "discovery"), { recursive: true });
+      writeFileSync(join(stateRoot, "discovery", "discovery.json"), JSON.stringify({ ready_for_plan: true }));
+      assert.equal(resolveDemandContinuation({ projectRoot: root }).stage, "prd");
+
+      writeFileSync(join(demandDir, "prd.json"), JSON.stringify({ schema: "yolo.prd.v1" }));
+      const complete = resolveDemandContinuation({ projectRoot: root });
+      assert.equal(complete.completed, true);
+      assert.equal(complete.progress.remaining_steps, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("explicit --stage remains an advanced rerun override", async () => {
+    const root = tempProject();
+    try {
+      mkdirSync(join(root, ".yolo", "discovery"), { recursive: true });
+      writeFileSync(join(root, ".yolo", "discovery", "discovery.json"), JSON.stringify({ ready_for_plan: true }));
+      const out = capture();
+      await runYoloCli(["demand", "--stage", "brainstorm", "重跑头脑风暴", `--cwd=${root}`, "--json", "--no-write"], { cwd: root, stdout: out.stream });
+      const result = out.json();
+      assert.ok(["DEMAND_BLOCKED", "DEMAND_WARNING", "DEMAND_READY"].includes(result.code));
+      assert.equal(result.progress, undefined, "explicit override must not be decorated as automatic continuation");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
