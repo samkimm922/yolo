@@ -188,6 +188,24 @@ describe("YOLO command registry", () => {
     }
   });
 
+  test("deprecated demand-stage top-level commands are neither registered nor routed", async () => {
+    const root = tempProject("yolo-removed-demand-stubs-");
+    const removed = ["brainstorm", "discuss", "office-hours", "plan", "discover", "prd"];
+    try {
+      const allNames = new Set(listYoloCommandNames({ includeHidden: true }));
+      for (const command of removed) {
+        assert.equal(allNames.has(command), false, command);
+        const { io, stderr } = captureIo(root);
+        const exitCode = await runYoloCli([command], io);
+        assert.equal(exitCode, 2, command);
+        assert.match(stderr.text, new RegExp(`^Unknown command: yolo ${command}\\n`), command);
+        assert.doesNotMatch(stderr.text, /no longer a standalone command/, command);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("demand/auto/ship/status stable routes are present", async () => {
     const root = tempProject("yolo-stable-routes-");
     try {

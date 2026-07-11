@@ -168,32 +168,8 @@ export async function runYoloCliInner(argv = process.argv.slice(2), io = Object(
   if (argv[0] === "auto") {
     return runYoloAutoCli(argv.slice(1), io);
   }
-  if (argv[0] === "office-hours") {
-    stderr.write(`yolo office-hours is no longer a standalone command. Use: yolo demand --mode office-hours\n`);
-    return 2;
-  }
-  if (argv[0] === "brainstorm") {
-    stderr.write(`yolo brainstorm is no longer a standalone command. Use: yolo demand --stage brainstorm\n`);
-    return 2;
-  }
   if (argv[0] === "demand") return runYoloDemandCli(argv.slice(1), io);
   if (argv[0] === "interview") return runYoloInterviewCli(argv.slice(1), io);
-  if (argv[0] === "discover") {
-    stderr.write(`yolo discover is no longer a standalone command. Use: yolo demand --stage discover\n`);
-    return 2;
-  }
-  if (argv[0] === "discuss") {
-    stderr.write(`yolo discuss is no longer a standalone command. Use: yolo demand --stage discuss\n`);
-    return 2;
-  }
-  if (argv[0] === "plan") {
-    stderr.write(`yolo plan is no longer a standalone command. Use: yolo tasks\n`);
-    return 2;
-  }
-  if (argv[0] === "prd") {
-    stderr.write(`yolo prd is no longer a standalone command. Use: yolo spec\n`);
-    return 2;
-  }
   if (argv[0] === "check") {
     return runYoloCheckCli(argv.slice(1), io);
   }

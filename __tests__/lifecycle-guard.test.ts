@@ -680,14 +680,8 @@ describe("lifecycle guard", () => {
     assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("status"), "status must be in known words");
   });
 
-  test("S3 deprecated alias names all exit 2 with redirect to stable verbs", async () => {
+  test("S3 remaining deprecated alias names exit 2 with redirect to stable verbs", async () => {
     const deprecatedNames = [
-      "office-hours",
-      "brainstorm",
-      "discover",
-      "discuss",
-      "plan",
-      "prd",
       "accept",
       "ui-review",
       "release-candidate",
