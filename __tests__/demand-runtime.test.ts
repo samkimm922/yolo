@@ -1879,7 +1879,6 @@ describe("demand runtime", () => {
   test("approved-demand UI PRDs include UI readiness fields and pass yolo check with an adapter", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-ui-check-"));
     try {
-      writeJson(join(root, ".yolo", "adapters", "local-browser.manifest.json"), acceptanceAdapterManifest());
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
@@ -1891,6 +1890,7 @@ describe("demand runtime", () => {
         assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
         proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        acceptance_adapter: acceptanceAdapterManifest(),
         visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
@@ -1912,6 +1912,10 @@ describe("demand runtime", () => {
 
       assert.equal(prd.status, "success");
       requirePrd(prd);
+      const generatedAdapterPath = join(root, ".yolo", "adapters", "local-browser.manifest.json");
+      assert.equal(existsSync(generatedAdapterPath), true);
+      assert.equal(JSON.parse(readFileSync(generatedAdapterPath, "utf8")).id, "local-browser");
+      assert.ok(prd.artifacts.includes(generatedAdapterPath));
       const uiTask = prd.prd.tasks.find((task) => task.handoff?.surface?.kind === "ui");
       assert.ok(uiTask);
       assert.ok(Array.isArray(uiTask.state_matrix) && uiTask.state_matrix.length > 0);

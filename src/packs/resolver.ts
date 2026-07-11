@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { buildUiAcceptanceFollowUp } from "../demand/ui-acceptance.js";
 import {
   discoverPackManifests,
   PACK_MANIFEST_KINDS,
@@ -39,6 +40,7 @@ export interface ResolverBlocker {
   message: string;
   manifest_id?: string | null;
   path?: string;
+  follow_up?: { slot: string; plain_language_prompt: string };
 }
 
 export interface ResolverWarning {
@@ -87,7 +89,10 @@ export function resolveProjectContext(options: ResolveProjectContextOptions = {}
   if (requiresAcceptanceAdapter && selected.acceptance_adapter.id === "unknown/custom") {
     blockers.push({
       code: "ACCEPTANCE_ADAPTER_MISSING",
-      message: "Acceptance requires a valid acceptance_adapter manifest.",
+      message: "UI acceptance needs the user's declared acceptance method before execution.",
+      manifest_id: "ui-acceptance",
+      path: join(stateRoot, "adapters"),
+      follow_up: buildUiAcceptanceFollowUp(),
     });
   }
 

@@ -957,6 +957,13 @@ describe("yolo check report", () => {
       assert.equal(report.remediation_plan.gate_strength, "strict");
       assert.equal(report.remediation_plan.blocks_ship, true);
       assert.equal(report.remediation_plan.action, "ASK_HUMAN");
+      const adapterItem = report.remediation_plan.items.find((item) => item.code === "ACCEPTANCE_ADAPTER_MISSING");
+      assert.equal(adapterItem.path, join(root, ".yolo", "adapters"));
+      assert.equal(adapterItem.manifest_id, "ui-acceptance");
+      assert.equal(adapterItem.follow_up.slot, "ui_acceptance");
+      assert.match(adapterItem.follow_up.plain_language_prompt, /命令|入口/);
+      assert.equal(report.remediation_plan.next_actions.length, 1);
+      assert.match(report.remediation_plan.next_actions[0], /ui_acceptance/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

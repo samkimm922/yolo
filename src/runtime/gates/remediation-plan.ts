@@ -152,6 +152,9 @@ export function classifyGateRemediationIssue(issue = Object(), context = Object(
     gate: issue.gate || issue.source || issue.type || context.source || "gate",
     task_id: taskId,
     message: issueMessage(issue),
+    path: issue.path || null,
+    manifest_id: issue.manifest_id || null,
+    follow_up: issue.follow_up || null,
     action,
     automation_can_continue: actionAutomationCanContinue(action),
     requires_human: action === GATE_REMEDIATION_ACTIONS.ASK_HUMAN,
@@ -278,6 +281,7 @@ export function buildGateRemediationPlan({
       blocks_ship: true,
     }
     : aggregate(items);
+  const adapterFollowUp = items.find((item) => item.follow_up?.slot === "ui_acceptance");
   return {
     schema_version: GATE_REMEDIATION_SCHEMA_VERSION,
     schema: GATE_REMEDIATION_SCHEMA,
@@ -304,6 +308,8 @@ export function buildGateRemediationPlan({
           : "Strict gate passed."
     ),
     items,
-    next_actions: nextActionsFor(aggregateResult),
+    next_actions: adapterFollowUp
+      ? [`Answer demand follow-up ui_acceptance, then write the declared manifest to ${adapterFollowUp.path} and rerun yolo check: ${adapterFollowUp.follow_up.plain_language_prompt}`]
+      : nextActionsFor(aggregateResult),
   };
 }

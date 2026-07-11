@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -33,6 +33,17 @@ function newSession(root) {
   });
 }
 
+function newUiSession(root) {
+  return createDemandInterviewSession({
+    projectRoot: root,
+    stateRoot: join(root, ".yolo"),
+    idea: "Build a user-visible inventory dashboard page for store managers.",
+    ui: true,
+  }, {
+    now: "2026-05-29T12:00:00.000Z",
+  });
+}
+
 function answer(session, questionId, value) {
   return answerDemandInterviewQuestion(session, {
     questionId,
@@ -55,6 +66,31 @@ function answerAllRequired(session) {
 }
 
 describe("demand interview", () => {
+  test("requires a concrete UI acceptance declaration for user-visible UI demand", () => withRoot((root) => {
+    const session = newUiSession(root);
+    const question = session.questions.find((item) => item.id === "ui_acceptance");
+
+    assert.ok(question);
+    assert.match(question.plain_language_prompt, /UI|界面/);
+    assert.match(question.plain_language_prompt, /命令|入口/);
+    assert.equal(session.coverage.missing_slots.includes("ui_acceptance"), true);
+  }));
+
+  test("reuses an existing project-declared acceptance adapter without asking again", () => withRoot((root) => {
+    const adapterDir = join(root, ".yolo", "adapters");
+    mkdirSync(adapterDir, { recursive: true });
+    writeFileSync(join(adapterDir, "browser.manifest.json"), JSON.stringify({
+      schema: "yolo.manifest.v1", id: "browser", kind: "acceptance_adapter",
+      inputs: ["url"], outputs: ["report"], commands: [{ command: "project-ui-smoke" }],
+      evidence: ["screenshot"], capabilities: ["ui"], applies_to: ["ui"],
+    }));
+
+    const session = newUiSession(root);
+
+    assert.equal(session.questions.some((item) => item.id === "ui_acceptance"), false);
+    assert.equal(session.coverage.missing_slots.includes("ui_acceptance"), false);
+  }));
+
   test("initializes a non-technical interview session from idea", () => withRoot((root) => {
     const session = newSession(root);
 
