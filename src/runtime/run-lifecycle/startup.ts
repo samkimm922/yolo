@@ -534,9 +534,9 @@ export function cleanupStaleGitWorktreesAndBranches({
     };
     for (const rawLine of wtList.split("\n")) {
       const line = rawLine.trim();
-      if (line.startsWith("Worktree ")) {
+      if (line.startsWith("worktree ")) {
         flush();
-        curPath = line.slice("Worktree ".length).trim();
+        curPath = line.slice("worktree ".length).trim();
         curBranch = null;
       } else if (line.startsWith("branch ")) {
         curBranch = line.slice("branch ".length).trim().replace(/^refs\/heads\//, "");

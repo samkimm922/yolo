@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -650,9 +650,9 @@ describe("run lifecycle startup helpers", () => {
         calls.push({ bin, args });
         if (bin === "git" && args[0] === "worktree" && args[1] === "list") {
           return [
-            "Worktree /repo",
+            "worktree /repo",
             "HEAD abc",
-            "Worktree /repo/../.yolo-worktrees/yolo-1",
+            "worktree /repo/../.yolo-worktrees/yolo-1",
             "HEAD def",
             "branch refs/heads/yolo-a",
             "",
@@ -669,6 +669,37 @@ describe("run lifecycle startup helpers", () => {
     assert.ok(calls.some((c) => c.bin === "git" && c.args[0] === "branch" && c.args[1] === "-D" && c.args[2] === "yolo-a"));
   });
 
+  test("cleanupStaleGitWorktreesAndBranches removes an owned worktree from real git porcelain output", () => {
+    const root = realpathSync(tempDir());
+    const repo = join(root, "repo");
+    const worktreeRoot = join(root, ".yolo-worktrees");
+    const ownedWorktree = join(worktreeRoot, "yolo-owned");
+    try {
+      mkdirSync(repo, { recursive: true });
+      mkdirSync(worktreeRoot, { recursive: true });
+      git(repo, ["init"]);
+      git(repo, ["config", "user.name", "YOLO Test"]);
+      git(repo, ["config", "user.email", "yolo@example.test"]);
+      git(repo, ["commit", "--allow-empty", "-m", "initial"]);
+      git(repo, ["worktree", "add", "-b", "yolo-owned", ownedWorktree]);
+
+      const result = cleanupStaleGitWorktreesAndBranches({
+        rootDir: repo,
+        worktreeRoot,
+        consoleLog: () => {},
+      });
+
+      assert.deepEqual(result, {
+        worktrees: [ownedWorktree],
+        branches: ["yolo-owned"],
+      });
+      assert.equal(existsSync(ownedWorktree), false);
+      assert.equal(git(repo, ["branch", "--list", "yolo-owned"]), "");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("cleanupStaleGitWorktreesAndBranches leaves another runner's worktree and branch alone", () => {
     const removed = [];
     const result = cleanupStaleGitWorktreesAndBranches({
@@ -678,14 +709,14 @@ describe("run lifecycle startup helpers", () => {
       execFileSync: (bin, args) => {
         if (bin === "git" && args[0] === "worktree" && args[1] === "list") {
           return [
-            "Worktree /repo",
+            "worktree /repo",
             "HEAD abc",
             // owned by this run: under worktreeRoot
-            "Worktree /repo/../.yolo-worktrees/OWNED",
+            "worktree /repo/../.yolo-worktrees/OWNED",
             "HEAD def",
             "branch refs/heads/yolo-owned-1",
             // NOT owned: lives outside this run's worktreeRoot
-            "Worktree /elsewhere/.yolo-worktrees/ALIEN",
+            "worktree /elsewhere/.yolo-worktrees/ALIEN",
             "HEAD ghi",
             "branch refs/heads/yolo-alien-1",
             "",
