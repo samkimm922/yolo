@@ -117,17 +117,17 @@ describe("YOLO command registry", () => {
     assert.equal(run.writes_code, true);
   });
 
-  test("demand command defaults to one-question interview before PRD", () => {
+  test("demand command defaults to automatic continuation before PRD", () => {
     const demand = getYoloCommand("demand");
     const demandText = [demand.description, demand.objective, demand.safety, demand.usage].join("\n");
 
-    assert.match(demandText, /one-question/);
+    assert.match(demandText, /automatic six-step continuation/);
     assert.match(demandText, /next_question/);
     assert.match(demandText, /不输出大段建议/);
-    assert.match(demandText, /不进入 PRD/);
+    assert.match(demandText, /approved PRD is generated/);
     assert.match(demandText, /批准最后/);
     assert.match(demandText, /不改代码/);
-    assert.match(demandText, /do not enter PRD/i);
+    assert.match(demandText, /do not advance past a blocked step/i);
     assert.equal(demand.writes_code, false);
     assert.equal(demand.requires_confirmation, false);
   });
@@ -163,7 +163,7 @@ describe("YOLO command registry", () => {
       "doctor",
     ]);
     assert.match(renderYoloCommandUsage("status"), /yolo status/);
-    assert.match(renderYoloCommandUsage("demand"), /office-hours/);
+    assert.match(renderYoloCommandUsage("demand"), /yolo demand/);
     assert.match(renderYoloCommandUsage("auto"), /yolo auto/);
   });
 

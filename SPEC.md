@@ -68,7 +68,7 @@
 
 ## 6. 需求阶段原则(最高杠杆)
 
-- **单一入口。** 收敛掉现有的多入口(office-hours / discuss / interview 等各命令)——用户只管说"我想做 X",skill 在**内部**自动走 头脑风暴 → 讨论收敛 → 访谈定稿 → PRD;子阶段是内部状态,对用户不可见。(多入口是被证明的 bug 源。)
+- **单一入口。** 用户只管运行 `yolo demand "我想做 X"`;未传 `--stage` 时,系统读取 `.yolo` 中最新的 demand、office-hours、plan、discovery 和 PRD 产物,自动走 头脑风暴 → 讨论收敛 → office-hours → 计划 → 探索 → PRD。输出只展示“第几步/共几步/还剩几步”,不要求用户理解 stage。`--stage` 仅保留给跳步、重跑和调试,并始终覆盖自动判断。(多入口是被证明的 bug 源。)
 - **内部必须逼出六件事**(领域无关):① 意图(做什么/为谁/痛在哪);② **完成定义**(怎么算做对 = 验证契约);③ 范围边界(做什么/明确不做/解耦);④ 约束(技术栈/存量/硬要求);⑤ **回放 + 显式确认对齐**;⑥ 收敛判定(够不够精确到可机器执行)。
 - **UI 完成定义必须 declare-first。** UI 相关 demand 优先复用项目已有的声明式验收 adapter；没有时，interview 必须先追问并收集用户声明的验收入口或命令、可观察结果与证据，以及完整 `acceptance_adapter` manifest，PRD 成功生成时自动写入 `.yolo/adapters/<manifest.id>.manifest.json`。两种声明都没有时，`check` 必须 fail-closed；remediation 必须返回 `manifest_id: ui-acceptance`、`.yolo/adapters` 目标路径和具体可回答的 `ui_acceptance` 追问，禁止系统自行猜选 adapter。
 - **对齐才是产物,PRD 只是它的序列化。** 对齐高→PRD 好;对齐低→就算过 check,结果也不是你要的。

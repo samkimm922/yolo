@@ -31,6 +31,7 @@ import {
   runDemandTaskRuntime,
   runDemandPrdRuntime,
   runDemandStatusRuntime,
+  resolveDemandContinuation,
 } from "../../demand/runtime.js";
 import { runDemandEvidenceDispatchRuntime } from "../../demand/evidence-dispatch.js";
 import { demandInterviewToDemandInput } from "../../demand/interview.js";
@@ -134,12 +135,15 @@ export async function runYoloBrainstormCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-async function runYoloDemandStageCli(stage: string, input: Record<string, unknown> = {}, options: Record<string, unknown> = {}, io: { stdout?: { write: (data: string) => void }; stderr?: { write: (data: string) => void }; cwd?: string } = {}) {
+async function runYoloDemandStageCli(stage: string, input: Record<string, unknown> = {}, options: Record<string, unknown> = {}, io: { stdout?: { write: (data: string) => void }; stderr?: { write: (data: string) => void }; cwd?: string } = {}, progress?: Record<string, unknown>) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const projectRoot = resolve((input.cwd as string | undefined) || io.cwd || process.cwd());
   const stateRoot = join(projectRoot, ".yolo");
   const stageLabel = normalizeDemandStage(stage);
+  const withProgress = <T extends Record<string, unknown>>(result: T): T & { progress?: Record<string, unknown> } => (
+    progress ? { ...result, progress } : result
+  );
 
   if (stageLabel === "office-hours") {
     let result = runDemandOfficeHoursRuntime({
@@ -149,6 +153,7 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
+    result = withProgress(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("office-hours", result)}\n`);
     return workflowExitCode(result);
@@ -162,6 +167,7 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
+    result = withProgress(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
     return workflowExitCode(result);
@@ -176,6 +182,14 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
     return runYoloInterviewCli(interviewArgs, io);
   }
 
+  if (stageLabel === "plan") {
+    let result = runDemandTaskRuntime({ ...input, projectRoot, stateRoot, writeArtifacts: options.writeLifecycle });
+    result = withProgress(result);
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("plan", result)}\n`);
+    return workflowExitCode(result);
+  }
+
   if (stageLabel === "discover") {
     let result = runDiscoveryRuntime({
       ...input,
@@ -186,6 +200,7 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
       writeLifecycle: options.writeLifecycle,
       source: "yolo-demand:discover",
     });
+    result = withProgress(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
     return workflowExitCode(result);
@@ -199,25 +214,15 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
+    result = withProgress(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
     return workflowExitCode(result);
   }
 
   if (stageLabel === "prd") {
-    const demandRef = input.demandPath || input.demand_path || "<session.json|dir>";
-    const result = {
-      status: "blocked",
-      code: "DEMAND_STAGE_PRD_DEPRECATED",
-      summary: "Demand stage stops at approved demand artifacts; executable PRD generation belongs to yolo spec.",
-      blockers: [{
-        code: "USE_SPEC_FOR_EXECUTABLE_PRD",
-        message: "Do not generate executable prd.json from yolo demand.",
-      }],
-      artifacts: [],
-      next_action: `yolo spec --demand ${demandRef}`,
-      next_actions: [`yolo spec --demand ${demandRef}`],
-    };
+    let result = runDemandPrdRuntime({ ...input, projectRoot, stateRoot, writeArtifacts: options.writeLifecycle });
+    result = withProgress(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("prd", result)}\n`);
     return workflowExitCode(result);
@@ -237,7 +242,7 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
 export async function runYoloDemandCli(argv = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const commandNames = new Set(["status", "dispatch", "evidence"]);
-  const stageNames = new Set(["brainstorm", "interview", "office-hours", "office_hours", "office", "discover", "discovery", "discuss", "discussion", "prd"]);
+  const stageNames = new Set(["brainstorm", "interview", "office-hours", "office_hours", "office", "plan", "discover", "discovery", "discuss", "discussion", "prd"]);
   const first = argv[0] && !argv[0].startsWith("--") ? normalizeDemandStage(argv[0]) : "";
   let command = commandNames.has(first) ? first : "status";
   let args = commandNames.has(first) ? argv.slice(1) : argv;
@@ -264,25 +269,7 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
     return runYoloDemandStageCli(stage, input, options, io);
   }
 
-  // Non-technical onboarding: a bare `yolo demand "<idea>"` (no --stage, no
-  // status/dispatch subcommand, no existing session) used to dump a blocked
-  // demand-intake-blocked snapshot and a free-text question with no runnable
-  // next step. Route it into the interview stage so the user gets a session
-  // path and a copy-pasteable `yolo interview answer ...` next action.
   const bareIdeaText = cleanCliText(input.objective || input.idea || input.text || input.requirement);
-  const hasExplicitSession = Boolean(
-    input.demandPath || input.demand_path || input.sessionPath || input.session_path,
-  );
-  if (
-    command === "status"
-    && !commandNames.has(first)
-    && !stageNames.has(first)
-    && bareIdeaText
-    && !hasExplicitSession
-  ) {
-    return runYoloDemandStageCli("interview", input, options, io);
-  }
-
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   if (command === "dispatch" || command === "evidence") {
     const result = await runDemandEvidenceDispatchRuntime({
@@ -296,6 +283,29 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandDispatchText(result)}\n`);
     return workflowExitCode(result);
+  }
+  if (command === "status" && !commandNames.has(first) && !stageNames.has(first)) {
+    const continuation = resolveDemandContinuation({ ...input, projectRoot, stateRoot: join(projectRoot, ".yolo") });
+    if (!bareIdeaText && continuation.stage === "brainstorm" && !continuation.completed) {
+      const result = runDemandStatusRuntime({ ...input, projectRoot, stateRoot: join(projectRoot, ".yolo") });
+      if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      else stdout.write(`${formatDemandStatusText({ ...result })}\n`);
+      return workflowExitCode(result);
+    }
+    if (continuation.completed) {
+      const result = { status: "success", code: "DEMAND_COMPLETE", summary: "需求已整理完成，PRD 已生成。", ...continuation };
+      if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      else stdout.write(`${formatDemandStatusText(result)}\n`);
+      return 0;
+    }
+    const resumeInput = {
+      ...(continuation.demand_session || {}),
+      ...input,
+      demandPath: input.demandPath || continuation.demand_path || undefined,
+      discoveryPath: input.discoveryPath || continuation.discovery_path || undefined,
+      projectRoot,
+    };
+    return runYoloDemandStageCli(continuation.stage, resumeInput, options, io, continuation.progress);
   }
   const result = runDemandStatusRuntime({
     ...input,
