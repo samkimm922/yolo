@@ -245,6 +245,7 @@ function cleanString(value) {
 const STRICT_EXECUTION_MODES = new Set(["runner", "release", "strict"]);
 const ADVISORY_WARNING_CODES = new Set([
   "ADAPTER_MANIFEST_MISSING",
+  "MANIFEST_DESCRIPTION_MISSING",
   "RESOLVER_UNKNOWN_CONTEXT",
   "STORY_ATOMICITY_CAPABILITY_NOUN",
 ]);

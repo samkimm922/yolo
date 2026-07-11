@@ -32,7 +32,7 @@ const INVENTORY = [
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/demand/gate.ts", { WARN: 0, warning: 27, "best-effort": 0, skip: 0 }],
-  ["src/demand/interview.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
+  ["src/demand/interview.ts", { WARN: 0, warning: 5, "best-effort": 0, skip: 0 }],
   ["src/demand/runtime.ts", { WARN: 3, warning: 14, "best-effort": 0, skip: 0 }],
   ["src/devtools/doctor.ts", { WARN: 0, warning: 10, "best-effort": 0, skip: 0 }],
   ["src/discovery/artifacts.ts", { WARN: 1, warning: 3, "best-effort": 0, skip: 2 }],

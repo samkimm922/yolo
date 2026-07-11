@@ -124,6 +124,24 @@ function strictPrd(taskOverrides = {}, prdOverrides = {}) {
 }
 
 describe("yolo check report", () => {
+  test("keeps a missing optional manifest description advisory in strict mode", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      const { description: _description, ...adapter } = acceptanceAdapter();
+      writeJson(join(root, ".yolo/adapters/local-browser.manifest.json"), adapter);
+      writeJson(prdPath, strictPrd());
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "strict" });
+
+      assert.equal(report.status, "pass", JSON.stringify(report.blockers, null, 2));
+      assert.equal(report.blockers.some((blocker) => blocker.code === "MANIFEST_DESCRIPTION_MISSING"), false);
+      assert.ok(report.advisory_warnings.some((warning) => warning.code === "MANIFEST_DESCRIPTION_MISSING"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("passes a strict non-UI PRD while keeping missing adapter advisory", () => {
     const root = tempProject();
     try {

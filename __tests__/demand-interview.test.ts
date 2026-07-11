@@ -76,7 +76,7 @@ describe("demand interview", () => {
     assert.equal(session.coverage.missing_slots.includes("ui_acceptance"), true);
   }));
 
-  test("reuses an existing project-declared acceptance adapter without asking again", () => withRoot((root) => {
+  test("accepts an existing adapter without an optional description", () => withRoot((root) => {
     const adapterDir = join(root, ".yolo", "adapters");
     mkdirSync(adapterDir, { recursive: true });
     writeFileSync(join(adapterDir, "browser.manifest.json"), JSON.stringify({
