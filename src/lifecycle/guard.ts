@@ -278,12 +278,38 @@ function truthyFlag(value: unknown): boolean {
 }
 
 function hasMustFixBeforeShip(value: unknown, depth = 0): boolean {
-  if (!value || depth > 8) return false;
-  if (Array.isArray(value)) return value.some((item) => hasMustFixBeforeShip(item, depth + 1));
-  if (typeof value !== "object") return false;
+  return collectMustFixFindingIds(value, depth).length > 0;
+}
+
+// Audit #21: `hasMustFixBeforeShip` previously returned a bare boolean, so the
+// blocker message could only say "work remains" without naming WHICH findings.
+// This walks the same recursive path but collects the finding id of every
+// object that carries a truthy must_fix_before_ship flag, mirroring the id
+// resolution used in acceptance/report.ts (finding_id -> id -> source_finding_id).
+// An object with the flag but no id still counts (returns an empty-string
+// placeholder) so callers can distinguish "flag present" from "no flag at all".
+function collectMustFixFindingIds(value: unknown, depth = 0): string[] {
+  if (!value || depth > 8) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectMustFixFindingIds(item, depth + 1));
+  }
+  if (typeof value !== "object") return [];
   const record = value as GuardRecord;
-  if (truthyFlag(record.must_fix_before_ship) || truthyFlag(record.mustFixBeforeShip)) return true;
-  return Object.values(record).some((item) => hasMustFixBeforeShip(item, depth + 1));
+  const ids: string[] = [];
+  if (truthyFlag(record.must_fix_before_ship) || truthyFlag(record.mustFixBeforeShip)) {
+    const id = clean(record.finding_id || record.id || record.source_finding_id);
+    ids.push(id || "");
+  }
+  ids.push(...Object.values(record).flatMap((item) => collectMustFixFindingIds(item, depth + 1)));
+  return ids;
+}
+
+function formatFindingIds(ids: string[]): string {
+  const named = ids.filter(Boolean);
+  if (named.length === 0) return "";
+  // De-duplicate while preserving first-seen order so the message stays stable.
+  const unique = [...new Set(named)];
+  return unique.join(", ");
 }
 
 function meaningfulEvidenceEntry(entry: unknown): boolean {
@@ -423,6 +449,40 @@ function checkRecoveryOnly(blockers: GuardBlocker[]): boolean {
   return blockers.length > 0 && blockers.every((blocker) => CHECK_RECOVERY_BLOCKER_CODES.has(blocker.code));
 }
 
+// Audit #21: when `yolo ship` is blocked by a delivery hard-gate failure, all
+// prerequisite stages are already "completed", so nextLifecycleAction falls
+// through to the delivery stage and recommends "yolo ship" — the exact command
+// that just failed. That dead-end self-loop leaves the operator stuck. These
+// blocker codes have an obvious upstream recovery command (the stage that
+// produces the missing evidence), so route there instead.
+const REVIEW_FIX_RECOVERY_BLOCKER_CODES = new Set([
+  "REVIEW_FIX_REPORT_UNREADABLE",
+  "REVIEW_FIX_PENDING",
+  "REVIEW_FIX_MUST_FIX_BEFORE_SHIP",
+]);
+const ACCEPTANCE_RECOVERY_BLOCKER_CODES = new Set([
+  "ACCEPTANCE_REPORT_UNREADABLE",
+  "ACCEPTANCE_REPORT_PENDING",
+  "ACCEPTANCE_EVIDENCE_EMPTY",
+  "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED",
+  "ACCEPTANCE_SOURCE_FINGERPRINT_UNVERIFIABLE",
+  "ACCEPTANCE_SOURCE_FINGERPRINT_STALE",
+]);
+
+// Returns a concrete recovery command for delivery hard-gate blockers, or "" if
+// no delivery-gate-specific recovery applies. Review blockers route to
+// `yolo review`; acceptance blockers route to `yolo release accept`. When both
+// kinds are present, review comes first (review must close before acceptance
+// can re-collect evidence against the fixed code).
+function deliveryHardGateRecoveryCommand(blockers: GuardBlocker[]): string {
+  if (blockers.length === 0) return "";
+  const hasReview = blockers.some((blocker) => REVIEW_FIX_RECOVERY_BLOCKER_CODES.has(blocker.code));
+  const hasAcceptance = blockers.some((blocker) => ACCEPTANCE_RECOVERY_BLOCKER_CODES.has(blocker.code));
+  if (hasReview) return "yolo review";
+  if (hasAcceptance) return "yolo release accept";
+  return "";
+}
+
 function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath }: { command: string; projectRoot: string; stateRoot: string; statusPath: string }) {
   return {
     schema_version: LIFECYCLE_GUARD_SCHEMA_VERSION,
@@ -480,11 +540,19 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
         `Review/fix status is ${reportStatusForMessage(review.report, PENDING_REPORT_STATUSES)}; delivery cannot pass while review is pending.`,
       ));
     }
-    if (hasMustFixBeforeShip(review.report)) {
+    const mustFixIds = collectMustFixFindingIds(review.report);
+    if (mustFixIds.length > 0) {
+      const idList = formatFindingIds(mustFixIds);
+      // Audit #21: name the specific findings instead of "work remains", and
+      // point recovery at `yolo review` (the stage that resolves findings)
+      // rather than the original `yolo ship` command (a dead-end self-loop).
+      const findingClause = idList
+        ? ` Open must-fix finding(s): ${idList}.`
+        : "";
       blockers.push(makeBlocker(
         "REVIEW_FIX_MUST_FIX_BEFORE_SHIP",
         "review-fix",
-        "Review/fix evidence still contains must_fix_before_ship work.",
+        `Review/fix evidence still contains must_fix_before_ship work.${findingClause} Run \`yolo review\` to resolve the open finding(s) before shipping.`,
       ));
     }
   }
@@ -501,10 +569,13 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
       ));
     }
     if (reportEvidenceEntries(acceptance.report).length === 0) {
+      // Audit #21: name the acceptance artifact path so the operator knows which
+      // report to backfill, and point recovery at acceptance collection rather
+      // than the original `yolo ship` command (a dead-end self-loop).
       blockers.push(makeBlocker(
         "ACCEPTANCE_EVIDENCE_EMPTY",
         "acceptance",
-        "Acceptance report evidence is empty; external E2E output cannot replace YOLO lifecycle evidence.",
+        `Acceptance report evidence is empty; external E2E output cannot replace YOLO lifecycle evidence. Acceptance artifact: ${acceptance.path}. Run \`yolo release accept\` to collect acceptance evidence.`,
       ));
     }
     blockers.push(...validateEvidencePaths(projectRoot, acceptance.report, "acceptance"));
@@ -835,7 +906,16 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       : [];
 
   if (blockers.length > 0) {
-    const primaryCommand = recoveryCommand || recommended.command;
+    // Audit #21: prefer concrete recovery commands over the lifecycle "next"
+    // recommendation when the latter would dead-end. `nextLifecycleAction`
+    // falls through to "yolo ship" once every prerequisite stage is completed,
+    // so a delivery hard-gate failure would otherwise recommend re-running the
+    // exact command that just failed. A delivery-gate recovery (review /
+    // acceptance) or a check recovery always wins; otherwise fall back to the
+    // lifecycle "next" command.
+    const deliveryRecovery = deliveryHardGateRecoveryCommand(blockers);
+    const primaryCommand = recoveryCommand || deliveryRecovery || recommended.command;
+    const effectiveRecovery = recoveryCommand || deliveryRecovery;
     return {
       ...base,
       status: "blocked",
@@ -848,9 +928,9 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       blockers,
       warnings: [...validation.warnings, ...writeWarning],
       allowed_commands: [...new Set([primaryCommand, "yolo status", "yolo doctor"])],
-      next_actions: recoveryCommand
+      next_actions: effectiveRecovery
         ? [
-          `Run ${recoveryCommand} first.`,
+          `Run ${effectiveRecovery} first.`,
           "Use `yolo status` when you are unsure which YOLO stage is currently allowed.",
         ]
         : [
