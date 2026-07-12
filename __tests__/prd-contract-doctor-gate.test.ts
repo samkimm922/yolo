@@ -467,6 +467,62 @@ describe("prd contract doctor gate", () => {
     }
   });
 
+  test("must_split with executable split suggestions is not hard-blocked by contract gate", () => {
+    // RED: a true multi-domain task that must_split but has concrete split
+    // suggestions (child task ids/files/goals) should not be hard-blocked by
+    // the contract gate. The runner's pre-session-flow can apply the split
+    // suggestions (applySplitSuggestionsToPrd) — but only if the contract gate
+    // lets the task through. When split_suggestions exist, the gate should
+    // downgrade ATOMICITY_MUST_SPLIT from a FAIL to a WARN so the runner can
+    // apply the split, not block before it gets the chance.
+    const paths = makePaths();
+    try {
+      const postConditions = Array.from({ length: 10 }, (_, index) => ({
+        id: `POST-BEHAVIOR-${index + 1}`,
+        type: "acceptance_criteria",
+        severity: "FAIL",
+        message: `Behavior ${index + 1} is verified for checkout UI and inventory service consistency.`,
+      }));
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-MUST-SPLIT-REACHABLE",
+          ...strictDemandFields("src/pages/checkout.tsx"),
+          tasks: [{
+            id: "FE-GIANT-001",
+            title: "Fix checkout UI and inventory transaction behavior",
+            priority: "P1",
+            type: "feature",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            description: "Update the checkout page selected item state, service transaction writes, inventory quantity, API contract, and tsc compile behavior.",
+            scope: {
+              targets: [
+                { file: "src/pages/checkout.tsx" },
+                { file: "src/components/CartSummary.tsx" },
+                { file: "src/services/inventory.ts" },
+                { file: "src/services/orders.ts" },
+              ],
+              max_files: 4,
+            },
+            post_conditions: postConditions,
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      // The task has executable split suggestions — the contract gate should
+      // NOT hard-block it with ATOMICITY_MUST_SPLIT as a failure.
+      const mustSplitFailure = result.doctor.failures.find((f) => f.code === "ATOMICITY_MUST_SPLIT");
+      assert.equal(mustSplitFailure, undefined,
+        `ATOMICITY_MUST_SPLIT should not be a hard failure when split suggestions exist: ${JSON.stringify(result.doctor.failures, null, 2)}`);
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("blocks runner/release tasks missing files and acceptance", () => {
     const paths = makePaths();
     try {
