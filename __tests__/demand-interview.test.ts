@@ -313,6 +313,37 @@ describe("demand interview", () => {
     assert.deepEqual(coverage.missing_slots, []);
   }));
 
+  test("treats explicit execution approval negation as rejection before matching approval words", () => withRoot((root) => {
+    const rejectedAnswers = [
+      "我没有批准",
+      "还未同意，请先等一下",
+      "I cant approve yet",
+      "I can't approve yet",
+      "I haven't approved this",
+      "disapproved",
+    ];
+
+    for (const rejectedAnswer of rejectedAnswers) {
+      const session = answerAllRequired(newSession(root));
+      answer(session, "execution_approval", rejectedAnswer);
+
+      const coverage = inspectDemandInterviewCoverage(session);
+      assert.equal(coverage.approval.answered, true, rejectedAnswer);
+      assert.equal(coverage.approval.approved, false, rejectedAnswer);
+      assert.equal(coverage.ready_for_prd_intake, false, rejectedAnswer);
+      assert.ok(coverage.missing_slots.includes("execution_approval"), rejectedAnswer);
+    }
+  }));
+
+  test("accepts explicit approval phrases without treating incidental no as rejection", () => withRoot((root) => {
+    const session = answerAllRequired(newSession(root));
+    answer(session, "execution_approval", "Approved with no changes needed.");
+
+    const coverage = inspectDemandInterviewCoverage(session);
+    assert.equal(coverage.approval.approved, true);
+    assert.equal(coverage.ready_for_prd_intake, true);
+  }));
+
   test("converts interview answers into demand runtime input", () => withRoot((root) => {
     const session = answerAllRequired(newSession(root));
     answer(session, "execution_approval", true);
