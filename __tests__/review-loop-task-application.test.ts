@@ -22,7 +22,7 @@ describe("review-loop task application helpers", () => {
       round: 2,
       taskCount: 7,
       maxTasks: 5,
-      taskIds: ["A", "B"],
+      taskIds: ["A", "B", "C", "D", "E", "F", "G"],
     }), {
       blockerId: "REVIEW-TASK-LIMIT-R2",
       message: "本轮将生成 7 个 executor 修复任务，超过上限 5，拒绝写入 PRD",
@@ -31,16 +31,53 @@ describe("review-loop task application helpers", () => {
       status: "blocked",
       reason: "review_task_limit",
       human_needed: true,
-      recovery_action: "split_review_findings_or_raise_review_task_limit",
+      recovery_action: "ask_human_review_task_limit_recovery",
+      next_question: "本轮有 7 个 review 修复任务，单轮上限为 5。请选择：按给出的批次拆分处理，或由人工显式设置 runner.max_review_tasks_per_round；YOLO 不会自动修改配置或选择方案。",
+      remediation: {
+        status: "human_required",
+        action: "ASK_HUMAN",
+        automation_can_continue: false,
+        requires_human: true,
+        unsafe_stop: false,
+        blocks_ship: true,
+        config: {
+          path: "config.yaml",
+          env_override: "YOLO_CONFIG",
+          key: "runner.max_review_tasks_per_round",
+          current_value: 5,
+          requested_value: null,
+          change_requires_explicit_human_approval: true,
+        },
+        split_template: {
+          strategy: "bounded_review_task_batches",
+          max_tasks_per_batch: 5,
+          batch_count: 2,
+          batches: [
+            { batch: 1, task_ids: ["A", "B", "C", "D", "E"] },
+            { batch: 2, task_ids: ["F", "G"] },
+          ],
+        },
+        rerun_command: "yolo run <PRD_PATH>",
+        next_actions: [
+          "Answer the review task limit question with either `split_review_findings` or `set_configured_limit`.",
+          "After applying the explicit human decision, rerun `yolo run <PRD_PATH>`.",
+        ],
+      },
       meta: {
         round: 2,
         phase: "REVIEW_TASK_LIMIT_BLOCKED",
         generated_tasks: 7,
         max_allowed: 5,
-        blocked_task_ids: ["A", "B"],
+        blocked_task_ids: ["A", "B", "C", "D", "E", "F", "G"],
         human_needed: true,
         recoverable: true,
         queue_strategy: "human_needed",
+        recovery: {
+          question_id: "review_task_limit_recovery",
+          allowed_answers: ["split_review_findings", "set_configured_limit"],
+          config_key: "runner.max_review_tasks_per_round",
+          rerun_command: "yolo run <PRD_PATH>",
+        },
       },
     });
   });
@@ -60,6 +97,12 @@ describe("review-loop task application helpers", () => {
     const reviewBlocker = taskResults.review_blocker as Record<string, unknown>;
     assert.equal(reviewBlocker.human_needed, true);
     assert.equal(reviewBlocker.reason, "review_task_limit");
+    assert.equal(reviewBlocker.next_question, block.next_question);
+    assert.deepEqual(reviewBlocker.remediation, block.remediation);
+    assert.deepEqual(taskResults.remediation, [{
+      task_id: "REVIEW-TASK-LIMIT-R1",
+      ...block.remediation,
+    }]);
   });
 
   test("appendReviewTasksToPrd shapes tasks, mutates PRD, and increments progress", () => {
