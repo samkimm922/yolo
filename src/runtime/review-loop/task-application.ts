@@ -190,6 +190,31 @@ export type ReviewTaskLimitBlock = {
   reason: string;
   human_needed: boolean;
   recovery_action: string;
+  next_question: string;
+  remediation: {
+    status: string;
+    action: string;
+    automation_can_continue: boolean;
+    requires_human: boolean;
+    unsafe_stop: boolean;
+    blocks_ship: boolean;
+    config: {
+      path: string;
+      env_override: string;
+      key: string;
+      current_value: number;
+      requested_value: null;
+      change_requires_explicit_human_approval: boolean;
+    };
+    split_template: {
+      strategy: string;
+      max_tasks_per_batch: number;
+      batch_count: number;
+      batches: Array<{ batch: number; task_ids: string[] }>;
+    };
+    rerun_command: string;
+    next_actions: string[];
+  };
   meta: {
     round: number;
     phase: string;
@@ -199,8 +224,30 @@ export type ReviewTaskLimitBlock = {
     human_needed: boolean;
     recoverable: boolean;
     queue_strategy: string;
+    recovery: {
+      question_id: string;
+      allowed_answers: string[];
+      config_key: string;
+      rerun_command: string;
+    };
   };
 };
+
+function buildReviewTaskSplitTemplate(taskIds: string[], maxTasks: number) {
+  const normalizedIds = taskIds.map((taskId) => String(taskId || "").trim()).filter(Boolean);
+  const batches: Array<{ batch: number; task_ids: string[] }> = [];
+  if (Number.isInteger(maxTasks) && maxTasks > 0) {
+    for (let index = 0; index < normalizedIds.length; index += maxTasks) {
+      batches.push({ batch: batches.length + 1, task_ids: normalizedIds.slice(index, index + maxTasks) });
+    }
+  }
+  return {
+    strategy: "bounded_review_task_batches",
+    max_tasks_per_batch: maxTasks,
+    batch_count: batches.length,
+    batches,
+  };
+}
 
 export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds = [] }: {
   round: number;
@@ -209,6 +256,32 @@ export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds 
   taskIds?: string[];
 }): ReviewTaskLimitBlock {
   const blockerId = `REVIEW-TASK-LIMIT-R${round}`;
+  const configKey = "runner.max_review_tasks_per_round";
+  const rerunCommand = "yolo run <PRD_PATH>";
+  const splitTemplate = buildReviewTaskSplitTemplate(taskIds, maxTasks);
+  const nextQuestion = `本轮有 ${taskCount} 个 review 修复任务，单轮上限为 ${maxTasks}。请选择：按给出的批次拆分处理，或由人工显式设置 ${configKey}；YOLO 不会自动修改配置或选择方案。`;
+  const remediation = {
+    status: "human_required",
+    action: "ASK_HUMAN",
+    automation_can_continue: false,
+    requires_human: true,
+    unsafe_stop: false,
+    blocks_ship: true,
+    config: {
+      path: "config.yaml",
+      env_override: "YOLO_CONFIG",
+      key: configKey,
+      current_value: maxTasks,
+      requested_value: null,
+      change_requires_explicit_human_approval: true,
+    },
+    split_template: splitTemplate,
+    rerun_command: rerunCommand,
+    next_actions: [
+      "Answer the review task limit question with either `split_review_findings` or `set_configured_limit`.",
+      `After applying the explicit human decision, rerun \`${rerunCommand}\`.`,
+    ],
+  };
   return {
     blockerId,
     message: `本轮将生成 ${taskCount} 个 executor 修复任务，超过上限 ${maxTasks}，拒绝写入 PRD`,
@@ -217,7 +290,9 @@ export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds 
     status: "blocked",
     reason: "review_task_limit",
     human_needed: true,
-    recovery_action: "split_review_findings_or_raise_review_task_limit",
+    recovery_action: "ask_human_review_task_limit_recovery",
+    next_question: nextQuestion,
+    remediation,
     meta: {
       round,
       phase: "REVIEW_TASK_LIMIT_BLOCKED",
@@ -227,6 +302,12 @@ export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds 
       human_needed: true,
       recoverable: true,
       queue_strategy: "human_needed",
+      recovery: {
+        question_id: "review_task_limit_recovery",
+        allowed_answers: ["split_review_findings", "set_configured_limit"],
+        config_key: configKey,
+        rerun_command: rerunCommand,
+      },
     },
   };
 }
@@ -240,12 +321,19 @@ export function markReviewTaskLimitBlocked({ taskResults, taskLimitBlock, append
   const blocked = asArrayField(taskResults, "blocked");
   const append = isFn(appendUnique) ? appendUnique : appendUniqueFallback;
   append(blocked, [taskLimitBlock.blockerId]);
+  const remediation = asArrayField(taskResults, "remediation");
+  if (!remediation.some((item) => isRecord(item) && item.task_id === taskLimitBlock.blockerId)) {
+    remediation.push({ task_id: taskLimitBlock.blockerId, ...taskLimitBlock.remediation });
+  }
   taskResults.review_blocker = {
     id: taskLimitBlock.blockerId,
     status: taskLimitBlock.status,
     reason: taskLimitBlock.reason,
     human_needed: taskLimitBlock.human_needed,
     recovery_action: taskLimitBlock.recovery_action,
+    message: taskLimitBlock.message,
+    next_question: taskLimitBlock.next_question,
+    remediation: taskLimitBlock.remediation,
     meta: taskLimitBlock.meta,
   };
   return taskResults;
