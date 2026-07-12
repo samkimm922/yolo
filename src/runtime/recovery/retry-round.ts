@@ -38,6 +38,17 @@ interface TaskResultSets {
   blocked?: string[];
   contractReview?: string[];
   stop_reason?: string;
+  immediateRemediationQueue?: RemediationQueueEntry[];
+}
+
+/** A queued immediate-remediation record waiting to be cleared. */
+interface RemediationQueueEntry {
+  source_task_id: string;
+  routing?: string;
+  reason?: string;
+  action?: string;
+  status?: string;
+  next_actions?: string[];
 }
 /** A task definition as read from a PRD or expanded-task snapshot. */
 interface RetryTask {
@@ -243,7 +254,35 @@ export function mergeRetryRoundResults({
     ...(retryResults.completed || []),
     ...(retryResults.skipped || []),
   ]);
+  // Drain the immediate remediation queue for tasks that are now resolved via
+  // retry (completed or no-op). Without this, a task that originally failed
+  // with AUTO_REMEDIATE/REROUTE_REVIEW_FIX leaves a stale queue entry that
+  // finalize reports as UNRESOLVED_REMEDIATION_QUEUE indefinitely — even after
+  // the task succeeded on retry. Only resolved tasks are drained; tasks that
+  // are still failed keep their entries so the operator sees the work is
+  // still required.
+  drainRemediationQueue(taskResults, [
+    ...(retryResults.completed || []),
+    ...(retryResults.skipped || []),
+  ]);
   return taskResults;
+}
+
+/**
+ * Remove every queue entry whose `source_task_id` is in `resolvedIds`.
+ * Mutates `taskResults.immediateRemediationQueue` in place.
+ */
+function drainRemediationQueue(taskResults: TaskResultSets, resolvedIds: string[]) {
+  const queue = taskResults.immediateRemediationQueue;
+  if (!Array.isArray(queue) || !resolvedIds.length) return;
+  const resolved = new Set(resolvedIds);
+  let write = 0;
+  for (const entry of queue) {
+    if (entry && !resolved.has(entry.source_task_id)) {
+      queue[write++] = entry;
+    }
+  }
+  queue.length = write;
 }
 
 export function cleanupRetryPrdFile(filePath: string) {
