@@ -150,7 +150,7 @@ describe("yolo check report", () => {
 
       const report = inspectYoloCheck({ prdPath, projectRoot: root });
 
-      assert.equal(report.status, "pass");
+      assert.equal(report.status, "pass", JSON.stringify(report.blockers, null, 2));
       assert.equal(report.checks.find((check) => check.name === "prd_preflight").status, "pass");
       assert.equal(report.checks.find((check) => check.name === "adapter_readiness").status, "pass");
       assert.equal(report.checks.find((check) => check.name === "resolver_readiness").status, "pass");
@@ -465,7 +465,7 @@ describe("yolo check report", () => {
     }
   });
 
-  test("YB-002 blocks investigate-first atomicity in runner check instead of warning", () => {
+  test("investigate-first atomicity remains executable in runner check", () => {
     const root = tempProject();
     try {
       const prdPath = join(root, "prd.json");
@@ -474,15 +474,16 @@ describe("yolo check report", () => {
         post_conditions: [
           { id: "POST-A", type: "target_file_modified", severity: "FAIL", params: { file: "src/a.js" } },
           { id: "POST-B", type: "target_file_modified", severity: "FAIL", params: { file: "src/b.js" } },
+          { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build --silent" } },
         ],
       }));
 
       const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
       const atomicity = report.checks.find((check) => check.name === "atomicity");
 
-      assert.equal(report.status, "blocked");
-      assert.equal(atomicity.status, "blocked");
-      assert.ok(report.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST" && blocker.human_needed === true));
+      assert.equal(report.status, "pass");
+      assert.equal(atomicity.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
       assert.equal(report.warnings.some((warning) => warning.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
     } finally {
       rmSync(root, { recursive: true, force: true });

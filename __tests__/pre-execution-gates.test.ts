@@ -166,7 +166,7 @@ describe("pre-execution gates", () => {
     }
   });
 
-  test("YB-002 blocks investigate-first tasks before runner execution", () => {
+  test("investigate-first tasks pass contract preflight for runner execution", () => {
     const paths = makePaths();
     try {
       const result = inspectPreExecutionGates({
@@ -184,6 +184,7 @@ describe("pre-execution gates", () => {
             post_conditions: [
               { id: "POST-A", type: "target_file_modified", severity: "FAIL", params: { file: "src/a.js" } },
               { id: "POST-B", type: "target_file_modified", severity: "FAIL", params: { file: "src/b.js" } },
+              { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build --silent" } },
             ],
           }],
         }),
@@ -193,9 +194,9 @@ describe("pre-execution gates", () => {
         config: {},
       });
 
-      assert.equal(result.status, "blocked");
-      assert.equal(result.stage, "contract");
-      assert.ok(result.contract.doctor.failures.some((failure) => failure.code === "ATOMICITY_INVESTIGATE_FIRST" && failure.human_needed === true));
+      assert.equal(result.status, "pass", JSON.stringify(result, null, 2));
+      assert.equal(result.contract.status, "pass");
+      assert.equal(result.contract.doctor.failures.some((failure) => failure.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

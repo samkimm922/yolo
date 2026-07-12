@@ -430,7 +430,7 @@ describe("prd contract doctor gate", () => {
     }
   });
 
-  test("blocks investigate-first atomicity instead of returning a warning gate", () => {
+  test("accepts investigate-first atomicity as a runner-executable mode", () => {
     const paths = makePaths();
     try {
       const result = inspectPrdContractDoctorGate({
@@ -449,6 +449,7 @@ describe("prd contract doctor gate", () => {
             post_conditions: [
               { id: "POST-A", type: "target_file_modified", severity: "FAIL", params: { file: "src/a.ts" } },
               { id: "POST-B", type: "target_file_modified", severity: "FAIL", params: { file: "src/b.ts" } },
+              { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build --silent" } },
             ],
           }],
         },
@@ -457,9 +458,9 @@ describe("prd contract doctor gate", () => {
         projectRoot: paths.projectRoot,
       });
 
-      assert.equal(result.status, "blocked");
-      assert.equal(result.exit_code, 1);
-      assert.ok(result.doctor.failures.some((finding) => finding.code === "ATOMICITY_INVESTIGATE_FIRST"));
+      assert.equal(result.status, "pass", JSON.stringify(result.doctor, null, 2));
+      assert.equal(result.exit_code, 0);
+      assert.equal(result.doctor.failures.some((finding) => finding.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
       assert.equal(result.doctor.warnings.some((finding) => finding.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });

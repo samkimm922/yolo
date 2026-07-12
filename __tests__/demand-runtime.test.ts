@@ -2396,12 +2396,10 @@ describe("demand runtime", () => {
         writeArtifacts: false,
       });
 
-      assert.equal(prd.status, "blocked");
-      assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
-      if ("prd" in prd) assert.equal(prd.prd, null);
-      assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
-      if (!("compiled" in prd) || !prd.compiled) throw new Error("expected compiled");
-      const compiledPrd = prd.compiled.prd;
+      assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+      assert.equal(prd.code, "DEMAND_PRD_READY");
+      requirePrd(prd);
+      const compiledPrd = prd.prd;
       assert.equal(compiledPrd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
       assert.equal(compiledPrd.tasks.every((task) => !(/编辑/.test(textValue(task.description)) && /移动/.test(textValue(task.description)))), true);
       assert.match(textValue(compiledPrd.demand.atomicity_contract.rule), /one user-visible story/);
