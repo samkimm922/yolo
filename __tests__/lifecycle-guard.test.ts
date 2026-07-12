@@ -549,7 +549,19 @@ describe("lifecycle guard", () => {
       const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
       assert.equal(guard.status, "blocked");
       assert.ok(guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_REPORT_PENDING"));
-      assert.ok(guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_EVIDENCE_EMPTY"));
+      const evidenceEmpty = guard.blockers.find((blocker) => blocker.code === "ACCEPTANCE_EVIDENCE_EMPTY");
+      assert.ok(evidenceEmpty, "ACCEPTANCE_EVIDENCE_EMPTY blocker must be present");
+      // Audit #21: the message must name the acceptance artifact path so the
+      // operator knows which report to backfill, instead of a bare "evidence
+      // is empty" with a self-looping "Run yolo ship first" recovery.
+      const acceptanceArtifact = join(stateRoot, "lifecycle", "acceptance-report.json");
+      assert.ok(
+        evidenceEmpty.message.includes(acceptanceArtifact),
+        `ACCEPTANCE_EVIDENCE_EMPTY message must include artifact path "${acceptanceArtifact}", got: "${evidenceEmpty.message}"`,
+      );
+      // Recovery must NOT self-loop back to the original command (yolo ship).
+      assert.notEqual(guard.recommended_command, "yolo ship",
+        "ACCEPTANCE_EVIDENCE_EMPTY must not recommend re-running the original ship command (dead-end self-loop)");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -583,7 +595,93 @@ describe("lifecycle guard", () => {
 
       const mustFix = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
       assert.equal(mustFix.status, "blocked");
-      assert.ok(mustFix.blockers.some((blocker) => blocker.code === "REVIEW_FIX_MUST_FIX_BEFORE_SHIP"));
+      const mustFixBlocker = mustFix.blockers.find((blocker) => blocker.code === "REVIEW_FIX_MUST_FIX_BEFORE_SHIP");
+      assert.ok(mustFixBlocker, "REVIEW_FIX_MUST_FIX_BEFORE_SHIP blocker must be present");
+      // Audit #21: the blocker must name the specific finding id so the operator
+      // knows which finding to resolve, instead of a bare "work remains" message.
+      assert.ok(
+        mustFixBlocker.message.includes("REV-001"),
+        `REVIEW_FIX_MUST_FIX_BEFORE_SHIP message must include finding id "REV-001", got: "${mustFixBlocker.message}"`,
+      );
+      // Recovery must NOT self-loop back to the original command (yolo ship).
+      assert.notEqual(mustFix.recommended_command, "yolo ship",
+        "REVIEW_FIX_MUST_FIX_BEFORE_SHIP must not recommend re-running the original ship command (dead-end self-loop)");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("REVIEW_FIX_MUST_FIX_BEFORE_SHIP lists every open finding id and routes recovery to yolo review", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root, {
+        findings: [
+          { finding_id: "REV-ALPHA", severity: "CRITICAL", must_fix_before_ship: true, message: "alpha" },
+          { id: "REV-BETA", severity: "HIGH", must_fix_before_ship: true, message: "beta" },
+        ],
+      });
+      writeAcceptancePass(root);
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      const blocker = guard.blockers.find((b) => b.code === "REVIEW_FIX_MUST_FIX_BEFORE_SHIP");
+      assert.ok(blocker, "must-fix blocker present");
+      // Both finding ids must surface regardless of which id field was used.
+      assert.ok(blocker.message.includes("REV-ALPHA"), `message must include REV-ALPHA: "${blocker.message}"`);
+      assert.ok(blocker.message.includes("REV-BETA"), `message must include REV-BETA: "${blocker.message}"`);
+      // Findings WITHOUT the must-fix flag must NOT leak into the blocker list.
+      writeReviewPass(root, {
+        findings: [
+          { finding_id: "REV-ALPHA", severity: "CRITICAL", must_fix_before_ship: true, message: "alpha" },
+          { finding_id: "REV-NOOP", severity: "LOW", must_fix_before_ship: false, message: "noop" },
+        ],
+      });
+      const guard2 = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      const blocker2 = guard2.blockers.find((b) => b.code === "REVIEW_FIX_MUST_FIX_BEFORE_SHIP");
+      assert.ok(blocker2);
+      assert.ok(!blocker2.message.includes("REV-NOOP"), `non-must-fix finding must not appear: "${blocker2.message}"`);
+      // Recovery routes to the review stage (the place that resolves findings),
+      // not back to ship.
+      assert.ok(
+        guard2.recommended_command.startsWith("yolo review"),
+        `recovery must route to review, got: "${guard2.recommended_command}"`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("ACCEPTANCE_EVIDENCE_EMPTY routes recovery to acceptance, not ship self-loop", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      // Acceptance report exists (stage completed) but has no evidence entries.
+      writeLifecycleStageReport("acceptance", {
+        status: "success",
+        summary: "acceptance has no evidence",
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      const blocker = guard.blockers.find((b) => b.code === "ACCEPTANCE_EVIDENCE_EMPTY");
+      assert.ok(blocker, "ACCEPTANCE_EVIDENCE_EMPTY present");
+      const acceptanceArtifact = join(stateRoot, "lifecycle", "acceptance-report.json");
+      assert.ok(
+        blocker.message.includes(acceptanceArtifact),
+        `message must name artifact path, got: "${blocker.message}"`,
+      );
+      // Recovery must route to acceptance collection, not back to the ship command.
+      assert.notEqual(guard.recommended_command, "yolo ship");
+      assert.ok(
+        guard.recommended_command.startsWith("yolo release accept"),
+        `recovery must route to acceptance collection, got: "${guard.recommended_command}"`,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
