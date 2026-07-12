@@ -5,6 +5,7 @@ import { initProject } from "../core/bootstrap.js";
 import { inspectDiscoveryReadiness } from "../discovery/gate.js";
 import { compileDiscoveryPlanToSpec } from "../prd/spec-compiler.js";
 import { buildAcceptanceReport } from "../runtime/acceptance/report.js";
+import { sha256File } from "../runtime/evidence/artifact-integrity.js";
 import { inspectYoloCheck } from "../runtime/gates/check-report.js";
 import {
   inspectParallelMergeGate,
@@ -129,6 +130,17 @@ export interface BuildNoCodeDogfoodOptions {
   projectRoot: string;
   now: string;
   compiledRaw?: CompiledResult | null;
+  controlledRunEvidence?: ControlledRunEvidence | null;
+}
+
+export interface ControlledRunEvidence extends ReleaseRecord {
+  status: string;
+  task_results?: unknown[];
+  summary?: ReleaseRecord;
+  provider_execution?: boolean;
+  code_edited?: boolean;
+  evidence_refs?: string[];
+  [key: string]: unknown;
 }
 
 export interface RealProjectDogfoodPackOptions extends ReleaseRecord {
@@ -146,6 +158,8 @@ export interface RealProjectDogfoodPackOptions extends ReleaseRecord {
   now?: Date | string;
   compiledRaw?: CompiledResult | null;
   compiled_raw?: CompiledResult | null;
+  controlledRunEvidence?: ControlledRunEvidence | null;
+  controlled_run_evidence?: ControlledRunEvidence | null;
 }
 
 function normalizeNow(value: RealProjectDogfoodPackOptions["now"]): string {
@@ -346,7 +360,7 @@ function dogfoodPrdEvidencePayload(compiled: CompiledResult = Object()) {
   };
 }
 
-function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCompiledRaw = null }: BuildNoCodeDogfoodOptions) {
+function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCompiledRaw = null, controlledRunEvidence = null }: BuildNoCodeDogfoodOptions) {
   const stateRoot = join(projectRoot, ".yolo");
   const discoveryInput = {
     id: "DISCOVERY-DOGFOOD-001",
@@ -587,15 +601,23 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
     provider_execution: false,
   };
   const reviewPath = writeJson(join(projectRoot, ".yolo/lifecycle/review-report.json"), reviewReport);
+  const hasRealRunEvidence = Boolean(controlledRunEvidence && controlledRunEvidence.status === "pass");
   const runReport = {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_pack_run_report.v1",
-    status: "dry_run",
-    mode: "controlled_run_plan_only",
-    dry_run: true,
-    summary: { completed: 1, failed: 0, blocked: 0 },
-    task_results: [{ task_id: "DOGFOOD-TASK-001", status: "pass", evidence_refs: [prdPath, checkPath] }],
-    provider_execution: false,
+    status: hasRealRunEvidence ? "pass" : "dry_run",
+    mode: hasRealRunEvidence ? "controlled_run_real_evidence" : "controlled_run_plan_only",
+    dry_run: !hasRealRunEvidence,
+    run_id: hasRealRunEvidence ? (controlledRunEvidence?.run_id || "DOGFOOD-CONTROLLED-RUN-001") : undefined,
+    prd_path: prdPath,
+    summary: hasRealRunEvidence && controlledRunEvidence?.summary
+      ? controlledRunEvidence.summary
+      : { completed: 1, failed: 0, blocked: 0 },
+    task_results: hasRealRunEvidence && Array.isArray(controlledRunEvidence?.task_results) && controlledRunEvidence.task_results.length > 0
+      ? controlledRunEvidence.task_results
+      : [{ task_id: "DOGFOOD-TASK-001", status: "pass", evidence_refs: [prdPath, checkPath] }],
+    provider_execution: hasRealRunEvidence ? Boolean(controlledRunEvidence?.provider_execution) : false,
+    evidence_refs: hasRealRunEvidence ? (controlledRunEvidence?.evidence_refs || []) : [],
   };
   const runPath = writeJson(join(projectRoot, ".yolo/lifecycle/run-report.json"), runReport);
   const acceptanceReport = buildAcceptanceReport({
@@ -605,6 +627,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
     runReport,
     reviewReport,
     resolver: { status: "pass", selected: {}, blockers: [] },
+    artifactDigests: { [resolve(prdPath)]: sha256File(prdPath) },
   });
   const acceptPath = writeJson(join(projectRoot, ".yolo/lifecycle/acceptance-report.json"), acceptanceReport);
 
@@ -627,14 +650,17 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
   const controlledRun = {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_pack_controlled_run.v1",
-    status: "blocked",
-    code: "REAL_PROJECT_DOGFOOD_CONTROLLED_RUN_DRY_RUN_ONLY",
-    summary: "Controlled run only planned dry-run evidence; real execution evidence is required before pass.",
+    status: hasRealRunEvidence ? "pass" : "blocked",
+    code: hasRealRunEvidence ? undefined : "REAL_PROJECT_DOGFOOD_CONTROLLED_RUN_DRY_RUN_ONLY",
+    summary: hasRealRunEvidence
+      ? "Controlled run passed with real execution evidence injected by the caller."
+      : "Controlled run only planned dry-run evidence; real execution evidence is required before pass.",
+    real_run_evidence: hasRealRunEvidence ? controlledRunEvidence : null,
     parallel_plan: parallelPlan,
     merge_gate: mergeGate,
     evidence_merge: parallelEvidence,
-    provider_execution: false,
-    code_edited: false,
+    provider_execution: hasRealRunEvidence ? Boolean(controlledRunEvidence?.provider_execution) : false,
+    code_edited: hasRealRunEvidence ? Boolean(controlledRunEvidence?.code_edited) : false,
   };
   const controlledRunPath = writeJson(join(projectRoot, ".yolo/lifecycle/controlled-run-report.json"), controlledRun);
 
@@ -720,6 +746,7 @@ export function runRealProjectDogfoodPack(options: RealProjectDogfoodPackOptions
     projectRoot,
     now,
     compiledRaw: options.compiledRaw || options.compiled_raw || null,
+    controlledRunEvidence: options.controlledRunEvidence || options.controlled_run_evidence || null,
   });
   const evidence = dogfoodLifecycle.evidence;
   const dogfoodGate = runRealProjectDogfoodGate({
