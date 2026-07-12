@@ -335,27 +335,21 @@ function validateEvidencePaths(projectRoot: string, report: GuardRecord = Object
   return blockers;
 }
 
-function hasManualAcceptanceCriteria(report: GuardRecord = Object(), projectRoot?: string, stateRoot?: string): boolean {
+function findUnresolvedManualAcceptanceCriteria(report: GuardRecord = Object(), projectRoot?: string, stateRoot?: string): EvidenceEntry[] {
   const nestedReport = report.report as GuardRecord | undefined;
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
   const nested = Array.isArray(nestedReport?.manual_criteria) ? nestedReport.manual_criteria : [];
-  // acceptance-report.json is an external artifact that can be hand-edited,
-  // partially flushed, or git-merged into a valid-JSON-but-malformed shape.
-  // A null/number/string entry inside `manual_criteria` would crash
-  // `criterion.task_id` below and take down the entire delivery gate.
-  // Reject non-object entries first, mirroring the asConditions/isBlockingCheck
-  // pattern used elsewhere in this module.
   const allManual = [...manualCriteria, ...nested].filter(
     (criterion) => criterion && typeof criterion === "object" && !Array.isArray(criterion),
   ) as EvidenceEntry[];
-  if (allManual.length === 0) return false;
+  if (allManual.length === 0) return [];
 
   const evidence = reportEvidenceEntries(report);
   const manualEvidence = evidence.filter(
     (e) => isStructuredManualAcceptanceEvidence(e, { projectRoot, stateRoot }),
   );
 
-  const unresolved = allManual.filter((criterion) => {
+  return allManual.filter((criterion) => {
     const taskId = criterion.task_id;
     const conditionId = criterion.condition_id;
     if (!taskId || !conditionId) return true;
@@ -363,8 +357,10 @@ function hasManualAcceptanceCriteria(report: GuardRecord = Object(), projectRoot
       (record) => (record as EvidenceEntry).task_id === taskId && (record as EvidenceEntry).condition_id === conditionId,
     );
   });
+}
 
-  return unresolved.length > 0;
+function hasManualAcceptanceCriteria(report: GuardRecord = Object(), projectRoot?: string, stateRoot?: string): boolean {
+  return findUnresolvedManualAcceptanceCriteria(report, projectRoot, stateRoot).length > 0;
 }
 
 function reportEvidenceEntries(report: GuardRecord = Object()): EvidenceEntry[] {
@@ -512,11 +508,15 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
       ));
     }
     blockers.push(...validateEvidencePaths(projectRoot, acceptance.report, "acceptance"));
-    if (hasManualAcceptanceCriteria(acceptance.report, projectRoot, stateRoot)) {
+    const unresolvedManual = findUnresolvedManualAcceptanceCriteria(acceptance.report, projectRoot, stateRoot);
+    if (unresolvedManual.length > 0) {
+      const unresolvedIds = unresolvedManual
+        .map((c) => `${c.task_id}/${c.condition_id}`)
+        .filter(Boolean);
       blockers.push(makeBlocker(
         "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED",
         "acceptance",
-        "Acceptance evidence contains manual (unverified) acceptance criteria. Each criterion needs either a passing verify command or explicit human acceptance evidence.",
+        `Acceptance evidence contains ${unresolvedManual.length} unresolved manual acceptance criteria (${unresolvedIds.join(", ")}). Each criterion needs either a passing verify command or explicit human acceptance evidence signed with the manual-acceptance keypair.`,
       ));
     }
     // CR5 part (b): re-check the acceptance-freeze source fingerprint against the

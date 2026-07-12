@@ -1272,6 +1272,12 @@ describe("acceptance report", () => {
         guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
         `expected ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED in blockers: ${JSON.stringify(guard.blockers)}`,
       );
+      // RED→GREEN: blocker message must include the task/condition IDs so the
+      // operator knows which criteria need human acceptance evidence.
+      const manualBlocker = guard.blockers.find((b) => b.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED");
+      assert.ok(manualBlocker, "manual criteria blocker should exist");
+      assert.match(manualBlocker.message, /POST-ACCEPT-MANUAL|task_id|condition_id/i,
+        `blocker message should name the unresolved task/condition IDs: ${manualBlocker.message}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
