@@ -379,7 +379,7 @@ export function runAdapterEvidenceCollector(input: Record<string, unknown> = Obj
   const baseSummary: string = plan.status === "blocked"
     ? plan.summary
     : execute
-      ? "Adapter command execution requires explicit authorization."
+      ? "Adapter command execution requires explicit authorization. Add --allow-adapter-commands to authorize execution."
       : "Adapter evidence collector planned commands without executing them.";
   const result = {
     ...plan,

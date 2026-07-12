@@ -1327,7 +1327,13 @@ export function formatAcceptanceReportText(report: AcceptanceRecord = Object()):
     lines.push(`issues: P0=${issueSummary.p0} P1=${issueSummary.p1} P2=${issueSummary.p2} human=${issueSummary.human_review}`);
   }
   for (const issue of toArray<AcceptanceIssue>(report.issues).slice(0, 12)) {
-    lines.push(`- ${issue.level}:${issue.code}${issue.task_id ? ` task=${issue.task_id}` : ""} ${issue.message}`.trim());
+    const extras: string[] = [];
+    if (issue.task_id) extras.push(`task=${issue.task_id}`);
+    if (issue.artifact_path) extras.push(`artifact=${issue.artifact_path}`);
+    if (issue.expected_sha256) extras.push(`expected=${issue.expected_sha256}`);
+    if (issue.actual_sha256) extras.push(`actual=${issue.actual_sha256}`);
+    const extraStr = extras.length > 0 ? ` ${extras.join(" ")}` : "";
+    lines.push(`- ${issue.level}:${issue.code}${extraStr} ${issue.message}`.trim());
   }
   const nextActions = report.next_actions as string[] | undefined;
   if (nextActions?.length) {
