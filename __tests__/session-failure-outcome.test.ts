@@ -1,11 +1,15 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildDiffQualityFailureOutcome,
   buildProviderFailureOutcome,
   buildTestGenerationFailureOutcome,
   providerFailureDiagnostic,
 } from "../src/runtime/execution/session-failure-outcome.js";
+import { validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 
 describe("session failure outcome helpers", () => {
   test("providerFailureDiagnostic preserves runner diagnostic fields", () => {
@@ -250,10 +254,10 @@ describe("session failure outcome helpers", () => {
     });
 
     assert.equal(outcome.failReason, "test-generation-validator blocked: new_test_file_forbidden");
-    assert.deepEqual(outcome.result, {
-      status: "failed",
-      reason: "test-generation-validator blocked: new_test_file_forbidden",
-    });
+    assert.equal(outcome.result.status, "failed");
+    assert.equal(outcome.result.reason, "test-generation-validator blocked: new_test_file_forbidden");
+    assert.deepEqual(outcome.result.remediation.items, [{ code: "new_test_file_forbidden" }]);
+    assert.equal(outcome.result.remediation.blocks_execution, true);
     assert.equal(outcome.transition.result.status, "FAIL");
     assert.equal(outcome.transition.result.retries, 2);
     assert.deepEqual(outcome.transition.prd_update, {
@@ -262,5 +266,86 @@ describe("session failure outcome helpers", () => {
       failReason: "test-generation-validator blocked: new_test_file_forbidden",
       testGenerationGate: gate,
     });
+  });
+
+  test("buildTestGenerationFailureOutcome exposes validator field, file, and count remediation details", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-generation-outcome-"));
+    const changedFiles = [{ file: "src/app.ts", status: " M", isNew: false }];
+    try {
+      mkdirSync(join(root, "tests"), { recursive: true });
+      writeFileSync(join(root, "tests", "count.test.js"), "assert.equal(actual, expected);\n", "utf8");
+
+      const missingFieldGate = validateTestGeneration({
+        verification_contract: {
+          authenticity: { required: true, methods: [] },
+        },
+      }, { cwd: root, changedFiles });
+      const missingFileGate = validateTestGeneration({
+        verification_contract: {
+          authenticity: {
+            required: true,
+            methods: [{
+              type: "required_marker",
+              files: ["tests/missing.test.js"],
+              markers: [{ text: "assert.equal" }],
+            }],
+          },
+        },
+      }, { cwd: root, changedFiles });
+      const countGate = validateTestGeneration({
+        verification_contract: {
+          authenticity: {
+            required: true,
+            methods: [{
+              type: "assertion_count",
+              files: ["tests/count.test.js"],
+              minimum: 2,
+              markers: [{ text: "assert.equal" }],
+            }],
+          },
+        },
+      }, { cwd: root, changedFiles });
+
+      const failures = [
+        missingFieldGate.failures.find((failure) => failure.code === "AUTHENTICITY_METHODS_MISSING"),
+        missingFileGate.failures.find((failure) => failure.code === "AUTHENTICITY_FILE_MISSING"),
+        countGate.failures.find((failure) => failure.code === "AUTHENTICITY_ASSERTION_COUNT_BELOW_MINIMUM"),
+      ];
+      assert.equal(failures[0]?.missing_field, "verification_contract.authenticity.methods");
+      assert.equal(failures[1]?.file, "tests/missing.test.js");
+      assert.deepEqual(
+        { minimum: failures[2]?.minimum, found: failures[2]?.found },
+        { minimum: 2, found: 1 },
+      );
+
+      const outcome = buildTestGenerationFailureOutcome({
+        taskId: "FIX-AUTHENTICITY",
+        testGenerationGate: {
+          blocks_execution: true,
+          failures,
+        },
+        attempt: 1,
+      });
+
+      assert.equal(outcome.result.status, "failed");
+      assert.equal(outcome.result.remediation.source, "test-generation-validator");
+      assert.equal(outcome.result.remediation.blocks_execution, true);
+      assert.equal(outcome.result.remediation.issue_count, 3);
+      assert.equal(
+        outcome.result.remediation.items[0].missing_field,
+        "verification_contract.authenticity.methods",
+      );
+      assert.equal(outcome.result.remediation.items[1].file, "tests/missing.test.js");
+      assert.deepEqual(
+        {
+          minimum: outcome.result.remediation.items[2].minimum,
+          found: outcome.result.remediation.items[2].found,
+        },
+        { minimum: 2, found: 1 },
+      );
+      assert.deepEqual(outcome.transition.result.remediation, outcome.result.remediation);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -134,12 +134,19 @@ describe("session pre-gate checks", () => {
     const result = await inspectSessionPreGateChecks(baseOptions(logs, {
       validateTestGeneration: async () => ({
         blocks_execution: true,
-        failures: [{ code: "NEW_TEST_FORBIDDEN" }],
+        failures: [{
+          code: "NEW_TEST_FORBIDDEN",
+          detail: "Create the declared test file before retrying.",
+          file: "tests/declared.test.js",
+        }],
       }),
     }));
 
     assert.equal(result.action, "return");
-    assert.deepEqual(result.result, { status: "failed", reason: "test-generation-validator blocked: NEW_TEST_FORBIDDEN" });
+    assert.equal(result.result.status, "failed");
+    assert.equal(result.result.reason, "test-generation-validator blocked: NEW_TEST_FORBIDDEN");
+    assert.equal(result.result.remediation.items[0].file, "tests/declared.test.js");
+    assert.deepEqual(result.result.remediation.next_actions, ["Create the declared test file before retrying."]);
     assert.equal(logs.transitions[0].prd_update.phase, "test_generation");
     assert.deepEqual(logs.cleanup, [["/tmp/wt", "yolo/FIX-PREGATE", false]]);
   });
