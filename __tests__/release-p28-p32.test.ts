@@ -327,6 +327,35 @@ describe("P28-P32 release evidence gates", () => {
     assert.equal(ready.guarantees.stable_runtime_declared, false);
   });
 
+  test("runtime boundary decision blocked result carries a decision record schema template and attach path", () => {
+    const blocked = runRuntimeBoundaryDecisionGate({
+      yoloRoot: "/tmp/yolo",
+      candidate: runtimeCandidate(),
+    });
+    assert.equal(blocked.status, "blocked");
+    assert.ok(blocked.decision_record_template, "blocked gate must surface a decision_record_template");
+
+    const template = blocked.decision_record_template as Record<string, unknown>;
+    const entry = template.entry_template as Record<string, unknown>;
+
+    // The skeleton must satisfy decisionApproved() so operators can copy it verbatim.
+    assert.equal(entry.approved, true);
+    assert.equal(entry.target_export, "./runtime");
+    assert.equal(entry.current_tier, "experimental");
+    assert.equal(entry.proposed_tier, "stable");
+    assert.equal(entry.stability_reviewed, true);
+    assert.equal(entry.rollback_plan_approved, true);
+    assert.ok(typeof entry.approver === "string" && entry.approver.length > 0);
+    assert.ok(typeof entry.approved_at === "string" && entry.approved_at.length > 0);
+    assert.ok(typeof entry.rollback_plan === "string" && entry.rollback_plan.length > 0);
+
+    // The template must name the option used to attach the record at the gate boundary.
+    assert.ok(
+      typeof template.attach_via === "string" && template.attach_via.length > 0,
+      "template must document the attach option",
+    );
+  });
+
   test("public beta evidence bundle aggregates P28-P31 without executing release side effects", () => {
     const result = runPublicBetaEvidenceGateDirect({
       yoloRoot: "/tmp/yolo",

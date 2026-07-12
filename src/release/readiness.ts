@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { inspectFixtureRegistry } from "../fixtures/registry.js";
 import {
   RELEASE_INCIDENT_PASS_STATUSES,
+  RELEASE_INCIDENT_PASS_STATUS_VALUES,
   RELEASE_RUN_PASS_OUTCOMES,
   RELEASE_RUN_PASS_STATUSES,
 } from "../lib/status-vocab.js";
@@ -160,6 +161,30 @@ function normalizeIncidentEvidence(evidence: ReliabilityEvidence = Object()): No
     .filter((entry): entry is NormalizedIncidentEvidence => entry !== null);
 }
 
+const INCIDENT_EVIDENCE_ACCEPTED_ARRAYS = Object.freeze(["incidents", "results", "checks"]);
+const INCIDENT_EVIDENCE_ACCEPTED_ID_FIELDS = Object.freeze(["id", "incident_id", "code"]);
+const INCIDENT_EVIDENCE_ACCEPTED_EVIDENCE_FIELDS = Object.freeze(["evidence", "evidence_file", "artifact"]);
+
+function buildIncidentEvidenceTemplate(): ReleaseRecord {
+  return {
+    description: "Fill one YB-* entry per required incident id, then attach via the incidentEvidence / incident_evidence option.",
+    accepted_arrays: [...INCIDENT_EVIDENCE_ACCEPTED_ARRAYS],
+    entry_template: {
+      id: "<YB-###>",
+      status: "pass | passed | fixed | closed",
+      evidence: "<path or reference to the closing regression artifact>",
+    },
+    accepted_id_fields: [...INCIDENT_EVIDENCE_ACCEPTED_ID_FIELDS],
+    accepted_pass_statuses: [...RELEASE_INCIDENT_PASS_STATUS_VALUES],
+    accepted_evidence_fields: [...INCIDENT_EVIDENCE_ACCEPTED_EVIDENCE_FIELDS],
+    example: {
+      id: REQUIRED_RELIABILITY_INCIDENT_IDS[0],
+      status: RELEASE_INCIDENT_PASS_STATUS_VALUES[0],
+      evidence: "state/reports/yb-001-regression.json",
+    },
+  };
+}
+
 function cleanStatus(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
@@ -281,6 +306,7 @@ export function inspectYoloReliabilityReadiness(options: PublicBetaReadinessOpti
     summary,
     checks,
     blockers,
+    ...(blockers.length > 0 ? { incident_evidence_template: buildIncidentEvidenceTemplate() } : {}),
   };
 }
 
