@@ -1259,7 +1259,12 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
     });
     summary = summarizeIssues(issues);
   }
-  const status = summary.p0 > 0 || summary.p1 > 0 ? "blocked" : summary.p2 > 0 || summary.human_review > 0 ? "warning" : "pass";
+  const approvedReleaseWarnings = releaseMode && releaseWarnings.length > 0 && warningApproval.approved;
+  const status = summary.p0 > 0 || summary.p1 > 0
+    ? "blocked"
+    : (summary.p2 > 0 || summary.human_review > 0) && !approvedReleaseWarnings
+      ? "warning"
+      : "pass";
   const report = Object.assign(Object(), {
     schema_version: ACCEPTANCE_REPORT_SCHEMA_VERSION,
     schema: ACCEPTANCE_REPORT_SCHEMA,

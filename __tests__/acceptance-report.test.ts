@@ -552,6 +552,10 @@ describe("acceptance report", () => {
         mode: "release",
         warning_count: 1,
       });
+      writeText(join(root, "state/reports/run/run-report.json"), "run evidence\n");
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
 
       const report = buildAcceptanceReport({
         prdPath,
@@ -570,18 +574,22 @@ describe("acceptance report", () => {
         stateRoot,
         mode: "release",
         approvalArtifact: approvalPath,
+        writeLifecycle: true,
       });
 
-      assert.equal(report.status, "warning");
+      assert.equal(report.status, "pass");
       assert.equal(report.issue_summary.p1, 0);
       assert.equal(report.warning_approval.approved, true);
       assert.equal(report.warning_approval.expected.warning_count, 1);
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "pass", JSON.stringify(guard.blockers, null, 2));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("runYoloAcceptCli exits 2 for approved acceptance warnings", () => {
+  test("runYoloAcceptCli exits 0 for approved acceptance warnings", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
     let stdout = "";
@@ -641,16 +649,16 @@ describe("acceptance report", () => {
       });
       const report = JSON.parse(stdout);
 
-      assert.equal(exitCode, 2);
+      assert.equal(exitCode, 0);
       assert.equal(stderr, "");
-      assert.equal(report.status, "warning");
-      assert.equal(report.code, "ACCEPTANCE_WARNING");
+      assert.equal(report.status, "pass");
+      assert.equal(report.code, "ACCEPTANCE_PASS");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("root yolo accept and yolo release accept exit 2 for approved acceptance warnings", async () => {
+  test("root yolo release accept exits 0 for approved acceptance warnings", async () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
     try {
@@ -713,10 +721,10 @@ describe("acceptance report", () => {
         });
         const report = JSON.parse(stdout);
 
-        assert.equal(exitCode, 2, argv.join(" "));
+        assert.equal(exitCode, 0, argv.join(" "));
         assert.equal(stderr, "");
-        assert.equal(report.status, "warning");
-        assert.equal(report.code, "ACCEPTANCE_WARNING");
+        assert.equal(report.status, "pass");
+        assert.equal(report.code, "ACCEPTANCE_PASS");
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
