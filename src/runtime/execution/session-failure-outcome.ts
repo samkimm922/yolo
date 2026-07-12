@@ -155,7 +155,20 @@ export function buildTestGenerationFailureOutcome({
   testGenerationGate = Object(),
   attempt = 0,
 } = Object()) {
-  const failReason = `test-generation-validator blocked: ${(testGenerationGate.failures || []).map((failure) => failure.code).join(", ")}`;
+  const failures = (testGenerationGate.failures || [])
+    .filter((failure) => failure && typeof failure === "object")
+    .map((failure) => ({ ...failure }));
+  const failReason = `test-generation-validator blocked: ${failures.map((failure) => failure.code).join(", ")}`;
+  const remediation = {
+    source: "test-generation-validator",
+    gate_strength: "strict",
+    blocks_execution: true,
+    issue_count: failures.length,
+    items: failures,
+    next_actions: failures
+      .map((failure) => failure.detail)
+      .filter((detail) => typeof detail === "string" && detail.trim()),
+  };
   return {
     failReason,
     transition: createTaskTransition({
@@ -164,6 +177,7 @@ export function buildTestGenerationFailureOutcome({
         status: "FAIL",
         reason: failReason,
         retries: attempt,
+        remediation,
       },
       prdUpdate: {
         status: "blocked",
@@ -172,6 +186,6 @@ export function buildTestGenerationFailureOutcome({
         testGenerationGate,
       },
     }),
-    result: { status: "failed", reason: failReason },
+    result: { status: "failed", reason: failReason, remediation },
   };
 }

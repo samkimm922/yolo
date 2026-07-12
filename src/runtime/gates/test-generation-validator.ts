@@ -215,6 +215,7 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
     failures.push({
       code: "AUTHENTICITY_METHODS_MISSING",
       detail: "verification_contract.authenticity.methods must declare at least one proof mechanism.",
+      missing_field: "verification_contract.authenticity.methods",
     });
     return;
   }
@@ -271,6 +272,7 @@ function validateAuthenticityContract(task, cwd, changedTests, failures) {
         failures.push({
           code: "AUTHENTICITY_FILE_MISSING",
           detail: `Authenticity contract target file does not exist: ${file}`,
+          file,
         });
         continue;
       }
