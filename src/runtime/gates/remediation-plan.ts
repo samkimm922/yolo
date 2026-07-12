@@ -79,7 +79,12 @@ function issueText(issue = Object()) {
 
 function isUnsafeIssue(issue = Object()) {
   const text = issueText(issue);
-  return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml|billable|npm publish|curl|wget/.test(text);
+  // Match genuine security/safety hazards. The bare word "release" was too
+  // broad — it matched any message mentioning "runner/release execution",
+  // misclassifying ordinary demand-contract blockers as STOP_UNSAFE. Now we
+  // require "release" to be part of a compound like "release approval",
+  // "release candidate", "publish.*release", or the standalone unsafe terms.
+  return /credential|secret|api[_ -]?key|password|token|publish|release\s+(?:approval|candidate|ready|gate)|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml|billable|npm publish|curl|wget/.test(text);
 }
 
 function isHumanRequiredIssue(issue = Object()) {

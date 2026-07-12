@@ -67,6 +67,21 @@ describe("gate remediation plan", () => {
     assert.equal(human.requires_human, true);
   });
 
+  test("does not misclassify demand-contract blockers as STOP_UNSAFE due to bare 'release' substring", () => {
+    // RED: the isUnsafeIssue regex matched the bare word "release", so any
+    // message mentioning "runner/release execution" was misclassified as
+    // STOP_UNSAFE — e.g. "Runner/release execution requires an approved demand
+    // contract." The only next_action for STOP_UNSAFE is "get explicit approval"
+    // which cannot create the missing demand contract, session, facts, or
+    // quality report.
+    const demandMissing = classifyGateRemediationIssue({
+      code: "DEMAND_CONTRACT_MISSING",
+      message: "Runner/release execution requires an approved demand contract.",
+    });
+    assert.notEqual(demandMissing.action, GATE_REMEDIATION_ACTIONS.STOP_UNSAFE,
+      "demand contract blocker must not be classified as STOP_UNSAFE");
+  });
+
   test("routes structural PRD gaps to bounded auto remediation", () => {
     const plan = buildGateRemediationPlan({
       source: "yolo-check",
