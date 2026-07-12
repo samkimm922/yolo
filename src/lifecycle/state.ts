@@ -115,7 +115,7 @@ export function initLifecycleState(options: LifecycleOptions = Object()) {
   const skipped: string[] = [];
   const ledgerHmac = dryRun
     ? { key_path: join(stateRoot, "keys/ledger.hmac"), created: false }
-    : provisionLedgerHmacKey(stateRoot);
+    : provisionLedgerHmacKey(stateRoot, { force });
 
   const absoluteDir = join(projectRoot, plan.directory);
   if (!existsSync(absoluteDir)) {

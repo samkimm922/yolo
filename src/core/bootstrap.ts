@@ -764,7 +764,7 @@ export function initProject(options: ProjectBootstrapOptions = Object()) {
   const skipped: string[] = [];
   const ledgerHmac = dryRun
     ? { key_path: join(plan.project_root, ".yolo/keys/ledger.hmac"), created: false }
-    : provisionLedgerHmacKey(join(plan.project_root, ".yolo"));
+    : provisionLedgerHmacKey(join(plan.project_root, ".yolo"), { force });
 
   for (const dir of plan.directories) {
     const absoluteDir = join(plan.project_root, dir);

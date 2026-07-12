@@ -15,7 +15,9 @@ import {
   evidenceArtifactDigest,
   LEDGER_EVENT_SCHEMA,
   ledgerRecordHash,
+  provisionLedgerHmacKey,
   readLedgerJsonl,
+  requireLedgerHmacKey,
   validateLedgerChain,
   validateEvidenceArtifact,
   validateLedgerRecord,
@@ -584,6 +586,104 @@ describe("evidence ledger", () => {
       assert.equal(event.task_id, "TEST-002"); // task_id is not a credential pattern
       assert.equal(event.schema, LEDGER_EVENT_SCHEMA);
       assert.equal(event.record_hash, ledgerRecordHash(event));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("requireLedgerHmacKey points users at `yolo init` when the key is missing", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-hmac-hint-"));
+    try {
+      let caught;
+      try {
+        requireLedgerHmacKey(root);
+      } catch (error) {
+        caught = error;
+      }
+      assert.ok(caught, "requireLedgerHmacKey must throw when the key is missing");
+      assert.equal(caught.code, "LEDGER_HMAC_KEY_REQUIRED");
+      assert.match(caught.message, /yolo init/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("requireLedgerHmacKey points users at `yolo init` when the key file exists but is empty", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-hmac-hint-empty-"));
+    try {
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(join(root, "keys", "ledger.hmac"), "", "utf8");
+
+      let caught;
+      try {
+        requireLedgerHmacKey(root);
+      } catch (error) {
+        caught = error;
+      }
+      assert.ok(caught, "requireLedgerHmacKey must throw when the key is empty");
+      assert.equal(caught.code, "LEDGER_HMAC_KEY_REQUIRED");
+      assert.match(caught.message, /yolo init/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionLedgerHmacKey without force leaves an existing valid key untouched", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-provision-existing-"));
+    try {
+      const first = provisionLedgerHmacKey(root);
+      assert.equal(first.created, true);
+      const original = readFileSync(first.key_path, "utf8");
+
+      const second = provisionLedgerHmacKey(root);
+      assert.equal(second.created, false);
+      assert.equal(readFileSync(second.key_path, "utf8"), original, "valid existing key must not be regenerated without force");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionLedgerHmacKey regenerates an empty key when force is set", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-provision-force-empty-"));
+    try {
+      const keyPath = join(root, "keys", "ledger.hmac");
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(keyPath, "", "utf8");
+
+      const result = provisionLedgerHmacKey(root, { force: true });
+      assert.equal(result.created, true);
+      const regenerated = readFileSync(keyPath, "utf8");
+      assert.match(regenerated, /^[a-f0-9]{64}$/, "force must replace the empty key with a fresh 32-byte hex key");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionLedgerHmacKey regenerates a whitespace-only key when force is set", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-provision-force-ws-"));
+    try {
+      const keyPath = join(root, "keys", "ledger.hmac");
+      mkdirSync(join(root, "keys"), { recursive: true });
+      writeFileSync(keyPath, "   \n\t\n", "utf8");
+
+      const result = provisionLedgerHmacKey(root, { force: true });
+      assert.equal(result.created, true);
+      const regenerated = readFileSync(keyPath, "utf8");
+      assert.match(regenerated, /^[a-f0-9]{64}$/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionLedgerHmacKey with force never overwrites a valid existing key", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-ledger-provision-force-valid-"));
+    try {
+      const first = provisionLedgerHmacKey(root);
+      const original = readFileSync(first.key_path, "utf8");
+
+      const result = provisionLedgerHmacKey(root, { force: true });
+      assert.equal(result.created, false, "force must not overwrite a valid key");
+      assert.equal(readFileSync(result.key_path, "utf8"), original);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
