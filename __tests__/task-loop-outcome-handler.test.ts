@@ -251,6 +251,34 @@ describe("task-loop outcome handler", () => {
     assert.equal(state.results.immediateRemediationQueue[0].routing, "before_next_feature_task");
   });
 
+  test("handleTaskOutcome drains remediation queue when a task later completes", () => {
+    // RED: a task that previously failed with AUTO_REMEDIATE was enqueued in
+    // the immediate remediation queue. When that same task id later reaches a
+    // "completed" outcome (e.g. after a retry or re-run), its queue entry must
+    // be drained — otherwise the run is permanently stuck at finalize with
+    // UNRESOLVED_REMEDIATION_QUEUE even though the work succeeded.
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+    state.results.immediateRemediationQueue.push({
+      source_task_id: "FIX-P40-015",
+      routing: "before_next_feature_task",
+      reason: "harness_remediation_must_be_cleared_before_new_work",
+      action: "AUTO_REMEDIATE",
+      status: "remediation_required",
+      next_actions: ["Regenerate fixture evidence."],
+    });
+
+    const result = handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P40-015" },
+      outcome: { status: "completed" },
+      ...callbacks,
+    });
+
+    assert.deepEqual(result, { action: "continue", lastFailKey: "" });
+    assert.deepEqual(state.results.immediateRemediationQueue, []);
+  });
+
   test("handleTaskOutcome stops the loop on repeated same failure", () => {
     const state = makeLoopState();
     const callbacks = makeOutcomeCallbacks();

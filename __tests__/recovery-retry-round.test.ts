@@ -177,4 +177,73 @@ describe("recovery retry round helpers", () => {
       skipped: ["C"],
     });
   });
+
+  test("mergeRetryRoundResults drains remediation queue for retry-completed tasks", () => {
+    // RED: a task that failed with AUTO_REMEDIATE was enqueued in the immediate
+    // remediation queue. After a successful retry, that queue entry must be
+    // drained — otherwise finalize reports UNRESOLVED_REMEDIATION_QUEUE forever.
+    const taskResults = {
+      completed: ["A"],
+      failed: ["B", "C"],
+      skipped: [],
+      immediateRemediationQueue: [
+        {
+          source_task_id: "B",
+          routing: "before_next_feature_task",
+          reason: "harness_remediation_must_be_cleared_before_new_work",
+          action: "AUTO_REMEDIATE",
+          status: "remediation_required",
+          next_actions: ["Regenerate fixture evidence."],
+        },
+        {
+          source_task_id: "C",
+          routing: "before_next_feature_task",
+          reason: "harness_remediation_must_be_cleared_before_new_work",
+          action: "AUTO_REMEDIATE",
+          status: "remediation_required",
+          next_actions: ["Rebuild test harness."],
+        },
+      ],
+    };
+    const retryResults = {
+      completed: ["B"],
+      failed: [],
+      skipped: ["C"],
+    };
+
+    mergeRetryRoundResults({ taskResults, retryResults });
+
+    // B succeeded on retry and C was skipped — both queue entries must be gone.
+    assert.deepEqual(taskResults.immediateRemediationQueue, []);
+  });
+
+  test("mergeRetryRoundResults keeps remediation queue for still-failed tasks", () => {
+    const taskResults = {
+      completed: ["A"],
+      failed: ["B"],
+      skipped: [],
+      immediateRemediationQueue: [
+        {
+          source_task_id: "B",
+          routing: "before_next_feature_task",
+          reason: "harness_remediation_must_be_cleared_before_new_work",
+          action: "AUTO_REMEDIATE",
+          status: "remediation_required",
+          next_actions: ["Regenerate fixture evidence."],
+        },
+      ],
+    };
+    const retryResults = {
+      completed: [],
+      failed: ["B"],
+      skipped: [],
+    };
+
+    mergeRetryRoundResults({ taskResults, retryResults });
+
+    // B still failed after retry — its queue entry must remain so the operator
+    // sees the remediation is still required.
+    assert.equal(taskResults.immediateRemediationQueue.length, 1);
+    assert.equal(taskResults.immediateRemediationQueue[0].source_task_id, "B");
+  });
 });

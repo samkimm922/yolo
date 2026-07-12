@@ -33,6 +33,25 @@ function removeTaskIds(target, items = []) {
   target.length = write;
 }
 
+/**
+ * Remove every queue entry whose `source_task_id` is in `resolvedIds`.
+ * Called when a task reaches a terminal success state (completed) so that a
+ * previously-enqueued immediate remediation record does not keep the run
+ * blocked at finalize indefinitely.
+ */
+function drainImmediateRemediationQueue(results, resolvedIds) {
+  const queue = results?.immediateRemediationQueue;
+  if (!Array.isArray(queue) || !resolvedIds.length) return;
+  const resolved = new Set(resolvedIds);
+  let write = 0;
+  for (const entry of queue) {
+    if (entry && !resolved.has(entry.source_task_id)) {
+      queue[write++] = entry;
+    }
+  }
+  queue.length = write;
+}
+
 export function handleTaskPreRun({
   task,
   tasks,
@@ -156,6 +175,10 @@ export function handleTaskOutcome({
     removeTaskIds(results.blocked, resolvedIds);
     removeTaskIds(results.contractReview, resolvedIds);
     removeTaskIds(runResultsTracker.failed, resolvedIds);
+    // Drain any immediate remediation queue entries for this task — the work
+    // succeeded, so a previously-enqueued AUTO_REMEDIATE/REROUTE_REVIEW_FIX
+    // entry is now stale and must not keep finalize blocked forever.
+    drainImmediateRemediationQueue(results, resolvedIds);
     results.completed.push(task.id);
     appendUniqueTaskIds(results.completed, sourceIds);
     runResultsTracker.completed.add(task.id);

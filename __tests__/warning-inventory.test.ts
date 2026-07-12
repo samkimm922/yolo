@@ -94,7 +94,8 @@ const INVENTORY = [
   ["src/runtime/progress/server.ts", { WARN: 0, warning: 2, "best-effort": 4, skip: 18 }],
   ["src/runtime/progress/ui-evidence.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 4 }],
   ["src/runtime/recovery/retry-orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
-  ["src/runtime/recovery/retry-round.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 9 }],
+  // remediation-queue: drainRemediationQueue reads retryResults.skipped, raising skip count 9 -> 10.
+  ["src/runtime/recovery/retry-round.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 10 }],
   // PR-13: skip count 3 -> 2 after removing the old whole-loop persisted-finding path in favor of per-finding ASK_HUMAN convergence.
   ["src/runtime/review-loop/orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/runtime/review-loop/round-helpers.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
