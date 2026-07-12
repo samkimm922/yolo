@@ -168,11 +168,15 @@ export function validateContextPack(pack, options = Object()) {
   const targetFiles = uniqueStrings(targets.map((target) => target?.file));
   const readonlyTargetOverlap = targetFiles.filter((file) => readonlyFiles.includes(file));
   if (readonlyTargetOverlap.length > 0) {
+    const conflictList = readonlyTargetOverlap.join(", ");
     addFailure(
       failures,
       "CONTEXT_PACK_TARGET_READONLY_CONFLICT",
-      `target files cannot also be readonly: ${readonlyTargetOverlap.join(", ")}`,
-      { files: readonlyTargetOverlap },
+      `target files cannot also be readonly: ${conflictList} (remove ${readonlyTargetOverlap[0]} from scope.targets or scope.readonly_files)`,
+      {
+        files: readonlyTargetOverlap,
+        remediation: `Remove ${readonlyTargetOverlap[0]} from scope.targets (if it should be writable) or from scope.readonly_files (if it should be a write target).`,
+      },
     );
   }
 
@@ -180,8 +184,12 @@ export function validateContextPack(pack, options = Object()) {
     addFailure(
       failures,
       "CONTEXT_PACK_MAX_FILES_EXCEEDED",
-      `target count ${targetFiles.length} exceeds scope.max_files ${scope.max_files}`,
-      { target_count: targetFiles.length, max_files: scope.max_files },
+      `target count ${targetFiles.length} exceeds scope.max_files ${scope.max_files} (split the task into smaller tasks or raise scope.max_files)`,
+      {
+        target_count: targetFiles.length,
+        max_files: scope.max_files,
+        remediation: `Split the task so each task touches <= ${scope.max_files} target file(s), or raise scope.max_files.`,
+      },
     );
   }
 

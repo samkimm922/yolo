@@ -121,7 +121,7 @@ describe("runner review fix execution flow", () => {
       contextGate: { result: { failures: [{ code: "MISSING_CONTEXT", detail: "x" }, { code: "STALE_PACK", detail: "y" }] } },
       attempt: 2,
     });
-    assert.match(outcome.failReason, /context-pack-validator blocked: MISSING_CONTEXT, STALE_PACK/);
+    assert.match(outcome.failReason, /context-pack-validator blocked: MISSING_CONTEXT \(x\), STALE_PACK \(y\)/);
     assert.equal(outcome.transition.task_id, "T1");
     assert.equal(outcome.transition.prd_update.phase, "context_pack");
     assert.equal(outcome.result.status, "failed");

@@ -53,4 +53,46 @@ describe("context pack outcome helpers", () => {
     assert.equal(outcome.failReason, "context-pack-validator blocked: missing_context");
     assert.equal(outcome.transition.prd_update.contextPackGate, rawGate);
   });
+
+  test("buildContextPackFailureOutcome surfaces actionable remediation for target/readonly conflict", () => {
+    const contextGate = {
+      ok: false,
+      result: {
+        failures: [{
+          code: "CONTEXT_PACK_TARGET_READONLY_CONFLICT",
+          detail: "target files cannot also be readonly: src/index.ts (remove src/index.ts from scope.targets or scope.readonly_files)",
+          files: ["src/index.ts"],
+          remediation: "Remove src/index.ts from scope.targets (if it should be writable) or from scope.readonly_files (if it should be a write target).",
+        }],
+      },
+    };
+    const outcome = buildContextPackFailureOutcome({ taskId: "FIX-3", contextGate, attempt: 1 });
+
+    assert.match(outcome.failReason, /CONTEXT_PACK_TARGET_READONLY_CONFLICT/);
+    assert.match(outcome.failReason, /src\/index\.ts/);
+    assert.match(outcome.failReason, /remove src\/index\.ts from scope\.targets or scope\.readonly_files/i);
+    assert.match(outcome.result.reason, /src\/index\.ts/);
+    assert.match(outcome.transition.prd_update.failReason, /remove src\/index\.ts from scope\.targets or scope\.readonly_files/i);
+  });
+
+  test("buildContextPackFailureOutcome surfaces actionable remediation for max files exceeded", () => {
+    const contextGate = {
+      ok: false,
+      result: {
+        failures: [{
+          code: "CONTEXT_PACK_MAX_FILES_EXCEEDED",
+          detail: "target count 5 exceeds scope.max_files 2 (split the task into smaller tasks or raise scope.max_files)",
+          target_count: 5,
+          max_files: 2,
+          remediation: "Split the task so each task touches <= 2 target files, or raise scope.max_files.",
+        }],
+      },
+    };
+    const outcome = buildContextPackFailureOutcome({ taskId: "FIX-4", contextGate, attempt: 1 });
+
+    assert.match(outcome.failReason, /CONTEXT_PACK_MAX_FILES_EXCEEDED/);
+    assert.match(outcome.failReason, /5 exceeds scope\.max_files 2/);
+    assert.match(outcome.failReason, /split the task into smaller tasks or raise scope\.max_files/i);
+    assert.match(outcome.result.reason, /split the task into smaller tasks or raise scope\.max_files/i);
+  });
 });

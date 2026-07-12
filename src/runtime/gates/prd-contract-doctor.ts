@@ -92,6 +92,14 @@ function normalizeTargetPath(value) {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
+function uniqueTargetFiles(targets = []) {
+  return [...new Set(
+    targets
+      .map((target) => normalizeTargetPath(target?.file))
+      .filter(Boolean),
+  )];
+}
+
 function collectPathValues(value, out = []) {
   if (!value) return out;
   if (typeof value === "string") {
@@ -731,6 +739,44 @@ export function inspectPrdContract(prd, options = Object()) {
         { human_needed: true },
       );
       addFinding(failures, task, null, "TASK_MISSING_TARGETS", "pending task must define scope.targets");
+    }
+
+    const targetFiles = uniqueTargetFiles(targets);
+    const readonlyFiles = asArray(task.scope?.readonly_files)
+      .map((file) => normalizeTargetPath(typeof file === "string" ? file : file?.file || file?.path))
+      .filter(Boolean);
+    const readonlyTargetOverlap = targetFiles.filter((file) => readonlyFiles.includes(file));
+    if (readonlyTargetOverlap.length > 0) {
+      const firstConflict = readonlyTargetOverlap[0];
+      addFinding(
+        failures,
+        task,
+        null,
+        "CONTEXT_PACK_TARGET_READONLY_CONFLICT",
+        `target files cannot also be readonly: ${readonlyTargetOverlap.join(", ")} (remove ${firstConflict} from scope.targets or scope.readonly_files)`,
+        {
+          files: readonlyTargetOverlap,
+          remediation: `Remove ${firstConflict} from scope.targets (if it should be writable) or from scope.readonly_files (if it should be a write target).`,
+          human_needed: true,
+        },
+      );
+    }
+
+    const maxFiles = Number(task.scope?.max_files);
+    if (Number.isFinite(maxFiles) && maxFiles > 0 && targetFiles.length > maxFiles) {
+      addFinding(
+        failures,
+        task,
+        null,
+        "CONTEXT_PACK_MAX_FILES_EXCEEDED",
+        `target count ${targetFiles.length} exceeds scope.max_files ${maxFiles} (split the task into smaller tasks or raise scope.max_files)`,
+        {
+          target_count: targetFiles.length,
+          max_files: maxFiles,
+          remediation: `Split the task so each task touches <= ${maxFiles} target file(s), or raise scope.max_files.`,
+          human_needed: true,
+        },
+      );
     }
 
     if (task.status === "pending" && !hasTaskAcceptance(task)) {
