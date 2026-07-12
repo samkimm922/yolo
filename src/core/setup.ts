@@ -292,6 +292,12 @@ function nextActions({ status, dryRun, projectRoot, targets, scopes, riskGaps, f
         gap_codes: riskGaps.map((gap) => gap.code),
       },
       {
+        id: "reinit_with_force",
+        command: "yolo",
+        args: ["init", "--force"],
+        verifies: "setup_state != risky",
+      },
+      {
         id: "recheck_setup_plan",
         command: "yolo",
         args: [...setupCommandArgs({ projectRoot, targets, scopes }), "--dry-run"],
