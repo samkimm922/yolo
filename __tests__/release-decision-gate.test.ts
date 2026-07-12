@@ -1,7 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { buildLedgerRecord } from "../src/runtime/evidence/ledger.js";
 import {
   buildControlledBetaReleaseDecisionPlan,
   CONTROLLED_BETA_RELEASE_ACTIONS,
@@ -47,6 +49,25 @@ function releaseDecision(overrides = {}) {
   };
 }
 
+function withSignedReleaseRoot(run) {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-release-decision-"));
+  const hmacKey = "release-decision-test-hmac-key";
+  try {
+    writeFileSync(resolve(root, "package.json"), JSON.stringify({ version: packageJson.version, private: true }));
+    mkdirSync(resolve(root, ".yolo/keys"), { recursive: true });
+    writeFileSync(resolve(root, ".yolo/keys/ledger.hmac"), hmacKey, { mode: 0o600 });
+    const decision = buildLedgerRecord("release.controlled_beta_decision", releaseDecision(), {
+      ledger: "state",
+      source: "human-release-operator",
+      now: "2026-05-25T00:00:00.000Z",
+      hmacKey,
+    });
+    return run(root, decision);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 describe("controlled beta release decision gate", () => {
   test("buildControlledBetaReleaseDecisionPlan encodes manual-only release guardrails", () => {
     const plan = buildControlledBetaReleaseDecisionPlan({ yoloRoot: YOLO_DIR });
@@ -58,6 +79,7 @@ describe("controlled beta release decision gate", () => {
     assert.equal(plan.reads_credentials, false);
     assert.equal(plan.spawns_provider, false);
     assert.ok(plan.required_decision_fields.includes("approver"));
+    assert.ok(plan.required_decision_fields.includes("record_sig"));
     assert.ok(CONTROLLED_BETA_RELEASE_ACTIONS.includes("billable_provider_execution"));
   });
 
@@ -78,21 +100,54 @@ describe("controlled beta release decision gate", () => {
   });
 
   test("runControlledBetaReleaseDecisionGate becomes ready with explicit human approval and private blocker acknowledgement", () => {
+    withSignedReleaseRoot((root, decision) => {
+      const result = runControlledBetaReleaseDecisionGate({
+        yoloRoot: root,
+        hardeningDrill: passingHardeningDrill(),
+        decision,
+      });
+
+      assert.equal(result.status, "ready", JSON.stringify(result.blockers, null, 2));
+      assert.deepEqual(result.approved_actions, ["remove_private", "publish_public_beta"]);
+      assert.equal(result.action_authorization.remove_private, true);
+      assert.equal(result.action_authorization.publish_public_beta, true);
+      assert.equal(result.action_authorization.access_credentials, false);
+      assert.equal(result.action_authorization.billable_provider_execution, false);
+      assert.equal(result.guarantees.published, false);
+      assert.equal(result.guarantees.package_private_unchanged, true);
+      assert.equal(result.guarantees.provider_execution, false);
+    });
+  });
+
+  test("unsigned human decisions fail closed with project-key signing instructions", () => {
     const result = runControlledBetaReleaseDecisionGate({
       yoloRoot: YOLO_DIR,
       hardeningDrill: passingHardeningDrill(),
       decision: releaseDecision(),
     });
 
-    assert.equal(result.status, "ready", JSON.stringify(result.blockers, null, 2));
-    assert.deepEqual(result.approved_actions, ["remove_private", "publish_public_beta"]);
-    assert.equal(result.action_authorization.remove_private, true);
-    assert.equal(result.action_authorization.publish_public_beta, true);
-    assert.equal(result.action_authorization.access_credentials, false);
-    assert.equal(result.action_authorization.billable_provider_execution, false);
-    assert.equal(result.guarantees.published, false);
-    assert.equal(result.guarantees.package_private_unchanged, true);
-    assert.equal(result.guarantees.provider_execution, false);
+    assert.equal(result.status, "blocked");
+    const blocker = result.blockers.find((item) => item.code === "DECISION_GATE_SIGNATURE_VALID");
+    assert.ok(blocker);
+    assert.equal(blocker.hmac_key_path, resolve(YOLO_DIR, ".yolo/keys/ledger.hmac"));
+    assert.match(String(blocker.signing_command), /buildLedgerRecord/);
+    assert.match(result.next_actions.join("\n"), /record_sig/);
+  });
+
+  test("tampered signed human decisions fail closed", () => {
+    withSignedReleaseRoot((root, decision) => {
+      const result = runControlledBetaReleaseDecisionGate({
+        yoloRoot: root,
+        hardeningDrill: passingHardeningDrill(),
+        decision: { ...decision, approver: "different-release-owner" },
+      });
+
+      assert.equal(result.status, "blocked");
+      const blocker = result.blockers.find((item) => item.code === "DECISION_GATE_SIGNATURE_VALID");
+      assert.ok(blocker);
+      assert.ok(Array.isArray(blocker.validation_errors));
+      assert.match(blocker.validation_errors.join("\n"), /record_hash does not match|record_sig does not verify/);
+    });
   });
 
   test("credential and billable provider actions require explicit action approval", () => {

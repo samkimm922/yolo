@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { DOGFOOD_MATRIX_SCENARIO_IDS, listDogfoodMatrixScenarios } from "./dogfood-matrix.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
 import { verifyArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
+import { LEDGER_HMAC_KEY_REL, resolveLedgerHmacKey, validateLedgerRecord } from "../runtime/evidence/ledger.js";
 import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
@@ -81,6 +82,10 @@ export interface DecisionRecord extends ReleaseRecord {
   hardening_drill_reviewed?: boolean;
   private_blocker_acknowledged?: boolean;
 }
+
+const CONTROLLED_BETA_DECISION_EVENT = "release.controlled_beta_decision";
+const CONTROLLED_BETA_DECISION_REL = ".yolo/release/controlled-beta-decision.json";
+const CONTROLLED_BETA_UNSIGNED_DECISION_REL = ".yolo/release/controlled-beta-decision.unsigned.json";
 
 export interface PackageJsonLike extends ReleaseRecord {
   version?: string;
@@ -733,6 +738,15 @@ function sanitizeDecision(decision: unknown) {
   };
 }
 
+function decisionSigningGuidance(yoloRoot: string) {
+  const stateRoot = join(yoloRoot, ".yolo");
+  const hmacKeyPath = join(stateRoot, LEDGER_HMAC_KEY_REL);
+  const unsignedDecisionPath = join(yoloRoot, CONTROLLED_BETA_UNSIGNED_DECISION_REL);
+  const signedDecisionPath = join(yoloRoot, CONTROLLED_BETA_DECISION_REL);
+  const signingCommand = `node --input-type=module -e "import fs from 'node:fs'; import { buildLedgerRecord } from 'yolo'; const input=JSON.parse(fs.readFileSync('${CONTROLLED_BETA_UNSIGNED_DECISION_REL}','utf8')); const key=fs.readFileSync('.yolo/${LEDGER_HMAC_KEY_REL}','utf8').trim(); const signed=buildLedgerRecord('${CONTROLLED_BETA_DECISION_EVENT}',input,{ledger:'state',source:'human-release-operator',now:input.approved_at,hmacKey:key}); fs.mkdirSync('.yolo/release',{recursive:true}); fs.writeFileSync('${CONTROLLED_BETA_DECISION_REL}',JSON.stringify(signed,null,2)+'\\n',{mode:0o600});"`;
+  return { stateRoot, hmacKeyPath, unsignedDecisionPath, signedDecisionPath, signingCommand };
+}
+
 export function buildControlledBetaReleaseDecisionPlan(options: DecisionGateOptions = Object()): ControlledBetaReleaseDecisionPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || DEFAULT_RELEASE_SCOPE;
@@ -757,11 +771,14 @@ export function buildControlledBetaReleaseDecisionPlan(options: DecisionGateOpti
       "risk_acceptance",
       "hardening_drill_reviewed",
       "private_blocker_acknowledged",
+      "record_hash",
+      "record_sig",
     ],
     required_checks: [
       "P5 hardening drill must pass.",
       "`private:true` may only be removed after a human decision record acknowledges the private release blocker.",
       "Every requested release action must be explicitly approved in `approved_actions` or `approvals`.",
+      `The decision must be a ${CONTROLLED_BETA_DECISION_EVENT} ledger record signed by the project HMAC key.`,
       "This gate never publishes, edits package.json, reads credentials, or executes model providers.",
     ],
     stop_conditions: [
@@ -803,6 +820,13 @@ export function runControlledBetaReleaseDecisionGate(options: DecisionGateOption
   const packageVersion = packageBefore.version || null;
   const decisionScope = decision?.scope || decision?.release_scope || null;
   const decisionVersion = decision?.package_version || decision?.version || null;
+  const signing = decisionSigningGuidance(yoloRoot);
+  const decisionHmacKey = resolveLedgerHmacKey(signing.stateRoot);
+  const decisionSignatureValidation = decision && decisionHmacKey
+    ? validateLedgerRecord(decision, { hmacKey: decisionHmacKey })
+    : { ok: false, errors: [decisionHmacKey ? "decision record is missing" : `ledger HMAC key is missing at ${signing.hmacKeyPath}`] };
+  const decisionSignatureValid = decisionSignatureValidation.ok
+    && decision?.event === CONTROLLED_BETA_DECISION_EVENT;
   const requestedCredentials = requestedActions.includes("access_credentials");
   const requestedBillable = requestedActions.includes("billable_provider_execution");
   const allRequestedActionsApproved = unknownActions.length === 0
@@ -842,6 +866,24 @@ export function runControlledBetaReleaseDecisionGate(options: DecisionGateOption
       "DECISION_GATE_HUMAN_DECISION_PRESENT",
       isObject(decision),
       "a human release decision record is required before controlled beta release actions are authorized",
+    ),
+    check(
+      "DECISION_GATE_SIGNATURE_VALID",
+      decisionSignatureValid,
+      "human release decision must be signed with the project ledger HMAC key",
+      {
+        hmac_key_path: signing.hmacKeyPath,
+        unsigned_decision_path: signing.unsignedDecisionPath,
+        signed_decision_path: signing.signedDecisionPath,
+        required_event: CONTROLLED_BETA_DECISION_EVENT,
+        validation_errors: [
+          ...decisionSignatureValidation.errors,
+          ...(decision && decision.event !== CONTROLLED_BETA_DECISION_EVENT
+            ? [`event must be ${CONTROLLED_BETA_DECISION_EVENT}`]
+            : []),
+        ],
+        signing_command: signing.signingCommand,
+      },
     ),
     check(
       "DECISION_GATE_HUMAN_APPROVED",
@@ -939,6 +981,8 @@ export function runControlledBetaReleaseDecisionGate(options: DecisionGateOption
         ]
       : [
           "Resolve decision gate blockers before changing private=true, publishing, touching credentials, or running billable providers.",
+          `Write the unsigned fields to ${signing.unsignedDecisionPath}, ensure the project key exists at ${signing.hmacKeyPath}, then create a record_hash and record_sig with: ${signing.signingCommand}`,
+          `Load the signed record from ${signing.signedDecisionPath} and pass it as decision, then rerun this gate.`,
         ],
   };
 }
