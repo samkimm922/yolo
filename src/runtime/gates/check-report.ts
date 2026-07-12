@@ -745,7 +745,17 @@ function atomicityReadiness({ prd, projectRoot, strictExecution }) {
     const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false, ...policyContext });
     inspections.push(inspection);
     if (inspection.mode === "must_split") {
-      blockers.push({ code: "ATOMICITY_MUST_SPLIT", task_id: task.id, message: "Task is too broad and must be split before execution.", score: inspection.score });
+      const hasSplitSuggestions = Array.isArray(inspection.split_suggestions) && inspection.split_suggestions.length > 0;
+      if (hasSplitSuggestions) {
+        warnings.push({
+          code: "ATOMICITY_MUST_SPLIT_WITH_SUGGESTIONS",
+          task_id: task.id,
+          message: "Task is too broad; runner will auto-apply split suggestions before execution.",
+          score: inspection.score,
+        });
+      } else {
+        blockers.push({ code: "ATOMICITY_MUST_SPLIT", task_id: task.id, message: "Task is too broad and must be split before execution (no executable split suggestions generated).", score: inspection.score });
+      }
     } else if (inspection.mode === "research_only") {
       blockers.push({
         code: "ATOMICITY_RESEARCH_ONLY",
