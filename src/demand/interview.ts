@@ -741,7 +741,7 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
 
   const tokens = wordTokens(normalized);
   const approvalClear = question.slot === "execution_approval"
-    && (parseApproval(answer) || /(暂不|不批准|否|no|false|not approved|do not|don't)/i.test(normalized));
+    && parseApprovalDecision(answer) !== null;
   const hasDetail = question.slot !== "execution_approval" && hasSlotDetail(question.slot, normalized);
   const tooShort = !approvalClear
     && !shortAnswerAllowed(question.slot, normalized)
@@ -874,7 +874,7 @@ function answerRecordForSlot(session: DemandInterviewSessionInput = Object(), sl
   return question ? answerRecords(session.answers)[question.id || ""] : null;
 }
 
-function parseApproval(value: unknown): boolean {
+function parseApprovalDecision(value: unknown): boolean | null {
   if (value === true) return true;
   if (value === false) return false;
   if (value && typeof value === "object") {
@@ -882,10 +882,27 @@ function parseApproval(value: unknown): boolean {
     if (record.approved === true || record.approve === true) return true;
     if (record.approved === false || record.approve === false) return false;
   }
-  const text = textFromValue(value).toLowerCase();
-  if (!text) return false;
-  if (/(暂不|不批准|不要|不能|否|no|false|not approved|do not|don't)/i.test(text)) return false;
-  return /(批准|同意|确认|可以|进入\s*prd|approve|approved|yes|true|confirm|confirmed)/i.test(text);
+  const text = textFromValue(value).trim();
+  if (!text) return null;
+
+  const explicitRejection = [
+    /(?:暂不|不批准|不同意|不确认|不能批准|不能同意|不要批准|没有批准|尚未批准|还未批准|未批准|尚未同意|还未同意|未同意|拒绝|否决)/,
+    /^\s*(?:no|false)\b/i,
+    /\b(?:not\s+(?:yet\s+)?(?:approve|approved|agree|agreed|confirm|confirmed)|do\s+not\s+(?:approve|agree|confirm)|don't\s+(?:approve|agree|confirm)|cannot\s+(?:approve|agree|confirm)|can't\s+(?:approve|agree|confirm)|cant\s+(?:approve|agree|confirm)|have\s+not\s+approved|haven't\s+approved|havent\s+approved|has\s+not\s+approved|hasn't\s+approved|hasnt\s+approved|disapproved)\b/i,
+  ].some((pattern) => pattern.test(text));
+  if (explicitRejection) return false;
+
+  const explicitApproval = [
+    /^\s*(?:批准|同意|确认无误|可以(?:进入\s*prd)?|进入\s*prd)(?:$|[，。,.！!\s])/i,
+    /^\s*我(?:已|明确)?(?:批准|同意|确认)(?:$|[，。,.！!\s])/i,
+    /^\s*(?:yes|true|approve|approved|confirm|confirmed)(?:\b|[,.!])/i,
+    /^\s*i\s+(?:approve|agree|confirm)\b/i,
+  ].some((pattern) => pattern.test(text));
+  return explicitApproval ? true : null;
+}
+
+function parseApproval(value: unknown): boolean {
+  return parseApprovalDecision(value) === true;
 }
 
 function hasAnswer(record?: DemandInterviewAnswerRecord | null): boolean {
