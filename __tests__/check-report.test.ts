@@ -8,6 +8,7 @@ import { gunzipSync } from "node:zlib";
 import { inspectYoloCheck, runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { runYoloCli } from "../src/cli/yolo.js";
 import { initLifecycleState } from "../src/lifecycle/state.js";
+import { writeSourceSnapshot } from "../src/lifecycle/source-snapshot.js";
 
 const R6_DEMAND_PRD_SHA256 = "fd62ceadc9983b9c7e357d8bf871ecc346531da9765d58fe857ca1aec4fd250b";
 
@@ -1198,6 +1199,39 @@ describe("yolo check report", () => {
       assert.equal(existsSync(join(stateRoot, "lifecycle/check-report.json")), true);
       const artifact = JSON.parse(readFileSync(join(stateRoot, "lifecycle/check-report.json"), "utf8"));
       assert.equal(artifact.report.schema, "yolo.check.report.v1");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("drift snapshot blocker explains that snapshot rebuilds only after a successful run, not by re-running check", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd());
+
+      // Seed lifecycle history that proves a snapshot was once established, then
+      // remove the snapshot itself. This produces the unverifiable/expected
+      // state where history records a snapshot that is no longer readable.
+      writeSourceSnapshot({ projectRoot: root, stateRoot });
+      rmSync(join(stateRoot, "lifecycle", "source-snapshot.json"));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot });
+      const driftReality = report.checks.find((check) => check.name === "drift_reality");
+      const blocker = report.blockers.find((b) => b.code === "WORKTREE_SNAPSHOT_UNVERIFIABLE");
+
+      assert.ok(driftReality, "drift_reality check should be present");
+      assert.equal(driftReality.status, "blocked");
+      assert.ok(blocker, "WORKTREE_SNAPSHOT_UNVERIFIABLE blocker should be present");
+      assert.ok(
+        /successful run/i.test(blocker.message) || /passes all gates/i.test(blocker.message),
+        `blocker message should explain snapshot rebuilds after a successful run, got: ${blocker.message}`,
+      );
+      assert.equal(
+        /run yolo check/i.test(blocker.message), false,
+        `blocker message should not instruct to re-run yolo check (dead-end), got: ${blocker.message}`,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -501,7 +501,7 @@ function driftRealityReadiness({ prd, projectRoot, stateRoot }) {
     return checkRecord("drift_reality", "blocked", "Worktree drift cannot be verified without a lifecycle source snapshot.", {
       blockers: [{
         code: "WORKTREE_SNAPSHOT_UNVERIFIABLE",
-        message: "Run yolo check to establish a source snapshot before relying on drift checks.",
+        message: "Source snapshot was lost; it is only rebuilt after a successful run or check that passes all gates. Run `yolo run` or fix the blockers that prevent this check from completing.",
         human_needed: false,
       }],
       warnings: [],
