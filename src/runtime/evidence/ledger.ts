@@ -319,24 +319,57 @@ export function requireLedgerHmacKey(stateRoot?: string, options: LedgerOptions 
   const keyPath = stateRoot ? join(stateRoot, LEDGER_HMAC_KEY_REL) : null;
   throw ledgerAppendError(
     "LEDGER_HMAC_KEY_REQUIRED",
-    `Evidence ledger HMAC key is required${keyPath ? ` at ${keyPath}` : " via hmacKey or stateRoot"}; refusing unsigned production evidence.`,
+    `Evidence ledger HMAC key is required${keyPath ? ` at ${keyPath}` : " via hmacKey or stateRoot"}; refusing unsigned production evidence. Run \`yolo init\` to (re)generate the project ledger HMAC key.`,
     {
       hmac_key_path: keyPath,
       production_ready: false,
+      recovery: "Run `yolo init` to provision the project ledger HMAC key, or pass --force to regenerate a missing/empty/corrupted key.",
     },
   );
 }
 
-export function provisionLedgerHmacKey(stateRoot: string): { key_path: string; created: boolean } {
+export function provisionLedgerHmacKey(
+  stateRoot: string,
+  options: { force?: boolean } = Object(),
+): { key_path: string; created: boolean } {
   const keyPath = join(stateRoot, LEDGER_HMAC_KEY_REL);
-  if (existsSync(keyPath)) return { key_path: keyPath, created: false };
+  // Fast path: an existing non-empty key is authoritative. Never overwrite a
+  // valid key, even under force — only missing/empty/corrupted keys are
+  // recoverable. This preserves the wx exclusivity guarantee for good keys.
+  if (existsSync(keyPath)) {
+    const existing = readLedgerHmacKeyFile(keyPath);
+    if (existing) return { key_path: keyPath, created: false };
+    // The key file exists but is empty/whitespace/unreadable. Without force we
+    // still fail safe and leave the (already broken) file alone so the caller
+    // can decide; with force we fall through to regenerate it.
+    if (!options.force) return { key_path: keyPath, created: false };
+  }
   mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
   try {
-    writeFileSync(keyPath, randomBytes(32).toString("hex"), { encoding: "utf8", flag: "wx", mode: 0o600 });
+    // When regenerating an existing-but-invalid key under force, overwrite the
+    // broken file in place. For fresh keys, wx keeps creation exclusive so two
+    // concurrent provisions cannot clobber each other.
+    writeFileSync(keyPath, randomBytes(32).toString("hex"), {
+      encoding: "utf8",
+      flag: options.force && existsSync(keyPath) ? "w" : "wx",
+      mode: 0o600,
+    });
     return { key_path: keyPath, created: true };
   } catch (error) {
     if (fsErrorCode(error) === "EEXIST") return { key_path: keyPath, created: false };
     throw error;
+  }
+}
+
+// Read and validate the on-disk HMAC key. Returns the trimmed key only when it
+// is non-empty; an empty/whitespace-only/unreadable file yields undefined so
+// callers can treat it as "missing" and (when force is set) regenerate it.
+function readLedgerHmacKeyFile(keyPath: string): string | undefined {
+  try {
+    const value = readFileSync(keyPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
   }
 }
 
