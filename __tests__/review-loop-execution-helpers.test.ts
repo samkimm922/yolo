@@ -93,6 +93,34 @@ describe("review-loop execution helpers", () => {
     assert.equal(complete.blocks_execution, false);
   });
 
+  test("inspectReviewScannerCoverage includes a copyable coverage_template skeleton when coverage is missing", () => {
+    // No coverage artifact at all -> scanner author needs a full template to copy.
+    const missing = inspectReviewScannerCoverage(JSON.stringify({ findings: [] }));
+    assert.equal(missing.status, "blocked");
+    assert.equal(missing.reason, "scanner_coverage_missing");
+    const blocker = missing.blockers.find((b) => b.code === "REVIEW_SCANNER_COVERAGE_MISSING");
+    assert.ok(blocker, "expected REVIEW_SCANNER_COVERAGE_MISSING blocker");
+    assert.ok(blocker && typeof blocker.coverage_template === "object" && blocker.coverage_template !== null,
+      "blocker.coverage_template must be a non-null object");
+
+    const template = blocker.coverage_template;
+    // Template must mirror every field the inspection logic in inspectReviewScannerCoverage checks.
+    assert.equal(typeof template.scanner_version, "string");
+    assert.ok(Array.isArray(template.scanned_files));
+    assert.ok(Array.isArray(template.rules) || (template.rules && typeof template.rules === "object"));
+    assert.ok(template.expected_scope !== undefined && template.expected_scope !== null);
+    assert.ok(["complete", "pass", "covered"].includes(template.coverage_status),
+      `coverage_status must be one of complete|pass|covered, got ${String(template.coverage_status)}`);
+
+    // The top-level inspection result should also carry the template so orchestrator logs surface it.
+    assert.ok(typeof missing.coverage_template === "object" && missing.coverage_template !== null);
+
+    // Filling the template verbatim must satisfy the inspection (no missing fields, coverage complete).
+    const filled = inspectReviewScannerCoverage(JSON.stringify({ ...template, findings: [] }));
+    assert.notEqual(filled.reason, "scanner_coverage_missing");
+    assert.deepEqual(filled.missing_fields ?? [], []);
+  });
+
   test("inspectReviewScannerCoverage checks scanner coverage against external scope", () => {
     const result = inspectReviewScannerCoverage(JSON.stringify({
       scanner_version: "test-review-scanner@1",
