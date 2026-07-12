@@ -701,14 +701,32 @@ export function inspectPrdContract(prd, options = Object()) {
         writeEvidence: false,
       });
       if (inspection.mode === "must_split") {
-        addFinding(
-          failures,
-          task,
-          null,
-          "ATOMICITY_MUST_SPLIT",
-          "runner/release task is too broad and must be split before execution",
-          { atomicity: inspection },
-        );
+        const hasSplitSuggestions = Array.isArray(inspection.split_suggestions) && inspection.split_suggestions.length > 0;
+        if (hasSplitSuggestions) {
+          // The doctor generated concrete, executable split suggestions (child
+          // task ids/files/goals). The runner's pre-session-flow can apply them
+          // via applySplitSuggestionsToPrd — but only if the contract gate lets
+          // the task through. Hard-blocking here traps the task before the
+          // runner ever gets the chance to split it. Downgrade to a warning so
+          // the runner can apply the split and continue.
+          addFinding(
+            warnings,
+            task,
+            null,
+            "ATOMICITY_MUST_SPLIT_WITH_SUGGESTIONS",
+            "runner/release task is too broad; runner will auto-apply split suggestions before execution",
+            { atomicity: inspection },
+          );
+        } else {
+          addFinding(
+            failures,
+            task,
+            null,
+            "ATOMICITY_MUST_SPLIT",
+            "runner/release task is too broad and must be split before execution (no executable split suggestions generated)",
+            { atomicity: inspection },
+          );
+        }
       } else if (inspection.mode === "research_only") {
         addFinding(
           failures,
