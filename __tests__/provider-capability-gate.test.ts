@@ -339,6 +339,33 @@ describe("pre-execution gates with provider capability", () => {
     }
   });
 
+  test("custom provider passes when capability_overrides are acknowledged", () => {
+    // RED: setting capability_overrides.shell=true clears the blocker, but a fixed
+    // PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED warning is still produced and then
+    // unconditionally escalated to PROVIDER_CAPABILITY_WARNING_BLOCKED — there is
+    // no escape. An operator who sets capability_overrides.acknowledged=true is
+    // explicitly accepting the custom-provider risk; the gate should pass.
+    const result = inspectProviderCapabilityGate({
+      prd: strictPrd({ required_capabilities: ["supports_tools"] }),
+      config: { ai: { executor: "custom", capability_overrides: { supports_tools: true, acknowledged: true } } },
+    });
+    assert.equal(result.status, "pass");
+    assert.equal(result.blockers.length, 0);
+    // The warning may still be present as advisory, but it must NOT escalate to a block.
+    assert.equal(result.warnings.filter((w) => w.code === "PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED").length, 0);
+  });
+
+  test("custom provider still warns when overrides are not acknowledged", () => {
+    // Without acknowledged=true, the custom-provider warning still fires and
+    // escalates to a block — the operator must explicitly accept the risk.
+    const result = inspectProviderCapabilityGate({
+      prd: strictPrd({ required_capabilities: ["supports_tools"] }),
+      config: { ai: { executor: "custom", capability_overrides: { supports_tools: true } } },
+    });
+    assert.equal(result.status, "warning");
+    assert.ok(result.warnings.some((w) => w.code === "PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED"));
+  });
+
   test("check and pre-execution both pass when required capabilities are satisfied", () => {
     const paths = makePreExecutionPaths();
     try {
