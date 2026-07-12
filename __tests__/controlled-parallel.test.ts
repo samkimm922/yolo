@@ -59,8 +59,54 @@ describe("controlled parallel execution planner", () => {
 
     assert.equal(plan.status, "blocked");
     assert.equal(plan.waves.some((wave) => wave.task_ids.includes("feature")), false);
-    assert.ok(plan.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE_OR_BLOCKED" && blocker.task_id === "feature"));
     assert.equal(plan.graph.edges.some((edge) => edge.from === "setup" && edge.to === "feature"), true);
+  });
+
+  test("reports unfinished (not-yet-completed) dependencies with an accurate code and recovery path, not a false cycle", () => {
+    const plan = planControlledParallelWaves({
+      tasks: [
+        { id: "setup", files: ["src/setup.ts"] },
+        { id: "feature", depends_on: ["setup"], files: ["src/feature.ts"] },
+        { id: "docs", files: ["docs/feature.md"] },
+      ],
+    });
+
+    assert.equal(plan.status, "blocked");
+    assert.equal(plan.waves.some((wave) => wave.task_ids.includes("feature")), false);
+
+    const blocker = plan.blockers.find((item) => item.task_id === "feature");
+    assert.ok(blocker, "expected a blocker for the feature task");
+    assert.equal(blocker.code, "TASK_DEPENDENCY_NOT_YET_COMPLETED");
+    assert.equal(blocker.missing_dependencies.length, 0);
+    assert.equal(blocker.pending_dependencies.length, 1);
+    assert.deepEqual(blocker.pending_dependencies, ["setup"]);
+    // Recovery hint must name the concrete prerequisite, not a generic "fix dependency" message.
+    assert.match(blocker.message, /setup/);
+    assert.match(blocker.message, /pass evidence|complete/i);
+    // Recovery next_actions must point at the concrete prerequisite, not generic "Fix dependency or conflict blockers".
+    assert.ok(plan.next_actions.some((action) => /setup/.test(action) && /pass evidence/i.test(action)));
+    // No false cycle reported for a legitimate sequential dependency.
+    assert.equal(
+      plan.blockers.some((item) => item.code === "TASK_DEPENDENCY_CYCLE_OR_BLOCKED"),
+      false,
+    );
+  });
+
+  test("reports a true dependency cycle as TASK_DEPENDENCY_CYCLE_OR_BLOCKED without relaxing", () => {
+    const plan = planControlledParallelWaves({
+      tasks: [
+        { id: "a", depends_on: ["b"], files: ["src/a.ts"] },
+        { id: "b", depends_on: ["a"], files: ["src/b.ts"] },
+      ],
+    });
+
+    assert.equal(plan.status, "blocked");
+    assert.ok(plan.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE_OR_BLOCKED"));
+    // A true cycle is never misreported as a recoverable unfinished dependency.
+    assert.equal(
+      plan.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_NOT_YET_COMPLETED"),
+      false,
+    );
   });
 
   test("schedules dependency successors only after dependency pass evidence", () => {

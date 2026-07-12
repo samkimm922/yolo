@@ -279,6 +279,28 @@ function waveRecord({ waveIndex, tasks, worktreeRoot }: { waveIndex: number; tas
   };
 }
 
+function findCyclicTaskIds(tasks = []) {
+  const taskIds = new Set(tasks.map(taskId));
+  const adjacency = new Map(tasks.map((task) => [taskId(task), taskDependencies(task).filter((dep) => taskIds.has(dep))]));
+  const cyclic = new Set();
+  for (const start of taskIds) {
+    if (cyclic.has(start)) continue;
+    const stack = [{ id: start, path: new Set([start]) }];
+    while (stack.length > 0) {
+      const { id, path } = stack.pop();
+      for (const next of adjacency.get(id) || []) {
+        if (path.has(next)) {
+          for (const node of path) cyclic.add(node);
+          cyclic.add(next);
+          continue;
+        }
+        stack.push({ id: next, path: new Set([...path, next]) });
+      }
+    }
+  }
+  return cyclic;
+}
+
 export function planControlledParallelWaves(input = Object(), options = Object()) {
   const projectRoot = clean(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const worktreeRoot = normalizePath(input.worktreeRoot || input.worktree_root || options.worktreeRoot || options.worktree_root || `${projectRoot}/../.yolo-worktrees`);
@@ -316,15 +338,39 @@ export function planControlledParallelWaves(input = Object(), options = Object()
   }
 
   const unscheduled = tasks.filter((task) => !planned.has(taskId(task)));
+  const cyclicTaskIds = findCyclicTaskIds(tasks);
   for (const task of unscheduled) {
+    const id = taskId(task);
     const dependencies = taskDependencies(task);
     const missing = dependencies.filter((dependency) => !taskById.has(dependency) && !completed.has(dependency));
+    if (missing.length > 0) {
+      blockers.push(Object.assign(Object(), {
+        code: "TASK_DEPENDENCY_MISSING",
+        message: "Task has missing dependencies and cannot be scheduled.",
+        task_id: id,
+        dependencies,
+        missing_dependencies: missing,
+      }));
+      continue;
+    }
+    // Dependency exists but has not completed yet, and the task is not part of a real cycle:
+    // this is a legitimate sequential dependency, not a deadlock. Report a recoverable path.
+    if (!cyclicTaskIds.has(id)) {
+      const pendingDependencies = dependencies.filter((dependency) => !completed.has(dependency));
+      blockers.push(Object.assign(Object(), {
+        code: "TASK_DEPENDENCY_NOT_YET_COMPLETED",
+        message: `Task depends on prerequisite(s) that exist but have not yet completed with pass evidence. Run and pass the dependency task(s) first: ${pendingDependencies.join(", ")}.`,
+        task_id: id,
+        dependencies,
+        missing_dependencies: [],
+        pending_dependencies: pendingDependencies,
+      }));
+      continue;
+    }
     blockers.push(Object.assign(Object(), {
-      code: missing.length > 0 ? "TASK_DEPENDENCY_MISSING" : "TASK_DEPENDENCY_CYCLE_OR_BLOCKED",
-      message: missing.length > 0
-        ? "Task has missing dependencies and cannot be scheduled."
-        : "Task dependencies cannot be satisfied without a cycle or blocked predecessor.",
-      task_id: taskId(task),
+      code: "TASK_DEPENDENCY_CYCLE_OR_BLOCKED",
+      message: "Task dependencies cannot be satisfied without a cycle or blocked predecessor.",
+      task_id: id,
       dependencies,
       missing_dependencies: missing,
     }));
@@ -349,6 +395,31 @@ export function planControlledParallelWaves(input = Object(), options = Object()
   const waveConflicts = waves.flatMap((wave) => wave.conflicts.map((conflict) => ({ ...conflict, wave_id: wave.id })));
   const status = blockers.length > 0 || waveConflicts.length > 0 ? "blocked" : "pass";
   const executionStatus = status === "blocked" || startGateBlockers.length > 0 ? "blocked" : "pass";
+  const notYetCompletedPrereqs = [...new Set(
+    blockers
+      .filter((blocker) => blocker.code === "TASK_DEPENDENCY_NOT_YET_COMPLETED")
+      .flatMap((blocker) => (blocker as { pending_dependencies?: string[] }).pending_dependencies || []),
+  )].sort();
+  const hasUnrecoverableBlockers = blockers.some((blocker) => blocker.code !== "TASK_DEPENDENCY_NOT_YET_COMPLETED")
+    || waveConflicts.length > 0
+    || startGateBlockers.length > 0;
+  let nextActions;
+  if (status === "pass" && executionStatus === "pass") {
+    nextActions = ["Execute waves sequentially; tasks inside each wave may run in isolated worktrees, then pass the merge gate before the next wave."];
+  } else if (status === "pass") {
+    nextActions = ["Run only waves whose start_gate is pass; later waves require previous wave merge evidence before start."];
+  } else if (notYetCompletedPrereqs.length > 0 && !hasUnrecoverableBlockers) {
+    nextActions = [
+      `Run and pass the prerequisite task(s) first, then re-plan: ${notYetCompletedPrereqs.join(", ")}. Once each dependency has completed with pass evidence, its dependents become schedulable.`,
+    ];
+  } else if (notYetCompletedPrereqs.length > 0) {
+    nextActions = [
+      `Run and pass the prerequisite task(s) first, then re-plan: ${notYetCompletedPrereqs.join(", ")}.`,
+      "Resolve any remaining dependency cycle, missing dependency, or conflict blockers before enabling parallel execution.",
+    ];
+  } else {
+    nextActions = ["Fix dependency or conflict blockers before enabling parallel execution."];
+  }
   return {
     schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
     schema: CONTROLLED_PARALLEL_PLAN_SCHEMA,
@@ -371,11 +442,7 @@ export function planControlledParallelWaves(input = Object(), options = Object()
       retry_policy: "retry only the failed task or wave after fixing the blocker; do not continue later waves",
       escalation_policy: "stop on missing dependency, repeated gate failure, merge conflict, or review blocker",
     },
-    next_actions: status === "pass" && executionStatus === "pass"
-      ? ["Execute waves sequentially; tasks inside each wave may run in isolated worktrees, then pass the merge gate before the next wave."]
-      : status === "pass"
-        ? ["Run only waves whose start_gate is pass; later waves require previous wave merge evidence before start."]
-        : ["Fix dependency or conflict blockers before enabling parallel execution."],
+    next_actions: nextActions,
   };
 }
 
