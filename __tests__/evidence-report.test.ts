@@ -250,6 +250,44 @@ describe("evidence run report", () => {
     assert.match(markdown, /## Failed\n- none/);
   });
 
+  test("formatRunReportMarkdown surfaces remediation item details with next_actions", () => {
+    // RED: the Remediation section only showed counts (item_count, etc.) and
+    // never the actual items with their task_id, action, and next_actions.
+    // Users see "Items: 1, Human required: 1" but not WHICH task needs what.
+    const markdown = formatRunReportMarkdown({
+      run_id: "RUN-REMEDIATION",
+      status: "error",
+      summary: {},
+      tasks: {},
+      remediation: {
+        item_count: 1,
+        active_item_count: 1,
+        historical_item_count: 1,
+        recovered_count: 0,
+        automation_continuable_count: 0,
+        human_required_count: 1,
+        unsafe_stop_count: 0,
+        action_counts: { ASK_HUMAN: 1 },
+        tasks: ["FIX-REVIEW-001"],
+        recovered_tasks: [],
+        items: [{
+          source: "task-results",
+          task_id: "FIX-REVIEW-001",
+          action: "ASK_HUMAN",
+          status: "remediation_required",
+          automation_can_continue: false,
+          requires_human: true,
+          unsafe_stop: false,
+        }],
+        recovered_items: [],
+      },
+    });
+
+    // The markdown should include the task id and action, not just counts.
+    assert.match(markdown, /FIX-REVIEW-001/);
+    assert.match(markdown, /ASK_HUMAN/);
+  });
+
   test("formatRunFinalAnswerMarkdown renders blockers and evidence deterministically", () => {
     const markdown = formatRunFinalAnswerMarkdown({
       schema: "yolo.evidence.final_answer.v1",

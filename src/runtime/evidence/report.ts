@@ -791,6 +791,11 @@ export function formatRunReportMarkdown(report: RunReport): string {
     `- Items: ${report.remediation?.item_count || 0}`,
     `- Automation can continue: ${report.remediation?.automation_continuable_count || 0}`,
     `- Human required: ${report.remediation?.human_required_count || 0}`,
+    ...(Array.isArray(report.remediation?.items) && report.remediation.items.length > 0
+      ? report.remediation.items.map((item) =>
+          `- ${item.task_id || "unknown"} [${item.action || "UNKNOWN"}]${item.requires_human ? " (human required)" : ""}${item.status ? ` ${item.status}` : ""}`.trim()
+        )
+      : []),
     "",
     "## Review",
     `- Issues: ${report.review?.issue_count || 0}`,

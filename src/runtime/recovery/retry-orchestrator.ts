@@ -53,7 +53,11 @@ export async function runRetryPhase({
 
     if (missingRetryTaskIds.length > 0) {
       appendUnique(taskResults.failed, missingRetryTaskIds);
-      logProgress("RETRY", "BLOCKED", `找不到失败任务定义，保留 failed: ${missingRetryTaskIds.join(", ")}`);
+      const lookupPaths = [
+        prdPath ? `PRD (${prdPath})` : null,
+        expandedTasksFile ? `expanded-tasks snapshot (${expandedTasksFile})` : null,
+      ].filter(Boolean).join(", ");
+      logProgress("RETRY", "BLOCKED", `找不到失败任务定义，保留 failed: ${missingRetryTaskIds.join(", ")} — task definitions not found in ${lookupPaths || "PRD or expanded-tasks snapshot"}; regenerate the PRD or restore the expanded-tasks snapshot to provide definitions for these ids`);
     }
 
     if (retryTasks.length === 0) {
