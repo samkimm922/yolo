@@ -138,4 +138,31 @@ describe("discovery external evidence fail-closed", () => {
     assert.ok(blocker);
     assert.match(blocker.message, /not triggered/);
   });
+
+  test("next_actions expose the specific EVREQ id, topic, and demand dispatch command", () => {
+    const result = inspectDiscoveryReadiness(baseInput);
+    assert.equal(result.status, "blocked");
+
+    const blocker = result.blockers.find((item) => item.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED");
+    assert.ok(blocker, "external evidence blocker should exist");
+    assert.ok(blocker.evidence_requirement_id, "blocker should carry the EVREQ id in extra fields");
+    assert.ok(blocker.topic, "blocker should carry the topic in extra fields");
+
+    const requirementId = String(blocker.evidence_requirement_id);
+    const topic = String(blocker.topic);
+
+    const evidenceAction = result.next_actions.find((action) => action.includes(requirementId));
+    assert.ok(
+      evidenceAction,
+      `next_actions should mention the evidence_requirement_id ${requirementId}; got ${JSON.stringify(result.next_actions)}`,
+    );
+    assert.ok(
+      evidenceAction.includes(topic),
+      `next_actions should mention the topic "${topic}"; got ${JSON.stringify(result.next_actions)}`,
+    );
+    assert.ok(
+      evidenceAction.includes("yolo demand dispatch"),
+      `next_actions should surface the dispatch command; got ${JSON.stringify(result.next_actions)}`,
+    );
+  });
 });
