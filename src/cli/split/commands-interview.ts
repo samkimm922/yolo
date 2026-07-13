@@ -173,6 +173,24 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       const questionId = resolveInterviewQuestionId(read.state, input.questionId);
       const question = (read.state.questions || []).find((item) => item.id === questionId);
       if (!question) return error("answer", "INTERVIEW_QUESTION_UNKNOWN", `Question not found: ${input.questionId}`, 1);
+      const alreadyAnswered = Boolean(read.state.answers?.[questionId]);
+      const nextQuestionId = cleanCliText(read.state.next_question?.id);
+      if (!alreadyAnswered && questionId !== nextQuestionId) {
+        return emit("answer", {
+          status: "error",
+          code: "INTERVIEW_STAGE_GATE_BLOCKED",
+          command: "answer",
+          summary: nextQuestionId
+            ? `Complete the current protocol step before answering ${questionId}.`
+            : "Confirm the current protocol gate before answering another question.",
+          next_question: read.state.next_question || null,
+          coverage: read.state.coverage || null,
+          artifacts: [],
+          next_actions: nextQuestionId
+            ? [`Answer the current question first: ${nextQuestionId}.`]
+            : ["Review and confirm the current understanding playback."],
+        }, 2);
+      }
       const state = decorateInterviewState(answerDemandInterviewQuestion(cloneJson(read.state), {
         questionId,
         answer: cleanCliText(input.answer),
@@ -236,12 +254,23 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
             matches_current_snapshot: true,
           },
         };
+        const initialConfirmation = state.coverage?.awaiting_initial_playback === true;
+        if (initialConfirmation) {
+          state.initial_playback = {
+            confirmed: true,
+            confirmed_by: "user",
+            confirmed_content_hash: generated.content_hash,
+            confirmed_at: now,
+          };
+        }
         const interviewPath = state.interview_path || "";
         if (writeArtifacts) writeJsonFile(interviewPath, state);
         return emit("playback", interviewResult("playback", state, {
           status: "success",
           code: "PLAYBACK_CONFIRMED",
-          summary: "Understanding playback confirmed by user.",
+          summary: initialConfirmation
+            ? "Initial scenario playback confirmed; layer one is now open."
+            : "Understanding playback confirmed by user.",
           artifacts: writeArtifacts ? [interviewPath] : [],
           outputs: [{ playback: state.playback }],
           runtime_next_actions: [`Create demand artifacts: yolo interview to-demand --session ${interviewPath}`],

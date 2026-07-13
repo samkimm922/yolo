@@ -56,6 +56,11 @@ type InterviewQuestion = {
   plain_language_prompt?: string;
   category?: string;
   why_it_matters?: string;
+  stage?: string;
+  layer?: number;
+  confirmation_gate?: boolean;
+  recommended_answer?: string;
+  recommendation_reason?: string;
   follow_up?: boolean;
   follow_up_id?: string;
   follow_up_code?: string;
@@ -80,6 +85,7 @@ type InterviewState = {
   interview_path?: string;
   next_question?: InterviewQuestion | null;
   playback?: { confirmed?: boolean; [key: string]: unknown };
+  initial_playback?: { confirmed?: boolean; confirmed_content_hash?: string; [key: string]: unknown };
   coverage?: { approval?: { approved?: boolean } } & InterviewCoverage;
   answers?: unknown;
   [key: string]: unknown;
@@ -101,6 +107,11 @@ export function decorateInterviewState(state: InterviewState = {}): InterviewSta
       text: next.plain_language_prompt || next.text || next.id,
       category: next.category,
       why_it_matters: next.why_it_matters,
+      stage: next.stage,
+      layer: next.layer,
+      confirmation_gate: next.confirmation_gate === true,
+      recommended_answer: next.recommended_answer,
+      recommendation_reason: next.recommendation_reason,
       follow_up: next.follow_up === true,
       follow_up_id: next.follow_up_id,
       follow_up_code: next.follow_up_code,

@@ -306,15 +306,24 @@ function presetInterview(details: FixtureDetails): PresetInterview {
     idea,
     title,
     answers: [
+      ["premise_current_solution", `Release maintainers manually run ${testCommand} and inspect ${testFile} before publishing.`],
+      ["premise_consequence", `Without this flow, ${requirementId} can be skipped and a release can claim success without canonical smoke evidence.`],
+      ["premise_minimum", `The minimum useful version verifies ${requirementId} through ${targetFile} and records the ${testCommand} result.`],
+      ["premise_decision", "Continue."],
       ["target_users", `Release managers and fixture maintainers check ${title} daily before publishing and are responsible for confirming the smoke test result.`],
       ["status_quo", `Currently release maintainers manually run ${testCommand} in the fixture system and check ${testFile}; the process gets stuck when the canonical path is skipped.`],
       ["pain_points", `There is release risk because a run can claim success when ${requirementId} was not exercised through the canonical demand to auto path.`],
+      ["layer_1_confirmation", "Confirmed, the roles, current flow, and pain are complete."],
+      ["day_in_life", `Before publishing, the release maintainer opens the fixture, runs ${testCommand}, reviews ${testFile}, and records whether ${requirementId} passed.`],
       ["desired_outcome", `Release managers can verify the fixture behavior through ${targetFile} without touching unrelated files or delaying the fixture signoff.`],
+      ["layer_2_confirmation", "Confirmed, this is the complete day-in-the-life flow."],
+      ["exceptions", "No special cases beyond missing or failed fixture files; if the fixture test command is missing or failed, the soak round must not pass."],
+      ["scope_boundaries", `Only ${targetFile}, ${testFile}, and generated .yolo artifacts are in scope; do not change roles, workflow, data, unrelated APIs, or UI.`],
+      ["layer_3_confirmation", "Confirmed, the exceptions and boundaries are complete."],
       ["success_criteria", `Record a pass status when ${testCommand} validates ${testFile} and the behavior in ${targetFile} for ${requirementId}.`],
       ["success_proof", `Run ${testCommand}, verify the pass record, and confirm ${testFile} exercises ${targetFile} for ${requirementId}.`],
-      ["scope_boundaries", `Only ${targetFile}, ${testFile}, and generated .yolo artifacts are in scope; do not change roles, workflow, data, unrelated APIs, or UI.`],
-      ["exceptions", "No special cases beyond missing or failed fixture files; if the fixture test command is missing or failed, the soak round must not pass."],
-      ["mvp_priority", `MVP is the single fixture requirement ${requirementId}; broader refactors can come later.`],
+      ["layer_4_confirmation", "Confirmed, the requirement has observable acceptance evidence."],
+      ["requirements_confirmation", "Confirmed, R-001 is accurate and complete."],
       ["execution_approval", "Approved, proceed to PRD and dry-run auto only."],
     ],
   };
@@ -525,6 +534,61 @@ async function runRoundFixture({
       return { reports, failures, commands };
     }
 
+    async function confirmPlayback(stepPrefix: string): Promise<boolean> {
+      const generatedPlayback = await step(`${stepPrefix}-generate`, [
+        "interview",
+        "playback",
+        "--session",
+        sessionPath as string,
+        "--json",
+      ]);
+      if (failures.length) return false;
+      const generatedReport = asRecord(generatedPlayback.report);
+      const generatedOutput = asRecord(asArray<Record<string, unknown>>(generatedReport.outputs)[0]);
+      const playbackHash = clean(asRecord(generatedOutput.playback).content_hash);
+      if (!playbackHash) {
+        failures.push({
+          round,
+          fixture,
+          step: `${stepPrefix}-generate`,
+          command: generatedPlayback.command,
+          exit_code: generatedPlayback.exit_code,
+          expected_exit_codes: [0],
+          code: "SOAK_PLAYBACK_HASH_MISSING",
+          status: generatedPlayback.report?.status || null,
+          summary: "Playback generation did not return a content_hash.",
+        });
+        return false;
+      }
+
+      const playback = await step(`${stepPrefix}-confirm`, [
+        "interview",
+        "playback",
+        "--session",
+        sessionPath as string,
+        "--confirm",
+        playbackHash,
+        "--json",
+      ]);
+      if (failures.length) return false;
+      const playbackReport = playback.report ? asRecord(playback.report) : {};
+      if (playbackReport.code !== "PLAYBACK_CONFIRMED") {
+        failures.push({
+          round,
+          fixture,
+          step: `${stepPrefix}-confirm`,
+          command: playback.command,
+          exit_code: playback.exit_code,
+          expected_exit_codes: [0],
+          code: "SOAK_PLAYBACK_NOT_CONFIRMED",
+          status: playback.report?.status || null,
+          summary: "Playback did not confirm understanding.",
+        });
+        return false;
+      }
+      return true;
+    }
+
     for (const [question, answer] of interview.answers) {
       await step(`interview-answer-${question}`, [
         "interview",
@@ -538,57 +602,12 @@ async function runRoundFixture({
         "--json",
       ]);
       if (failures.length) return { reports, failures, commands };
+      if (question === "premise_decision" && !await confirmPlayback("interview-initial-playback")) {
+        return { reports, failures, commands };
+      }
     }
 
-    const generatedPlayback = await step("interview-playback-generate", [
-      "interview",
-      "playback",
-      "--session",
-      sessionPath as string,
-      "--json",
-    ]);
-    if (failures.length) return { reports, failures, commands };
-    const generatedReport = asRecord(generatedPlayback.report);
-    const generatedOutput = asRecord(asArray<Record<string, unknown>>(generatedReport.outputs)[0]);
-    const playbackHash = clean(asRecord(generatedOutput.playback).content_hash);
-    if (!playbackHash) {
-      failures.push({
-        round,
-        fixture,
-        step: "interview-playback-generate",
-        command: generatedPlayback.command,
-        exit_code: generatedPlayback.exit_code,
-        expected_exit_codes: [0],
-        code: "SOAK_PLAYBACK_HASH_MISSING",
-        status: generatedPlayback.report?.status || null,
-        summary: "Playback generation did not return a content_hash.",
-      });
-      return { reports, failures, commands };
-    }
-
-    const playback = await step("interview-playback-confirm", [
-      "interview",
-      "playback",
-      "--session",
-      sessionPath as string,
-      "--confirm",
-      playbackHash,
-      "--json",
-    ]);
-    if (failures.length) return { reports, failures, commands };
-    const playbackReport = playback.report ? asRecord(playback.report) : {};
-    if (playbackReport.code !== "PLAYBACK_CONFIRMED") {
-      failures.push({
-        round,
-        fixture,
-        step: "interview-playback-confirm",
-        command: playback.command,
-        exit_code: playback.exit_code,
-        expected_exit_codes: [0],
-        code: "SOAK_PLAYBACK_NOT_CONFIRMED",
-        status: playback.report?.status || null,
-        summary: "Playback did not confirm understanding.",
-      });
+    if (!await confirmPlayback("interview-playback")) {
       return { reports, failures, commands };
     }
 
