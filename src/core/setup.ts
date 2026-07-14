@@ -597,7 +597,12 @@ export function formatProjectSetupText(result: Record<string, unknown> = Object(
   const gaps = (result.gaps as Array<Record<string, unknown>>) || [];
   if (gaps.length) {
     lines.push("gaps:");
-    for (const gap of gaps.slice(0, 20)) lines.push(`  - ${gap.code}: ${gap.message}`);
+    for (const gap of gaps.slice(0, 20)) {
+      const nextAction = typeof gap.next_action === "string" ? gap.next_action.trim() : "";
+      lines.push(nextAction
+        ? `  - ${gap.code}: ${gap.message} → ${nextAction}`
+        : `  - ${gap.code}: ${gap.message}`);
+    }
   }
   const contextGaps = (result.human_context_gaps as Array<Record<string, unknown>>) || [];
   if (contextGaps.length) {

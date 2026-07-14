@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildAcceptanceReport, runYoloAcceptCli } from "../src/runtime/acceptance/report.js";
+import { buildAcceptanceReport, formatAcceptanceReportText, runYoloAcceptCli } from "../src/runtime/acceptance/report.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import { initLifecycleState } from "../src/lifecycle/state.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
@@ -1658,5 +1658,40 @@ describe("acceptance report", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("formatAcceptanceReportText surfaces artifact path and SHA256 for digest mismatches", () => {
+    // RED: the default text formatter only showed level:code:message, dropping
+    // artifact_path, expected_sha256, and actual_sha256. Users had to run --json
+    // to see which artifact failed and what digest was expected.
+    const text = formatAcceptanceReportText({
+      status: "blocked",
+      summary: "digest mismatch",
+      issues: [{
+        level: "P1",
+        code: "ACCEPTANCE_ARTIFACT_DIGEST_MISMATCH",
+        message: "Acceptance evidence artifact digest does not match the expected sha256.",
+        artifact_path: "/tmp/state/evidence/adapter-latest.json",
+        expected_sha256: "aaa111",
+        actual_sha256: "bbb222",
+      }],
+    });
+    assert.match(text, /\/tmp\/state\/evidence\/adapter-latest\.json/);
+    assert.match(text, /aaa111/);
+    assert.match(text, /bbb222/);
+  });
+
+  test("formatAcceptanceReportText surfaces artifact path for missing artifacts", () => {
+    const text = formatAcceptanceReportText({
+      status: "blocked",
+      summary: "artifact missing",
+      issues: [{
+        level: "P1",
+        code: "ACCEPTANCE_ARTIFACT_MISSING",
+        message: "Acceptance evidence artifact path does not exist on disk.",
+        artifact_path: "/tmp/state/evidence/missing.json",
+      }],
+    });
+    assert.match(text, /\/tmp\/state\/evidence\/missing\.json/);
   });
 });
