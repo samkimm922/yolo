@@ -30,6 +30,8 @@ const INVENTORY = [
   ["src/cli/split/text-format.ts", { WARN: 0, warning: 8, "best-effort": 0, skip: 5 }],
   ["src/core/bootstrap.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 4 }],
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
+  // Partial project-file scans are persisted in demand facts and CONTEXT.md instead of failing silently.
+  ["src/demand/artifacts.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/demand/gate.ts", { WARN: 0, warning: 27, "best-effort": 0, skip: 0 }],
   ["src/demand/interview.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],

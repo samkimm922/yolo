@@ -11,6 +11,7 @@ import {
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
+  writeDemandArtifacts,
 } from "../src/demand/runtime.js";
 import * as demandRuntimeModule from "../src/demand/runtime.js";
 import {
@@ -2578,6 +2579,80 @@ describe("demand runtime", () => {
       assert.deepEqual(taskFor(/标签筛选|按标签筛选/)?.scope?.targets?.map((target) => target.file), ["src/features/todo-filter.ts"]);
       assert.deepEqual(taskFor(/到期字段|到期时间/)?.scope?.targets?.map((target) => target.file), ["src/domain/todo.ts"]);
       assert.deepEqual(taskFor(/通知调度|到期前.*提醒/)?.scope?.targets?.map((target) => target.file), ["src/services/reminder-scheduler.ts"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("large brownfield scan prioritizes config-declared source roots and reports partial coverage", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-large-brownfield-"));
+    try {
+      for (let index = 0; index < 600; index += 1) {
+        writeProjectFile(root, `000-reference/note-${String(index).padStart(3, "0")}.md`, "reference\n");
+      }
+      writeProjectFile(root, "tsconfig.json", [
+        "{",
+        "  // The source root is intentionally non-standard and alphabetically late.",
+        '  "include": ["zeta-product/**/*.ts",],',
+        "}",
+        "",
+      ].join("\n"));
+      writeProjectFile(root, "zeta-product/services/inventory.service.ts");
+
+      const session = {
+        id: "DEMAND-LARGE-BROWNFIELD",
+        project: { target_files: [], candidate_target_files: [] },
+        project_facts: { target_files: [], candidate_target_files: [] },
+        requirements: {
+          active: [{
+            id: "REQ-001",
+            text: "Store managers can view actual inventory by product or storage location.",
+          }],
+        },
+        scenario_matrix: {
+          scenarios: [{
+            id: "SCN-001",
+            requirement_id: "REQ-001",
+            desired_behavior: "Show actual inventory grouped by product or storage location.",
+            proof: "A manager can inspect the grouped inventory counts.",
+            surfaces: [],
+          }],
+        },
+      } as DemandSession;
+
+      const inferred = inferGreenfieldTargetFiles(session, { projectRoot: root });
+      assert.deepEqual(inferred.map((item) => item.file), ["zeta-product/services/inventory.service.ts"]);
+
+      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      assert.equal(grounded.applied, true, JSON.stringify(grounded, null, 2));
+      assert.deepEqual(grounded.session.project.target_files, ["zeta-product/services/inventory.service.ts"]);
+      assert.deepEqual(grounded.session.project_facts.file_scan, {
+        schema: "yolo.demand.project_file_scan.v1",
+        status: "partial",
+        candidate_coverage_complete: false,
+        strategy: "declared_source_roots_then_stratified_directory_budget",
+        max_files: 600,
+        discovered_files: 602,
+        selected_files: 600,
+        omitted_files: 2,
+        declared_source_roots: ["zeta-product"],
+        partially_covered_directories: [{
+          directory: "000-reference",
+          discovered_files: 600,
+          selected_files: 598,
+          omitted_files: 2,
+        }],
+        inaccessible_directories: [],
+        excluded_directories: [".yolo"],
+        warning: "Project file candidate scan was partial: selected 600 of 602 eligible files; 2 files were omitted from mapping scores. Partially covered directories: 000-reference (598/600).",
+      });
+
+      const artifactDir = join(root, "demand-artifacts");
+      writeDemandArtifacts(grounded.session, artifactDir);
+      const context = readFileSync(join(artifactDir, "CONTEXT.md"), "utf8");
+      assert.match(context, /Project File Candidate Coverage/);
+      assert.match(context, /selected 600 of 602 eligible files/);
+      assert.match(context, /000-reference \(598\/600\)/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
