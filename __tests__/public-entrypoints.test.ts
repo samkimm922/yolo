@@ -603,7 +603,46 @@ describe("runner support modules", () => {
     assert.equal(result.status, "fail");
     assert.equal(result.blocks_execution, true);
     assert.ok(result.failures.some((failure) => failure.code === "CONTEXT_PACK_UNSAFE_TARGET"));
-    assert.ok(result.failures.some((failure) => failure.code === "CONTEXT_PACK_TARGET_READONLY_CONFLICT"));
+    const conflict = result.failures.find((failure) => failure.code === "CONTEXT_PACK_TARGET_READONLY_CONFLICT");
+    assert.ok(conflict, "expected CONTEXT_PACK_TARGET_READONLY_CONFLICT failure");
+    assert.deepEqual(conflict.files, ["src/index.ts"]);
+    assert.match(conflict.detail, /src\/index\.ts/);
+    assert.match(conflict.detail, /remove src\/index\.ts from scope\.targets or scope\.readonly_files/i);
+    assert.ok(conflict.remediation, "expected a remediation hint for the conflict");
+  });
+
+  test("context pack validator blocks max files exceeded with count vs max and a split hint", () => {
+    const pack = buildContextPackForTask({
+      id: "FIX-PUBLIC-002B",
+      type: "bugfix",
+      status: "pending",
+      scope: {
+        targets: [
+          { file: "src/a.ts" },
+          { file: "src/b.ts" },
+          { file: "src/c.ts" },
+        ],
+        max_files: 2,
+      },
+      post_conditions: [{
+        id: "POST-FILE",
+        type: "target_file_modified",
+        severity: "FAIL",
+        params: { file: "src/a.ts" },
+      }],
+    }, { root: YOLO_DIR, attempt: 1 });
+
+    const result = validateContextPack(pack, { root: YOLO_DIR });
+
+    assert.equal(result.status, "fail");
+    assert.equal(result.blocks_execution, true);
+    const exceeded = result.failures.find((failure) => failure.code === "CONTEXT_PACK_MAX_FILES_EXCEEDED");
+    assert.ok(exceeded, "expected CONTEXT_PACK_MAX_FILES_EXCEEDED failure");
+    assert.equal(exceeded.target_count, 3);
+    assert.equal(exceeded.max_files, 2);
+    assert.match(exceeded.detail, /3 exceeds scope\.max_files 2/);
+    assert.match(exceeded.detail, /split the task into smaller tasks or raise scope\.max_files/i);
+    assert.ok(exceeded.remediation, "expected a remediation hint for max files exceeded");
   });
 
   test("context pack validator blocks new targets below a symlink outside root", () => {

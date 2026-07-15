@@ -253,7 +253,7 @@ function applyDuplicateSurfaces(discuss: any, input: ReturnType<typeof duplicate
     kind: "code",
     label: input.surfaceLabel,
     target_files: [input.targetFile],
-    readonly_files: input.addReadonlyContext ? [input.targetFile] : [],
+    readonly_files: input.addReadonlyContext ? [`src/property/readonly-${input.seed}.ts`] : [],
     allow_new_files: false,
     session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
     proof,

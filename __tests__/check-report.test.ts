@@ -951,6 +951,86 @@ describe("yolo check report", () => {
     }
   });
 
+  test("doctor blocks task targets that are also listed as readonly files", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: {
+          targets: [{ file: "src/index.ts" }],
+          readonly_files: ["src/index.ts"],
+        },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/index.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.blockers.some((blocker) =>
+        blocker.code === "CONTEXT_PACK_TARGET_READONLY_CONFLICT" &&
+        /src\/index\.ts/.test(blocker.message || "")
+      ), `expected CONTEXT_PACK_TARGET_READONLY_CONFLICT blocker; got ${JSON.stringify(report.blockers)}`);
+      const conflict = report.blockers.find((blocker) => blocker.code === "CONTEXT_PACK_TARGET_READONLY_CONFLICT");
+      assert.match(conflict.message || "", /remove src\/index\.ts from scope\.targets or scope\.readonly_files/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor blocks task targets that exceed scope.max_files", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: {
+          targets: [
+            { file: "src/a.ts" },
+            { file: "src/b.ts" },
+            { file: "src/c.ts" },
+          ],
+          max_files: 2,
+        },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/a.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "blocked");
+      const exceeded = report.blockers.find((blocker) => blocker.code === "CONTEXT_PACK_MAX_FILES_EXCEEDED");
+      assert.ok(exceeded, `expected CONTEXT_PACK_MAX_FILES_EXCEEDED blocker; got ${JSON.stringify(report.blockers)}`);
+      assert.match(exceeded.message || "", /3 exceeds scope\.max_files 2/);
+      assert.match(exceeded.message || "", /split the task into smaller tasks or raise scope\.max_files/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks UI tasks without state matrix and evidence plan", () => {
     const root = tempProject();
     try {
