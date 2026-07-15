@@ -1067,7 +1067,7 @@ describe("yolo sdk", () => {
     assert.equal(covered.blocks_execution, false);
   });
 
-  test("PI contract gate returns target coverage migration advice for legacy PRDs", async () => {
+  test("PI contract gate accepts executable test behavior as target coverage", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-contract-advice-"));
     try {
       const prdPath = join(root, "prd.json");
@@ -1100,13 +1100,13 @@ describe("yolo sdk", () => {
 
       const result = await runPiRuntime("prd.contract_gate", { prdPath });
 
-      assert.equal(result.status, "error");
-      assert.equal(result.code, "PI_PRD_CONTRACT_FAILED");
-      assert.equal(result.migration.available, true);
-      assert.equal(result.migration.would_fix_contract, true);
-      assert.equal(result.migration.added_count, 1);
-      assert.ok(result.migration.dry_run_command.includes("yolo-prd-migrate-gates"));
-      assert.ok(result.next_actions.some((action) => action.includes("--apply")));
+      assert.equal(result.status, "success");
+      assert.equal(result.contract.blocks_execution, false);
+      assert.equal(
+        result.contract.failures.some((failure) => failure.code === "TASK_TARGETS_MISSING_EXECUTABLE_COVERAGE"),
+        false,
+      );
+      assert.equal(result.migration, undefined);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

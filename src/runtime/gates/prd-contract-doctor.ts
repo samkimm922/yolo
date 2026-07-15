@@ -174,6 +174,10 @@ function isBehaviorVerificationGate(condition) {
   return conditionVerifyCommand(condition).length > 0;
 }
 
+function isTestBehaviorVerificationGate(condition) {
+  return TEST_CONDITION_TYPES.has(normalizeCondition(condition).type) && isBehaviorVerificationGate(condition);
+}
+
 function conditionRequiresNonEmptyTests(condition = Object()) {
   const normalized = normalizeCondition(condition);
   if (normalized.severity !== "FAIL" || !TEST_CONDITION_TYPES.has(normalized.type)) return false;
@@ -817,7 +821,9 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    if (task.status === "pending" && targets.length > 0) {
+    const hasExecutableBehaviorVerification = postConditions.some(isTestBehaviorVerificationGate);
+    const expectsNoBusinessCodeChanges = task.scope?.expected_zero_business_code === true;
+    if (task.status === "pending" && targets.length > 0 && !hasExecutableBehaviorVerification && !expectsNoBusinessCodeChanges) {
       const coveredTargets = new Set();
       for (const condition of postConditions) {
         for (const file of conditionCoveredTargets(condition, targets)) {

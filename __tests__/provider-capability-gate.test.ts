@@ -93,15 +93,16 @@ describe("provider capability bits and parity matrix", () => {
 });
 
 describe("provider capability gate", () => {
-  test("blocks when PRD declares no required capabilities (fail-closed)", () => {
+  test("passes when neither declarations nor instructions require special capabilities", () => {
     const result = inspectProviderCapabilityGate({
-      prd: { tasks: [{ id: "T1" }] },
+      prd: { required_capabilities: [], tasks: [{ id: "T1" }] },
       config: { ai: { executor: "claude" } },
     });
-    assert.equal(result.status, "blocked");
-    assert.equal(result.blocks_execution, true);
+    assert.equal(result.status, "pass");
+    assert.equal(result.blocks_execution, false);
     assert.equal(result.required.length, 0);
-    assert.ok(result.blockers.some((b) => b.code === "PROVIDER_CAPABILITY_NOT_DECLARED"));
+    assert.equal(result.blockers.length, 0);
+    assert.equal(result.warnings.length, 0);
   });
 
   test("passes when PRD opts out of capability declaration explicitly", () => {
@@ -114,11 +115,7 @@ describe("provider capability gate", () => {
     assert.equal(result.required.length, 0);
   });
 
-  test("passes when PRD carries an approved, PRD-effective demand contract (global opt-out)", () => {
-    // Matrix/CI fixtures and operator-driven pipeline runs always carry an
-    // approved demand — the operator accepted the work (and its provider risk)
-    // upstream, so an undeclared capability is an accepted risk, not a silent
-    // pass. This is the legitimate-pipeline path the gate must not break.
+  test("treats an approved PRD with no capability signals as requiring no special capability", () => {
     const result = inspectProviderCapabilityGate({
       prd: {
         tasks: [{ id: "T1" }],
@@ -129,7 +126,7 @@ describe("provider capability gate", () => {
     assert.equal(result.status, "pass");
     assert.equal(result.blocks_execution, false);
     assert.equal(result.required.length, 0);
-    assert.ok(result.warnings.some((w) => w.code === "PROVIDER_CAPABILITY_OPT_OUT"));
+    assert.equal(result.warnings.length, 0);
   });
 
   test("blocks when provider lacks required capability", () => {
