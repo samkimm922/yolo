@@ -9,6 +9,7 @@ import {
   inspectDemandInterviewCoverage,
   selectDemandInterviewNextQuestion,
 } from "../src/demand/interview.js";
+import { PM_PROTOCOL_STAGES, renderPMProtocolMarkdown } from "../src/workflows/pm-protocol.js";
 
 function withSession(run: (session: ReturnType<typeof createDemandInterviewSession>) => void) {
   const root = mkdtempSync(join(tmpdir(), "yolo-pm-protocol-"));
@@ -34,14 +35,13 @@ function answer(session: ReturnType<typeof createDemandInterviewSession>, questi
 
 describe("PM protocol interview stages", () => {
   test("starts with a lightweight premise challenge before the four business layers", () => withSession((session) => {
-    assert.equal(session.next_question?.id, "premise_current_solution");
+    assert.equal(session.next_question?.id, "premise_consequence");
     assert.deepEqual(
-      session.questions?.slice(0, 4).map((question) => question.id),
-      ["premise_current_solution", "premise_consequence", "premise_minimum", "premise_decision"],
+      session.questions?.slice(0, 3).map((question) => question.id),
+      ["premise_consequence", "premise_minimum", "premise_decision"],
     );
     assert.equal(session.next_question?.stage, "premise");
 
-    answer(session, "premise_current_solution", "现在用标题前缀写标签，每天下班前人工翻看日期。");
     answer(session, "premise_consequence", "不做会继续漏掉本周到期的任务，负责人至少每周补救两次。");
     answer(session, "premise_minimum", "最小版本也要能创建标签、按标签筛选、设置到期时间并在到期前提醒。");
 
@@ -58,7 +58,6 @@ describe("PM protocol interview stages", () => {
   }));
 
   test("a do-not-continue premise judgment stops instead of leaking into layer one", () => withSession((session) => {
-    answer(session, "premise_current_solution", "现在偶尔手工看一眼，没有固定流程。");
     answer(session, "premise_consequence", "不做没有业务影响，也没有人会因此多花时间。");
     answer(session, "premise_minimum", "目前没有一个值得交付的最小版本。");
     answer(session, "premise_decision", "不继续");
@@ -71,7 +70,6 @@ describe("PM protocol interview stages", () => {
   }));
 
   test("each layer confirmation gates the next layer and is invalidated by corrections", () => withSession((session) => {
-    answer(session, "premise_current_solution", "现在用标题前缀分类，每天人工检查日期。");
     answer(session, "premise_consequence", "每周都会漏掉到期任务，团队需要临时追赶。");
     answer(session, "premise_minimum", "最小版本包含标签、筛选、到期时间和站内提醒。");
     answer(session, "premise_decision", "继续");
@@ -116,4 +114,28 @@ describe("PM protocol interview stages", () => {
     assert.equal(requirementGate?.confirmation_gate, true);
     assert.match(requirementGate?.plain_language_prompt || "", /R-001/);
   }));
+
+  test("removes redundant required fields from protocol stages", () => {
+    const questionIds: string[] = PM_PROTOCOL_STAGES.flatMap((stage) => [...stage.question_ids]);
+    assert.equal(questionIds.includes("premise_current_solution"), false);
+    assert.equal(questionIds.includes("success_proof"), false);
+  });
+
+  test("keeps iron law four intact while removing duplicate protocol wording", () => {
+    const markdown = renderPMProtocolMarkdown({
+      id: "demand",
+      name: "Demand",
+      workflow: "demand",
+      purpose: "test",
+    });
+
+    assert.match(markdown, /## 铁律四：具体化强制/);
+    for (const trigger of ["都行", "越快越好", "差不多就行", "跟某某系统差不多", "用户体验要好", "性能要快", "稳定"]) {
+      assert.match(markdown, new RegExp(trigger));
+    }
+    assert.match(markdown, /给我一个上周真实发生的例子/);
+    assert.doesNotMatch(markdown, /4\. \*\*浅尝辄止/);
+    assert.doesNotMatch(markdown, /7\. \*\*技术泄露/);
+    assert.doesNotMatch(markdown, /2\. \*\*【铁律二】复述确认/);
+  });
 });

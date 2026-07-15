@@ -608,7 +608,6 @@ async function runL1(tempRoot: string) {
 
 function interviewAnswers(title: string, targetFile: string) {
   return [
-    ["premise_current_solution", `Release maintainers manually run the matrix check for ${title} and inspect its generated artifacts before every merge.`],
     ["premise_consequence", "Without the deterministic path, a CLI or fixture regression can reach main while ordinary unit tests still pass."],
     ["premise_minimum", `The minimum useful version runs one deterministic demand-to-check path for ${targetFile} and fails closed when an artifact is missing.`],
     ["premise_decision", "Continue."],
@@ -623,7 +622,6 @@ function interviewAnswers(title: string, targetFile: string) {
     ["scope_boundaries", `Only generated .yolo artifacts and ${targetFile} are in scope; no business source edits are part of L2.`],
     ["layer_3_confirmation", "Confirmed, the exceptions and boundaries are complete."],
     ["success_criteria", `The CI log shows exit 0, a concrete prd.json path, and a check-report.json whose JSON status is pass for ${targetFile}; any missing artifact or non-pass status turns the PR red.`],
-    ["success_proof", "Run yolo spec --demand and yolo check --prd, then verify both JSON artifacts exist and report pass/success."],
     ["layer_4_confirmation", "Confirmed, the requirement has observable acceptance evidence."],
     ["requirements_confirmation", "Confirmed, R-001 is accurate and complete."],
     ["execution_approval", "Approved for deterministic matrix CI PRD and check generation."],

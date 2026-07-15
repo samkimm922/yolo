@@ -53,7 +53,6 @@ function answer(session, questionId, value) {
 }
 
 function openLayerOne(session) {
-  answer(session, "premise_current_solution", "Store managers export a spreadsheet every morning and manually review risky inventory rows.");
   answer(session, "premise_consequence", "Without a change, stores miss at least two stockout risks each week and managers spend an hour on recovery.");
   answer(session, "premise_minimum", "The minimum useful version must show a low-stock signal in the existing inventory workflow.");
   answer(session, "premise_decision", "继续");
@@ -74,7 +73,6 @@ function answerAllRequired(session) {
   answer(session, "scope_boundaries", "Do not build supplier ordering; do not change order import.");
   answer(session, "layer_3_confirmation", "确认，例外和边界都完整。");
   answer(session, "success_criteria", "Low-stock SKUs show a clear badge in the inventory list.");
-  answer(session, "success_proof", "Create a SKU below threshold and confirm the list shows the badge.");
   answer(session, "layer_4_confirmation", "确认，每项能力都有可见证据。");
   answer(session, "requirements_confirmation", "确认，R-001 清单准确且没有遗漏。");
   return session;
@@ -118,7 +116,7 @@ describe("demand interview", () => {
     assert.equal(session.stateRoot, join(root, ".yolo"));
     assert.equal(session.objective, "Build inventory stockout prevention for store managers.");
     assert.deepEqual(session.answers, {});
-    assert.equal(session.next_question.id, "premise_current_solution");
+    assert.equal(session.next_question.id, "premise_consequence");
     assert.equal(session.next_question.stage, "premise");
     assert.equal(session.coverage.ready_for_discuss, false);
     assert.equal(session.coverage.ready_for_prd_intake, false);
@@ -133,6 +131,8 @@ describe("demand interview", () => {
       assert.equal(question.accepts.free_text, true);
       assert.equal(question.accepts.examples.length >= 2, true);
     }
+    assert.equal(DEMAND_INTERVIEW_QUESTION_BANK.some((question) => question.id === "premise_current_solution"), false);
+    assert.equal(DEMAND_INTERVIEW_QUESTION_BANK.some((question) => question.id === "success_proof"), false);
   }));
 
   test("answers questions in order and advances coverage", () => withRoot((root) => {
@@ -376,7 +376,7 @@ describe("demand interview", () => {
     assert.deepEqual(input.status_quo, ["They export inventory counts and manually scan for risky SKUs."]);
     assert.ok(input.success_criteria.includes("Managers see low-stock risks before the item sells out."));
     assert.ok(input.success_criteria.includes("Low-stock SKUs show a clear badge in the inventory list."));
-    assert.deepEqual(input.proof, ["Create a SKU below threshold and confirm the list shows the badge."]);
+    assert.deepEqual(input.proof, ["Low-stock SKUs show a clear badge in the inventory list."]);
     assert.deepEqual(input.non_goals, ["Do not build supplier ordering", "do not change order import."]);
     assert.deepEqual(input.exceptions, ["New SKUs without sales history should not be marked high risk by default."]);
     assert.deepEqual(input.roadmap, ["The minimum useful version must show a low-stock signal in the existing inventory workflow."]);
@@ -397,17 +397,14 @@ describe("demand interview", () => {
   test("keeps Chinese enumeration phrases as one demand item", () => withRoot((root) => {
     const session = newSession(root);
     const criterion = "看板包含 Todo、Doing、Done 三列，卡片可在列之间移动。";
-    const proof = "验收时完成新增列表、新增卡片、编辑、移动、归档、刷新持久化并刷新后仍保留。";
 
     answer(session, "success_criteria", criterion);
-    answer(session, "success_proof", proof);
 
     assert.deepEqual(session.answers.success_criteria.normalized.items, [criterion]);
-    assert.deepEqual(session.answers.success_proof.normalized.items, [proof]);
 
     const input = demandInterviewToDemandInput(session);
     assert.deepEqual(input.success_criteria, [criterion]);
-    assert.deepEqual(input.proof, [proof]);
+    assert.deepEqual(input.proof, [criterion]);
 
     const demandSession = buildDemandSession({
       objective: "让产品负责人使用中文看板管理任务状态。",
