@@ -221,13 +221,6 @@ const protocolQuestion = (question: DemandInterviewQuestion): DemandInterviewQue
 
 export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
   protocolQuestion({
-    id: "premise_current_solution", slot: "premise_current_solution", stage: "premise", category: "现在的解决办法",
-    plain_language_prompt: "先不谈新功能：这件事现在怎么解决？请讲最近一次真实发生时用了什么办法。",
-    why_it_matters: "先确认现有替代方案，才能判断新需求是否值得继续。",
-    accepts: answerExamples("现在用表格记录，每天早上人工筛一遍。", "目前靠群消息提醒，负责人下班前逐条核对。"),
-    required_for: ["discuss", "prd_intake"],
-  }),
-  protocolQuestion({
     id: "premise_consequence", slot: "premise_consequence", stage: "premise", category: "不做的后果",
     plain_language_prompt: "如果三个月内不做，谁会继续受影响？会多花多少时间、出多少错，或者失去什么机会？",
     why_it_matters: "不做的后果决定是否值得投入，而不是默认所有想法都要实现。",
@@ -330,13 +323,6 @@ export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
     required_for: ["prd_intake"],
   }),
   protocolQuestion({
-    id: "success_proof", slot: "success_proof", stage: "layer_4", layer: 4, category: "验收证据",
-    plain_language_prompt: "请用一个上周真实例子走一遍验收：谁打开哪里、看到什么、做什么、最后留下什么可检查的证据？",
-    why_it_matters: "真实例子会变成可复现的验收步骤。",
-    accepts: answerExamples("创建“客户”标签并筛选，只看到两个匹配待办。", "把任务设为明天到期，今天负责人看到提醒并打开任务。"),
-    required_for: ["prd_intake"],
-  }),
-  protocolQuestion({
     id: UI_ACCEPTANCE_SLOT, slot: UI_ACCEPTANCE_SLOT, stage: "layer_4", layer: 4, category: "界面验收证据",
     plain_language_prompt: "这个界面从哪个业务入口打开？用户必须看到哪些文字、位置和状态，留下什么截图或记录就能确认做对？",
     why_it_matters: "界面验收保持业务语言；项目已有的技术验收方式由系统内部解析。",
@@ -370,7 +356,6 @@ export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
 ];
 
 const DISCUSS_REQUIRED_SLOTS: string[] = [
-  "premise_current_solution",
   "premise_consequence",
   "mvp_priority",
   "premise_decision",
@@ -384,7 +369,6 @@ const DISCUSS_REQUIRED_SLOTS: string[] = [
 ];
 const FOLLOW_UP_SEVERITY = "warning";
 const PRD_REQUIRED_SLOTS: string[] = [
-  "premise_current_solution",
   "premise_consequence",
   "mvp_priority",
   "premise_decision",
@@ -399,7 +383,6 @@ const PRD_REQUIRED_SLOTS: string[] = [
   "scope_boundaries",
   "layer_3_confirmation",
   "success_criteria",
-  "success_proof",
   "layer_4_confirmation",
   "requirements_confirmation",
 ];
@@ -565,7 +548,6 @@ function technicalOnly(text: unknown): boolean {
 type DetailSignal = "quantified" | "artifact" | "assertion" | "causal" | "role_context" | "explicit_none";
 
 const SLOT_DETAIL_SIGNALS: Record<string, DetailSignal[]> = {
-  premise_current_solution: ["quantified", "artifact", "assertion"],
   premise_consequence: ["quantified", "assertion", "causal"],
   target_users: ["role_context"],
   status_quo: ["quantified", "artifact", "assertion"],
@@ -573,7 +555,6 @@ const SLOT_DETAIL_SIGNALS: Record<string, DetailSignal[]> = {
   day_in_life: ["quantified", "assertion", "role_context"],
   desired_outcome: ["quantified", "artifact", "assertion"],
   success_criteria: ["quantified", "artifact", "assertion"],
-  success_proof: ["quantified", "artifact", "assertion"],
   ui_acceptance: ["quantified", "artifact", "assertion"],
   scope_boundaries: ["artifact", "assertion"],
   exceptions: ["explicit_none", "quantified", "artifact", "assertion", "causal"],
@@ -706,11 +687,6 @@ const SLOT_FOLLOW_UPS: Record<string, Record<string, string>> = {
     missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
     technical_only: "还缺可验收的观察点：请补具体数量/日期、产物名，或“当…时…”/“必须…”式结果。",
     vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-  },
-  success_proof: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-    technical_only: "还缺证明动作和结果：请补具体数量/日期、产物名，或“当…时…”式检查结果。",
-    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式证明步骤。",
   },
   scope_boundaries: {
     missing_detail: "还缺以下任一种：明确“不做/不改/不碰/只做”的可观察边界、具体数量/日期、或产物名。",
@@ -1690,7 +1666,6 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
   const painPoints = itemsForSlot(session, "pain_points");
   const desiredOutcomes = itemsForSlot(session, "desired_outcome");
   const successCriteria = itemsForSlot(session, "success_criteria");
-  const successProof = itemsForSlot(session, "success_proof");
   const scopeBoundaries = itemsForSlot(session, "scope_boundaries");
   const exceptions = itemsForSlot(session, "exceptions");
   const roadmap = itemsForSlot(session, "mvp_priority");
@@ -1717,14 +1692,13 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
     status_quo: statusQuo,
     problem: painPoints.join("; ") || objective,
     success_criteria: [...new Set([...desiredOutcomes, ...successCriteria])],
-    proof: successProof.length ? successProof : successCriteria,
+    proof: successCriteria,
     non_goals: scopeBoundaries,
     constraints: scopeBoundaries,
     exceptions,
     roadmap,
     requirement_checklist: confirmedRequirements,
     premise_challenges: [
-      textForSlot(session, "premise_current_solution"),
       textForSlot(session, "premise_consequence"),
       textForSlot(session, "mvp_priority"),
       clean(coverage.premise_judgment?.decision),

@@ -96,13 +96,13 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
 
   const actor = bySlot.get("target_users") || "目标用户";
   const objective = clean(session.objective || session.title) || bySlot.get("desired_outcome") || "这项工作";
-  const currentBehavior = bySlot.get("status_quo") || bySlot.get("premise_current_solution") || "沿用现在的临时办法";
+  const currentBehavior = bySlot.get("status_quo") || "沿用现在的临时办法";
   const pain = bySlot.get("pain_points") || bySlot.get("premise_consequence") || "现有流程仍有明确代价";
   const dayInLife = bySlot.get("day_in_life") || "进入日常工作入口并处理当天事项";
   const desiredOutcome = bySlot.get("desired_outcome") || bySlot.get("mvp_priority") || objective;
   const exceptions = bySlot.get("exceptions") || "尚未确认例外情况";
   const boundaries = bySlot.get("scope_boundaries") || "尚未确认本次边界";
-  const acceptanceEvidence = bySlot.get("success_proof") || bySlot.get("success_criteria") || "尚未确认验收证据";
+  const acceptanceEvidence = bySlot.get("success_criteria") || "尚未确认验收证据";
   const cadence = /每天|每日|早上|上午|下午|下班|daily|morning|afternoon/i.test(`${actor}\n${dayInLife}\n${currentBehavior}`)
     ? "每天"
     : "在需要处理这件事时";

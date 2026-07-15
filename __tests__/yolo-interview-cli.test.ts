@@ -97,7 +97,6 @@ async function confirmCurrentPlayback(root, sessionPath) {
 
 async function startLayerOneInterview(root, id = "stock-alerts") {
   const started = await startInterview(root, id);
-  await answer(root, started.session_path, "premise_current_solution", "Store managers export a spreadsheet every morning and manually inspect risky rows.");
   await answer(root, started.session_path, "premise_consequence", "Without a change, managers miss at least two stockout risks each week and spend an hour recovering.");
   await answer(root, started.session_path, "premise_minimum", "The minimum useful version must show a low-stock signal in the current inventory workflow.");
   await answer(root, started.session_path, "premise_decision", "继续");
@@ -123,7 +122,6 @@ async function openLayerFourInterview(root, id = "stock-alerts") {
 async function completeInterview(root, id = "stock-alerts") {
   const started = await openLayerFourInterview(root, id);
   await answer(root, started.session_path, "success_criteria", "A low-stock SKU shows a clear badge before quantity reaches zero.");
-  await answer(root, started.session_path, "success_proof", "Create a SKU below its threshold and verify the manager sees its badge in the inventory list.");
   await answer(root, started.session_path, "layer_4_confirmation", "确认，每项能力都有可见证据。");
   await answer(root, started.session_path, "requirements_confirmation", "确认，R-001 清单准确且没有遗漏。");
   await answer(root, started.session_path, "execution_approval", "批准，按确认后的需求清单进入 PRD。");
@@ -173,7 +171,7 @@ describe("yolo interview CLI", () => {
       assert.equal(exitCode, 2);
       const result = out.json();
       assert.equal(result.code, "INTERVIEW_STAGE_GATE_BLOCKED");
-      assert.equal(result.next_question.id, "premise_current_solution");
+      assert.equal(result.next_question.id, "premise_consequence");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -309,7 +307,7 @@ describe("yolo interview CLI", () => {
 
       assert.equal(result.session_path, statePath);
       assert.equal(existsSync(statePath), true);
-      assert.equal(result.next_question.id, "premise_current_solution");
+      assert.equal(result.next_question.id, "premise_consequence");
       assert.equal(result.next_question.recommended_answer.length > 0, true);
       assert.equal(Array.isArray(result.next_question), false);
       assert.equal(result.coverage.answered, 0);
@@ -319,7 +317,7 @@ describe("yolo interview CLI", () => {
 
       const saved = JSON.parse(readFileSync(statePath, "utf8"));
       assert.equal(saved.schema, "yolo.demand.interview.v2");
-      assert.equal(saved.next_question.id, "premise_current_solution");
+      assert.equal(saved.next_question.id, "premise_consequence");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -336,7 +334,7 @@ describe("yolo interview CLI", () => {
         "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
       );
 
-      assert.equal(result.coverage.answered, 5);
+      assert.equal(result.coverage.answered, 4);
       assert.equal(result.next_question.id, "status_quo");
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
@@ -354,7 +352,7 @@ describe("yolo interview CLI", () => {
       const started = await startLayerOneInterview(root);
       const result = await answer(root, started.session_path, "target_users", "用户");
 
-      assert.equal(result.coverage.answered, 5);
+      assert.equal(result.coverage.answered, 4);
       assert.equal(result.coverage.ready_for_prd_intake, false);
       assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
       assert.equal(result.next_question.id, "target_users");
@@ -483,7 +481,7 @@ describe("yolo interview CLI", () => {
       const result = out.json();
       assert.equal(exitCode, 0);
       assert.equal(result.session_path, started.session_path);
-      assert.equal(result.coverage.answered, 5);
+      assert.equal(result.coverage.answered, 4);
       assert.equal(result.next_question.id, "status_quo");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -629,7 +627,6 @@ describe("yolo interview CLI", () => {
         "待办标签分类和到期提醒",
       );
       const sessionPath = started.session_path;
-      await answer(root, sessionPath, "premise_current_solution", "现在用标题前缀写标签，每天下班前由负责人逐条翻看日期。");
       await answer(root, sessionPath, "premise_consequence", "不做会每周漏掉至少两次到期任务，项目负责人需要临时追赶和补救。");
       await answer(root, sessionPath, "premise_minimum", "最小版本必须包含标签管理、标签筛选、到期时间和到期前站内提醒。");
       await answer(root, sessionPath, "premise_decision", "继续");
@@ -659,7 +656,6 @@ describe("yolo interview CLI", () => {
         "把待办设为明天到期后详情显示新日期。",
         "到期前负责人能看到包含任务名称的站内提醒。",
       ].join("\n"));
-      await answer(root, sessionPath, "success_proof", "验收时创建标签并筛选待办，再把待办设为明天到期并看到包含任务名的站内提醒。");
       await answer(root, sessionPath, "layer_4_confirmation", "确认，每项能力都有可见证据。");
       await answer(root, sessionPath, "requirements_confirmation", "确认，R-001 到 R-004 准确且没有遗漏。");
       await answer(root, sessionPath, "execution_approval", "批准，按确认后的四项需求进入 PRD。");

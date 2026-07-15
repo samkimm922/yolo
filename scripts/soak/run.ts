@@ -306,7 +306,6 @@ function presetInterview(details: FixtureDetails): PresetInterview {
     idea,
     title,
     answers: [
-      ["premise_current_solution", `Release maintainers manually run ${testCommand} and inspect ${testFile} before publishing.`],
       ["premise_consequence", `Without this flow, ${requirementId} can be skipped and a release can claim success without canonical smoke evidence.`],
       ["premise_minimum", `The minimum useful version verifies ${requirementId} through ${targetFile} and records the ${testCommand} result.`],
       ["premise_decision", "Continue."],
@@ -321,7 +320,6 @@ function presetInterview(details: FixtureDetails): PresetInterview {
       ["scope_boundaries", `Only ${targetFile}, ${testFile}, and generated .yolo artifacts are in scope; do not change roles, workflow, data, unrelated APIs, or UI.`],
       ["layer_3_confirmation", "Confirmed, the exceptions and boundaries are complete."],
       ["success_criteria", `Record a pass status when ${testCommand} validates ${testFile} and the behavior in ${targetFile} for ${requirementId}.`],
-      ["success_proof", `Run ${testCommand}, verify the pass record, and confirm ${testFile} exercises ${targetFile} for ${requirementId}.`],
       ["layer_4_confirmation", "Confirmed, the requirement has observable acceptance evidence."],
       ["requirements_confirmation", "Confirmed, R-001 is accurate and complete."],
       ["execution_approval", "Approved, proceed to PRD and dry-run auto only."],
