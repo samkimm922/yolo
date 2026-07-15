@@ -614,15 +614,11 @@ function interviewAnswers(title: string, targetFile: string) {
     ["target_users", `A release operations manager uses ${title} daily on every pull request and is responsible for the merge/no-merge decision, failed-cell triage, and review signoff.`],
     ["status_quo", "The coverage matrix is currently checked manually with `npm run soak` once per week, so regressions can be missed between manual runs."],
     ["pain_points", "Manual soak takes about 20 minutes of release-maintainer time, is skipped under deadline pressure, and lets a CLI, HTTP, or monorepo fixture regression reach main while ordinary unit tests still pass."],
-    ["layer_1_confirmation", "Confirmed, the role, current flow, and pain are complete."],
     ["day_in_life", `On every pull request, the release manager starts the ${title} matrix cell, reviews its generated PRD and check report, and blocks the merge if either artifact is missing or blocked.`],
     ["desired_outcome", `CI produces a fixed executable PRD for ${targetFile} and fails when the readiness check regresses.`],
-    ["layer_2_confirmation", "Confirmed, this is the complete day-in-the-life flow."],
     ["exceptions", "If the fixture target is missing or the check blocks, the matrix cell must fail closed instead of creating success evidence."],
     ["scope_boundaries", `Only generated .yolo artifacts and ${targetFile} are in scope; no business source edits are part of L2.`],
-    ["layer_3_confirmation", "Confirmed, the exceptions and boundaries are complete."],
     ["success_criteria", `The CI log shows exit 0, a concrete prd.json path, and a check-report.json whose JSON status is pass for ${targetFile}; any missing artifact or non-pass status turns the PR red.`],
-    ["layer_4_confirmation", "Confirmed, the requirement has observable acceptance evidence."],
     ["requirements_confirmation", "Confirmed, R-001 is accurate and complete."],
     ["execution_approval", "Approved for deterministic matrix CI PRD and check generation."],
   ];
@@ -657,34 +653,6 @@ function createApprovedDemand(projectRoot: string, id: string, title: string, ta
     stdout: tail(start.run.stdout),
   });
 
-  const confirmPlayback = () => {
-    const playback = runYolo("L2/setup-demand", [
-      "interview",
-      "playback",
-      "--session",
-      sessionPath,
-      "--json",
-    ], { expectedStatus: ["ready"] });
-    const playbackHash = String(playback.json?.outputs?.[0]?.playback?.content_hash || "");
-    assertCondition(Boolean(playbackHash), {
-      cell: "L2/setup-demand",
-      command: playback.run.display,
-      actualExit: playback.run.exitCode,
-      detail: "interview playback did not return a content_hash.",
-      stdout: tail(playback.run.stdout),
-    });
-
-    runYolo("L2/setup-demand", [
-      "interview",
-      "playback",
-      "--session",
-      sessionPath,
-      "--confirm",
-      playbackHash,
-      "--json",
-    ], { expectedStatus: ["success"] });
-  };
-
   for (const [question, answer] of interviewAnswers(title, targetFile)) {
     runYolo("L2/setup-demand", [
       "interview",
@@ -697,10 +665,7 @@ function createApprovedDemand(projectRoot: string, id: string, title: string, ta
       answer,
       "--json",
     ], { expectedStatus: ["success"] });
-    if (question === "premise_decision") confirmPlayback();
   }
-
-  confirmPlayback();
 
   const demand = runYolo("L2/setup-demand", [
     "interview",

@@ -254,23 +254,12 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
             matches_current_snapshot: true,
           },
         };
-        const initialConfirmation = state.coverage?.awaiting_initial_playback === true;
-        if (initialConfirmation) {
-          state.initial_playback = {
-            confirmed: true,
-            confirmed_by: "user",
-            confirmed_content_hash: generated.content_hash,
-            confirmed_at: now,
-          };
-        }
         const interviewPath = state.interview_path || "";
         if (writeArtifacts) writeJsonFile(interviewPath, state);
         return emit("playback", interviewResult("playback", state, {
           status: "success",
           code: "PLAYBACK_CONFIRMED",
-          summary: initialConfirmation
-            ? "Initial scenario playback confirmed; layer one is now open."
-            : "Understanding playback confirmed by user.",
+          summary: "Optional understanding snapshot confirmed by user.",
           artifacts: writeArtifacts ? [interviewPath] : [],
           outputs: [{ playback: state.playback }],
           runtime_next_actions: [`Create demand artifacts: yolo interview to-demand --session ${interviewPath}`],
@@ -294,16 +283,6 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       const read = readInterviewState(input.sessionPath, projectRoot);
       if (!read.ok) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const stateForDemand = decorateInterviewState(cloneJson(read.state));
-      if (stateForDemand.playback?.confirmed !== true) {
-        return error("to-demand", "PLAYBACK_UNCONFIRMED", "Understanding playback has not been confirmed by the user. Run playback confirmation before to-demand.", 2);
-      }
-      const currentPlayback = buildUnderstandingPlayback(stateForDemand);
-      const confirmedHash = cleanCliText(stateForDemand.playback.confirmed_content_hash);
-      const contractHash = cleanCliText((stateForDemand.playback.confirmation_contract as Record<string, unknown> | undefined)?.expected_content_hash);
-      const evidenceHash = cleanCliText((stateForDemand.playback.confirmation_evidence as Record<string, unknown> | undefined)?.provided_content_hash);
-      if (confirmedHash !== currentPlayback.content_hash || contractHash !== currentPlayback.content_hash || evidenceHash !== currentPlayback.content_hash) {
-        return error("to-demand", "PLAYBACK_CONFIRMATION_STALE", "Understanding playback confirmation does not match the current demand answers. Generate and confirm a new playback snapshot before to-demand.", 2);
-      }
       if (stateForDemand.coverage?.ready_for_prd_intake !== true) {
         const blockers = stateForDemand.coverage?.readiness?.blockers || [];
         const nextSlot = stateForDemand.next_question?.id || blockers[0]?.slot || "target_users";

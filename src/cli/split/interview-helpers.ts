@@ -85,7 +85,6 @@ type InterviewState = {
   interview_path?: string;
   next_question?: InterviewQuestion | null;
   playback?: { confirmed?: boolean; [key: string]: unknown };
-  initial_playback?: { confirmed?: boolean; confirmed_content_hash?: string; [key: string]: unknown };
   coverage?: { approval?: { approved?: boolean } } & InterviewCoverage;
   answers?: unknown;
   [key: string]: unknown;
@@ -239,11 +238,6 @@ export function interviewNextActions(state: ReturnType<typeof decorateInterviewS
   if (state.next_question) {
     actions.push(`Answer ${state.next_question.id}: yolo interview answer --session ${path} --question ${state.next_question.id} --answer "<answer>"`);
     actions.push(`Check progress: yolo interview status --session ${path}`);
-    return actions;
-  }
-  if (state.playback?.confirmed !== true) {
-    actions.push(`Confirm understanding: yolo interview playback --session ${path}`);
-    if (!extra.demand_dir) actions.push(`Then create demand artifacts: yolo interview to-demand --session ${path}`);
     return actions;
   }
   if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);

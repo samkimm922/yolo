@@ -56,7 +56,6 @@ function openLayerOne(session) {
   answer(session, "premise_consequence", "Without a change, stores miss at least two stockout risks each week and managers spend an hour on recovery.");
   answer(session, "premise_minimum", "The minimum useful version must show a low-stock signal in the existing inventory workflow.");
   answer(session, "premise_decision", "继续");
-  session.initial_playback = { confirmed: true, confirmed_content_hash: "sha256:test-initial-playback" };
   return session;
 }
 
@@ -65,15 +64,11 @@ function answerAllRequired(session) {
   answer(session, "target_users", "Store managers who review inventory every morning.");
   answer(session, "status_quo", "They export inventory counts and manually scan for risky SKUs.");
   answer(session, "pain_points", "Stockouts are discovered after customers complain.");
-  answer(session, "layer_1_confirmation", "确认，这一层理解无误。");
   answer(session, "day_in_life", "Every morning a store manager opens the inventory list, reviews low-stock items, and decides what to replenish before customers arrive.");
   answer(session, "desired_outcome", "Managers see low-stock risks before the item sells out.");
-  answer(session, "layer_2_confirmation", "确认，这就是完整的一天。");
   answer(session, "exceptions", "New SKUs without sales history should not be marked high risk by default.");
   answer(session, "scope_boundaries", "Do not build supplier ordering; do not change order import.");
-  answer(session, "layer_3_confirmation", "确认，例外和边界都完整。");
   answer(session, "success_criteria", "Low-stock SKUs show a clear badge in the inventory list.");
-  answer(session, "layer_4_confirmation", "确认，每项能力都有可见证据。");
   answer(session, "requirements_confirmation", "确认，R-001 清单准确且没有遗漏。");
   return session;
 }
@@ -145,12 +140,10 @@ describe("demand interview", () => {
 
     answer(session, "status_quo", "They export inventory counts each morning and manually scan rows for risky SKUs.");
     answer(session, "pain_points", "Stockouts are discovered after customers complain, which causes rush replenishment work.");
-    assert.equal(session.next_question.id, "layer_1_confirmation");
-    answer(session, "layer_1_confirmation", "确认，这一层理解无误。");
+    assert.equal(session.next_question.id, "day_in_life");
     answer(session, "day_in_life", "Every morning the store manager opens inventory, checks risky SKUs, and schedules replenishment before the store opens.");
     answer(session, "desired_outcome", "Store managers can see low-stock risks before the item sells out and prioritize replenishment.");
-    assert.equal(session.next_question.id, "layer_2_confirmation");
-    answer(session, "layer_2_confirmation", "确认，这就是完整的一天。");
+    assert.equal(session.next_question.id, "exceptions");
 
     const coverage = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_discuss, true);

@@ -53,6 +53,7 @@ export interface UnderstandingPlayback {
   items: PlaybackItem[];
   summary: string;
   confirmation_required: boolean;
+  workflow_blocking: boolean;
   prompt: string;
   content_hash: string;
   scene?: {
@@ -80,8 +81,8 @@ function playbackContentHash(items: PlaybackItem[]): string {
   return `sha256:${createHash("sha256").update(snapshot).digest("hex")}`;
 }
 
-// 在进入 PRD 前，把已收集的每个槽位复述成"我的理解"清单，要求用户逐项确认或纠正。
-// 这是防"鸡同鸭讲"的结构化对齐步骤：审批门只问"批不批准"，复述步骤先确认"我理解对了吗"。
+// 把已收集的每个槽位复述成可选的"我的理解"快照，供用户纠正或留存。
+// 最终门控由需求清单确认和执行批准承担；本快照不阻断访谈或 PRD。
 export function buildUnderstandingPlayback(session: UnderstandingSession = {}): UnderstandingPlayback {
   const answers = isRecord(session.answers) ? session.answers : {};
   const bySlot = new Map<string, string>();
@@ -125,7 +126,7 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
   const confirmationRequired = items.length > 0;
   const contentHash = playbackContentHash(items);
   const prompt = confirmationRequired
-    ? `以下是我目前对需求的理解，请逐项确认是否正确；如有偏差请直接纠正后我再更新，确认无误才进入 PRD：\n${summary}`
+    ? `以下是可选的理解快照；如有偏差请直接纠正。它不阻断访谈或 PRD，最终以 R-001 需求清单确认和执行批准为准：\n${summary}`
     : "目前还没有可复述的需求信息，请先回答前面的问题。";
 
   return {
@@ -133,6 +134,7 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
     items,
     summary,
     confirmation_required: confirmationRequired,
+    workflow_blocking: false,
     prompt,
     content_hash: contentHash,
     scene: items.length > 0 ? {

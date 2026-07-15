@@ -2356,7 +2356,7 @@ function compactPrdIntakeForPrd(session = Object(), requirements = []) {
 function compactInterviewForPrd(session = Object()) {
   const interview = session.interview;
   if (!interview || typeof interview !== "object") return null;
-  const gates = interview.coverage?.layer_gates || {};
+  const requirementsGate = interview.coverage?.layer_gates?.requirements_replay;
   return {
     schema: clean(interview.schema) || "yolo.demand.interview.reference.v1",
     id: clean(interview.id) || null,
@@ -2364,8 +2364,7 @@ function compactInterviewForPrd(session = Object()) {
     question_count: questionTraceIds(interview.question_trace || session.question_trace).length,
     requirement_count: asArray(session.requirements?.active || session.requirements).length,
     premise_decision: clean(interview.coverage?.premise_judgment?.decision) || null,
-    confirmed_gates: Object.fromEntries(Object.entries(gates as Record<string, { confirmed?: boolean }>)
-      .map(([id, gate]) => [id, gate?.confirmed === true])),
+    requirements_confirmed: requirementsGate?.confirmed === true,
   };
 }
 
