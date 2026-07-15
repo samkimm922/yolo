@@ -140,6 +140,11 @@ describe("project setup orchestrator", () => {
       assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), "# Existing local agent rules\n");
       assert.ok(result.risk_gaps.some((gap) => gap.code === "YOLO_SETUP_UNMANAGED_AGENT_INSTRUCTIONS"));
       assert.equal(result.next_actions[0].id, "resolve_risky_setup_gaps");
+      // RED→GREEN: risky setup must offer `yolo init --force` as a recovery path,
+      // not just `resolve_risky_setup_gaps` + `recheck_setup_plan` (which re-fails).
+      const reinitAction = result.next_actions.find((a) => a.id === "reinit_with_force");
+      assert.ok(reinitAction, "risky setup should offer reinit_with_force as a recovery path");
+      assert.deepEqual(reinitAction.args, ["init", "--force"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
