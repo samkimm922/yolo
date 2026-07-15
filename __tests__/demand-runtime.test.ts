@@ -11,8 +11,11 @@ import {
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
+  writeDemandArtifacts,
 } from "../src/demand/runtime.js";
+import * as demandRuntimeModule from "../src/demand/runtime.js";
 import {
+  buildDemandSession,
   groundDemandExecutionScope,
   inferGreenfieldTargetFiles,
 } from "../src/demand/artifacts.js";
@@ -1343,7 +1346,7 @@ describe("demand runtime", () => {
       assert.equal(prd.prd.demand.project_facts.target_files.every((fact) => fact.status === "verified"), true);
       assert.equal(prd.prd.demand.project_facts.assumptions.every((fact) => fact.status !== "needs_verification" && fact.status !== "contradicted"), true);
       assert.equal(prd.prd.demand.quality_report.dimensions.length, 6);
-      assert.equal(prd.prd.execution_readiness.quality_report.total_score, prd.prd.demand.quality_report.total_score);
+      assert.equal(prd.prd.execution_readiness.quality_report_reference, "demand.quality_report");
       assert.equal(prd.prd.tasks[0].handoff.type, "agent_brief");
       assert.equal(prd.prd.tasks[0].handoff.plain_language_goal.length > 0, true);
       const firstSession = assertTaskSessionPlan(prd.prd.tasks[0], prd.prd.demand.id);
@@ -2120,6 +2123,18 @@ describe("demand runtime", () => {
 
       const compiledPrd = result.prd;
       const tasks = requirePrdTasks(compiledPrd);
+      const serializedPrd = JSON.stringify(compiledPrd);
+      const serializedDemand = JSON.stringify(compiledPrd.demand);
+      assert.doesNotMatch(
+        serializedPrd,
+        /现在通常需要开发者手动运行 git log、git shortlog 和 git diff --stat/,
+        "the PRD must not copy raw interview answers from the demand artifact",
+      );
+      const demandSourceArtifact = `.yolo/demand/${compiledPrd.demand.id}/session.json`;
+      assert.equal(compiledPrd.demand.interview?.source_artifact, demandSourceArtifact);
+      assert.equal(compiledPrd.demand.prd_intake?.source_artifact, demandSourceArtifact);
+      assert.equal(compiledPrd.demand.question_trace.every((item) => Object.keys(item).every((key) => key === "id")), true);
+      assert.equal(serializedDemand.length < serializedPrd.length * 0.25, true, `demand=${serializedDemand.length} prd=${serializedPrd.length}`);
       assert.equal(nakedManualAcceptancePostConditions(compiledPrd).length, 0, "auto-verifiable R2 demand must not emit naked prose acceptance_criteria post_conditions");
       assert.equal(prdTraceEvidenceCount(compiledPrd) > 0, true, "R2 PRD should retain demand evidence trace");
 
@@ -2494,6 +2509,150 @@ describe("demand runtime", () => {
       assert.ok(businessTask);
       assert.equal(businessTask.handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
       assert.ok(prd.prd.execution_readiness.session_handoff.state_paths[0].includes("库存预警"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("tag classification and due reminders become four domain tasks on real project files", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-tag-due-"));
+    try {
+      const projectFiles = [
+        "src/domain/tag.ts",
+        "src/features/todo-filter.ts",
+        "src/domain/todo.ts",
+        "src/services/reminder-scheduler.ts",
+      ];
+      seedDemandTargetFiles(root, projectFiles);
+      const session = buildDemandSession({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demand_id: "DEMAND-TAG-DUE",
+        title: "待办标签分类和到期提醒",
+        idea: "让团队成员给待办分类，并在到期前收到提醒。",
+        target_users: ["每天维护待办并负责按时交付的团队成员"],
+        status_quo: ["现在靠标题前缀分类，每天下班前人工翻看日期。"],
+        problem: "标签写法不一致，而且每周都会漏掉到期任务。",
+        success_criteria: [
+          "团队成员可以创建和管理待办标签。",
+          "团队成员可以按标签筛选待办列表。",
+          "团队成员可以为待办设置和修改到期时间。",
+          "团队成员会在待办到期前收到站内提醒。",
+        ],
+        proof: [
+          "验收时创建标签并筛选待办，再把待办设为明天到期并看到站内提醒。",
+        ],
+        constraints: ["保留现有待办创建和完成流程。"],
+        non_goals: ["不做邮件和短信通知。"],
+        exceptions: ["没有到期时间的待办不发送提醒。"],
+        questions: [
+          { id: "target_users", question: "谁使用？", answer: "团队成员" },
+          { id: "day_in_life", question: "一天怎么使用？", answer: "早上筛选标签，下午检查到期提醒。" },
+          { id: "success_proof", question: "如何验收？", answer: "亲眼看到筛选结果和提醒。" },
+        ],
+        approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
+      }, { now: "2026-07-13T13:00:00.000Z" });
+
+      const grounding = groundDemandExecutionScope(session, { projectRoot: root, now: "2026-07-13T13:05:00.000Z" });
+      assert.equal(grounding.applied, true, JSON.stringify(grounding, null, 2));
+      assert.deepEqual(new Set(grounding.session.project.target_files), new Set(projectFiles));
+      assert.equal(grounding.session.project.target_files.every((file) => existsSync(join(root, file))), true);
+      assert.equal(grounding.session.project.target_files.some((file) => /placeholder|feature-[a-f0-9]{8}/.test(file)), false);
+
+      const buildAtomicDemandTasks = (demandRuntimeModule as unknown as {
+        buildAtomicDemandTasks?: (session: DemandSession, input?: DemandRecord, options?: DemandRecord) => {
+          tasks: DemandTask[];
+          compileErrors: DemandRecord[];
+        };
+      }).buildAtomicDemandTasks;
+      assert.equal(typeof buildAtomicDemandTasks, "function");
+      if (!buildAtomicDemandTasks) throw new Error("buildAtomicDemandTasks must be exported for domain-plan verification");
+      const compiled = buildAtomicDemandTasks(grounding.session, { projectRoot: root }, {});
+      assert.deepEqual(compiled.compileErrors, []);
+      const tasks = compiled.tasks.filter((task) => task.task_kind === "demand_atomic_task");
+      assert.equal(tasks.length, 4, JSON.stringify(tasks.map((task) => ({ title: task.title, scope: task.scope })), null, 2));
+      assert.equal(new Set(tasks.map((task) => task.title)).size, 4);
+
+      const taskFor = (pattern: RegExp) => tasks.find((task) => pattern.test(String(task.title)));
+      assert.deepEqual(taskFor(/标签模型|创建和管理.*标签/)?.scope?.targets?.map((target) => target.file), ["src/domain/tag.ts"]);
+      assert.deepEqual(taskFor(/标签筛选|按标签筛选/)?.scope?.targets?.map((target) => target.file), ["src/features/todo-filter.ts"]);
+      assert.deepEqual(taskFor(/到期字段|到期时间/)?.scope?.targets?.map((target) => target.file), ["src/domain/todo.ts"]);
+      assert.deepEqual(taskFor(/通知调度|到期前.*提醒/)?.scope?.targets?.map((target) => target.file), ["src/services/reminder-scheduler.ts"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("large brownfield scan prioritizes config-declared source roots and reports partial coverage", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-large-brownfield-"));
+    try {
+      for (let index = 0; index < 600; index += 1) {
+        writeProjectFile(root, `000-reference/note-${String(index).padStart(3, "0")}.md`, "reference\n");
+      }
+      writeProjectFile(root, "tsconfig.json", [
+        "{",
+        "  // The source root is intentionally non-standard and alphabetically late.",
+        '  "include": ["zeta-product/**/*.ts",],',
+        "}",
+        "",
+      ].join("\n"));
+      writeProjectFile(root, "zeta-product/services/inventory.service.ts");
+
+      const session = {
+        id: "DEMAND-LARGE-BROWNFIELD",
+        project: { target_files: [], candidate_target_files: [] },
+        project_facts: { target_files: [], candidate_target_files: [] },
+        requirements: {
+          active: [{
+            id: "REQ-001",
+            text: "Store managers can view actual inventory by product or storage location.",
+          }],
+        },
+        scenario_matrix: {
+          scenarios: [{
+            id: "SCN-001",
+            requirement_id: "REQ-001",
+            desired_behavior: "Show actual inventory grouped by product or storage location.",
+            proof: "A manager can inspect the grouped inventory counts.",
+            surfaces: [],
+          }],
+        },
+      } as DemandSession;
+
+      const inferred = inferGreenfieldTargetFiles(session, { projectRoot: root });
+      assert.deepEqual(inferred.map((item) => item.file), ["zeta-product/services/inventory.service.ts"]);
+
+      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      assert.equal(grounded.applied, true, JSON.stringify(grounded, null, 2));
+      assert.deepEqual(grounded.session.project.target_files, ["zeta-product/services/inventory.service.ts"]);
+      assert.deepEqual(grounded.session.project_facts.file_scan, {
+        schema: "yolo.demand.project_file_scan.v1",
+        status: "partial",
+        candidate_coverage_complete: false,
+        strategy: "declared_source_roots_then_stratified_directory_budget",
+        max_files: 600,
+        discovered_files: 602,
+        selected_files: 600,
+        omitted_files: 2,
+        declared_source_roots: ["zeta-product"],
+        partially_covered_directories: [{
+          directory: "000-reference",
+          discovered_files: 600,
+          selected_files: 598,
+          omitted_files: 2,
+        }],
+        inaccessible_directories: [],
+        excluded_directories: [".yolo"],
+        warning: "Project file candidate scan was partial: selected 600 of 602 eligible files; 2 files were omitted from mapping scores. Partially covered directories: 000-reference (598/600).",
+      });
+
+      const artifactDir = join(root, "demand-artifacts");
+      writeDemandArtifacts(grounded.session, artifactDir);
+      const context = readFileSync(join(artifactDir, "CONTEXT.md"), "utf8");
+      assert.match(context, /Project File Candidate Coverage/);
+      assert.match(context, /selected 600 of 602 eligible files/);
+      assert.match(context, /000-reference \(598\/600\)/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

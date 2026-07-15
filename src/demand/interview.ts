@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import type {
   DemandRecord,
@@ -8,10 +9,16 @@ import type {
 } from "./graph.js";
 import { resolveProjectContext } from "../packs/resolver.js";
 import { validatePackManifest } from "../packs/manifest.js";
-import { buildUiAcceptanceFollowUp, UI_ACCEPTANCE_SLOT } from "./ui-acceptance.js";
+import { UI_ACCEPTANCE_SLOT } from "./ui-acceptance.js";
+import {
+  PM_PROTOCOL_LAYER_QUESTION_IDS,
+  PM_PROTOCOL_SCHEMA,
+  PM_PROTOCOL_STAGES,
+  type PMProtocolStageId,
+} from "../workflows/pm-protocol.js";
 
-export const DEMAND_INTERVIEW_SCHEMA_VERSION = "1.0";
-export const DEMAND_INTERVIEW_SCHEMA = "yolo.demand.interview.v1";
+export const DEMAND_INTERVIEW_SCHEMA_VERSION = "2.0";
+export const DEMAND_INTERVIEW_SCHEMA = "yolo.demand.interview.v2";
 
 export interface DemandInterviewQuestion extends DemandRecord {
   id?: string;
@@ -33,6 +40,13 @@ export interface DemandInterviewQuestion extends DemandRecord {
   follow_up_reason?: string;
   follow_up_severity?: string;
   original_prompt?: string;
+  stage?: PMProtocolStageId | string;
+  layer?: number;
+  confirmation_gate?: boolean;
+  gate_for?: string;
+  recommended_answer?: string;
+  recommendation_reason?: string;
+  protocol_schema?: string;
 }
 
 export interface DemandInterviewFollowUpQuestion extends DemandRecord {
@@ -150,6 +164,12 @@ export interface DemandInterviewCoverage extends DemandRecord {
   approval: DemandInterviewApprovalState;
   ready_for_discuss: boolean;
   ready_for_prd_intake: boolean;
+  active_stage?: string | null;
+  awaiting_initial_playback?: boolean;
+  stopped?: boolean;
+  premise_judgment?: DemandRecord & { decision?: string };
+  layer_gates?: Record<string, DemandRecord & { confirmed?: boolean }>;
+  requirement_checklist?: string[];
 }
 
 export interface DemandInterviewLedgers extends DemandRecord {
@@ -168,6 +188,7 @@ type DemandInterviewSessionInput = Omit<Partial<DemandInterviewSession>, "answer
   answers?: unknown;
   questions?: DemandInterviewQuestion[];
   updated_at?: string;
+  initial_playback?: DemandRecord & { confirmed?: boolean; confirmed_content_hash?: string };
 };
 
 export interface DemandInterviewSession extends Omit<DemandRuntimeInput, "answers"> {
@@ -185,189 +206,202 @@ export interface DemandInterviewSession extends Omit<DemandRuntimeInput, "answer
   accepted_assumptions?: DemandInterviewAcceptedAssumption[];
   next_question?: DemandInterviewQuestion | null;
   ledgers?: DemandInterviewLedgers;
+  initial_playback?: DemandRecord & { confirmed?: boolean; confirmed_content_hash?: string };
 }
 
+const answerExamples = (first: string, second: string) => ({
+  free_text: true,
+  examples: [first, second],
+});
+
+const protocolQuestion = (question: DemandInterviewQuestion): DemandInterviewQuestion => ({
+  ...question,
+  protocol_schema: PM_PROTOCOL_SCHEMA,
+});
+
 export const DEMAND_INTERVIEW_QUESTION_BANK: DemandInterviewQuestion[] = [
-  {
-    id: "target_users",
-    slot: "target_users",
-    category: "用户/角色",
-    plain_language_prompt: "谁会使用、受影响或负责这个需求？请用业务角色描述，不需要写技术身份。",
-    why_it_matters: "明确角色后，后续目标、验收标准和任务拆分才不会服务错对象。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "门店店长，每天查看库存并处理缺货问题。",
-        "客服主管，需要看到高风险工单并安排跟进。",
-      ],
-    },
+  protocolQuestion({
+    id: "premise_current_solution", slot: "premise_current_solution", stage: "premise", category: "现在的解决办法",
+    plain_language_prompt: "先不谈新功能：这件事现在怎么解决？请讲最近一次真实发生时用了什么办法。",
+    why_it_matters: "先确认现有替代方案，才能判断新需求是否值得继续。",
+    accepts: answerExamples("现在用表格记录，每天早上人工筛一遍。", "目前靠群消息提醒，负责人下班前逐条核对。"),
     required_for: ["discuss", "prd_intake"],
-  },
-  {
-    id: "status_quo",
-    slot: "status_quo",
-    category: "当前现状",
-    plain_language_prompt: "现在遇到这个场景时，大家是怎么做的？可以写人工流程、表格、临时办法或现有系统表现。",
-    why_it_matters: "现状能帮助团队判断要替换、补强还是保留哪些流程。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "店长每天导出库存表，靠人工筛选快缺货的 SKU。",
-        "客服要在多个后台来回查，才能判断一个工单是不是高优先级。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "premise_consequence", slot: "premise_consequence", stage: "premise", category: "不做的后果",
+    plain_language_prompt: "如果三个月内不做，谁会继续受影响？会多花多少时间、出多少错，或者失去什么机会？",
+    why_it_matters: "不做的后果决定是否值得投入，而不是默认所有想法都要实现。",
+    accepts: answerExamples("负责人每周至少漏掉两次到期任务，需要临时补救。", "不做没有业务影响，也没有人会多花时间。"),
     required_for: ["discuss", "prd_intake"],
-  },
-  {
-    id: "pain_points",
-    slot: "pain_points",
-    category: "痛点",
-    plain_language_prompt: "现在最麻烦、最容易出错或最耽误时间的地方是什么？请写真实困扰。",
-    why_it_matters: "痛点决定需求优先级，也能避免把精力花在不痛的优化上。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "发现缺货太晚，客户投诉后才补救。",
-        "主管不知道哪些工单真的紧急，容易平均用力。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "premise_minimum", slot: "mvp_priority", stage: "premise", category: "最小有价值版本",
+    plain_language_prompt: "如果只交付一个最小但真正有用的版本，它必须包含什么？哪些能力少了就没有价值？",
+    why_it_matters: "最小版本用于检验价值闭环，不替用户擅自砍掉已经确认的愿景。",
+    accepts: answerExamples("至少能创建标签、按标签筛选、设置到期时间并看到提醒。", "至少能保存私密备注并在同一客户页面重新看到。"),
     required_for: ["discuss", "prd_intake"],
-  },
-  {
-    id: "desired_outcome",
-    slot: "desired_outcome",
-    category: "目标结果",
-    plain_language_prompt: "如果这个需求做好了，用户应该能完成什么，或者业务上应该变成什么样？",
-    why_it_matters: "目标结果会被转成 PRD 里的核心需求和用户故事。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "店长能在缺货前看到清晰提醒，并优先处理高风险商品。",
-        "客服主管能先处理可能违约的工单。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "premise_decision", slot: "premise_decision", stage: "premise", category: "前提判断",
+    confirmation_gate: true, gate_for: "premise",
+    plain_language_prompt: "根据现有办法、不做的后果和最小版本，现在判断：继续进入需求澄清，还是不继续？请明确回答“继续”或“不继续”。",
+    why_it_matters: "只有明确值得继续，才进入四层需求沟通。",
+    accepts: answerExamples("继续。", "不继续，目前没有足够价值。"),
     required_for: ["discuss", "prd_intake"],
-  },
-  {
-    id: "success_criteria",
-    slot: "success_criteria",
-    category: "成功标准",
-    plain_language_prompt: "做到什么程度才算成功？请写用户看得见或业务能确认的结果。",
-    why_it_matters: "成功标准会变成验收条件，避免实现完成后无法判断是否达标。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "库存低于阈值时，列表里能看到低库存标记。",
-        "主管能按风险等级筛选工单。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "target_users", slot: "target_users", stage: "layer_1", layer: 1, category: "用户/角色",
+    plain_language_prompt: "谁会使用、受影响或负责这个需求？请列全所有业务角色，包括偶尔看一眼的人。",
+    why_it_matters: "明确全部角色后，后续场景和验收才不会服务错对象。",
+    accepts: answerExamples("门店店长每天查看库存，区域经理每周看汇总。", "团队成员维护待办，项目负责人查看延期风险。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "status_quo", slot: "status_quo", stage: "layer_1", layer: 1, category: "当前现状",
+    plain_language_prompt: "这些角色现在分别怎么做？请补充谁在什么时候用表格、消息、口头或现有页面完成哪一步。",
+    why_it_matters: "角色对应的现状能说明哪些流程要保留、替换或补强。",
+    accepts: answerExamples("店长每天导出库存表，人工筛选快缺货的商品。", "成员用标题前缀分类，负责人每天下班前人工翻日期。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "pain_points", slot: "pain_points", stage: "layer_1", layer: 1, category: "痛点",
+    plain_language_prompt: "每个角色最痛、最容易出错或最耽误时间的地方是什么？给一个最近真实发生的例子。",
+    why_it_matters: "真实痛点决定优先级，也暴露遗漏角色。",
+    accepts: answerExamples("发现缺货太晚，客户投诉后店长才补救。", "标签写法不一致，而且负责人每周漏掉两次到期任务。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "layer_1_confirmation", slot: "layer_1_confirmation", stage: "layer_1", layer: 1, category: "第一层确认",
+    confirmation_gate: true, gate_for: "layer_1",
+    plain_language_prompt: "请确认上面的角色、现状和痛点完整无误；如有遗漏先纠正。明确回答“确认”后才进入一天的使用故事。",
+    why_it_matters: "第一层未确认时，后面的场景会建立在错误角色或现状上。",
+    accepts: answerExamples("确认，这就是全部角色、现状和痛点。", "不确认，还漏了区域经理。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "day_in_life", slot: "day_in_life", stage: "layer_2", layer: 2, category: "一天的使用故事",
+    plain_language_prompt: "从一天开始讲：用户什么时候碰到这件事，先看到什么、做什么，然后做什么，直到事情结束？",
+    why_it_matters: "按时间走一遍能发现机械题库遗漏的步骤、交接和绕行。",
+    accepts: answerExamples("每天早上店长打开库存页，先看缺货列表，再逐项安排补货。", "成员早上按标签筛任务，下午更新到期时间，负责人下班前处理提醒。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "desired_outcome", slot: "desired_outcome", stage: "layer_2", layer: 2, category: "目标结果",
+    plain_language_prompt: "沿着刚才的一天，哪些步骤应该由新功能改变？用户每一步应看到或完成什么结果？",
+    why_it_matters: "目标结果会成为按场景拆分的业务能力。",
+    accepts: answerExamples("店长先看到缺货商品，再按风险处理补货。", "成员按标签找到任务，并在到期前看到提醒。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "layer_2_confirmation", slot: "layer_2_confirmation", stage: "layer_2", layer: 2, category: "第二层确认",
+    confirmation_gate: true, gate_for: "layer_2",
+    plain_language_prompt: "请确认按时间回放的一天和每个交互点都正确；明确回答“确认”后才进入例外和边界。",
+    why_it_matters: "第二层确认保证需求来自真实业务流程。",
+    accepts: answerExamples("确认，这就是完整的一天。", "不确认，下午还有一次负责人复核。"),
+    required_for: ["discuss", "prd_intake"],
+  }),
+  protocolQuestion({
+    id: "exceptions", slot: "exceptions", stage: "layer_3", layer: 3, category: "异常/例外",
+    plain_language_prompt: "正常流程在哪些情况下会走不下去？请覆盖空数据、错误数据、重复操作、中断、同时操作和特殊日期。",
+    why_it_matters: "异常路径决定功能是否可靠。",
+    accepts: answerExamples("没有到期时间的待办不提醒，已完成待办取消提醒。", "两个人同时改同一任务时，后保存的人要看到变化提示。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: "success_proof",
-    slot: "success_proof",
-    category: "成功证明",
-    plain_language_prompt: "你会怎样证明它真的有用？可以是页面检查、数据指标、运营记录或人工验收方式。",
-    why_it_matters: "证明方式会帮助后续任务写出可验证的完成条件。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "验收时新建一个低库存商品，页面必须显示提醒。",
-        "上线后每周查看因缺货导致的投诉是否下降。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "scope_boundaries", slot: "scope_boundaries", stage: "layer_3", layer: 3, category: "范围边界",
+    plain_language_prompt: "这次明确不做什么？哪些角色、流程、渠道或数据不要碰？哪些能力完整保留到以后？",
+    why_it_matters: "边界由用户确认，系统不能自行把愿景砍成更小范围。",
+    accepts: answerExamples("只做站内提醒，不做邮件和短信通知。", "保留现有待办创建流程，不改账号和权限。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: "scope_boundaries",
-    slot: "scope_boundaries",
-    category: "范围边界",
-    plain_language_prompt: "这次明确不做什么？有哪些流程、用户、渠道、数据或功能不要碰？",
-    why_it_matters: "边界能保护项目不膨胀，也能降低误改现有业务的风险。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "只做库存提醒，不做供应商自动下单。",
-        "只覆盖门店后台，不改移动端。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "layer_3_confirmation", slot: "layer_3_confirmation", stage: "layer_3", layer: 3, category: "第三层确认",
+    confirmation_gate: true, gate_for: "layer_3",
+    plain_language_prompt: "请逐条确认例外的触发条件、期望行为、影响对象和本次边界；明确回答“确认”后才进入验收证据。",
+    why_it_matters: "第三层确认防止异常和边界被默认处理。",
+    accepts: answerExamples("确认，例外和边界都完整。", "不确认，还要补充已完成任务的提醒规则。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: "exceptions",
-    slot: "exceptions",
-    category: "异常/边界情况",
-    plain_language_prompt: "哪些特殊情况如果没处理好，会让用户觉得这个功能不可靠？没有也可以直接写“没有特殊情况”。",
-    why_it_matters: "边界情况会被转成场景矩阵和原子任务的异常说明。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "新品没有历史销量时，不要误报高风险。",
-        "数据同步失败时要显示上次更新时间。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "success_criteria", slot: "success_criteria", stage: "layer_4", layer: 4, category: "成功标准",
+    plain_language_prompt: "你打开页面或完成操作后，亲眼看到什么、点哪里发生什么，就能判断每项能力做对了？",
+    why_it_matters: "每项需求都必须有用户可观察的验收结果。",
+    accepts: answerExamples("创建标签后能在列表里选中它，筛选后只显示匹配待办。", "把待办设为明天到期后，今天能看到清晰提醒。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: "mvp_priority",
-    slot: "mvp_priority",
-    category: "MVP/优先级",
-    plain_language_prompt: "第一版最小可用版本必须包含什么？哪些可以后做？",
-    why_it_matters: "MVP 顺序会变成 roadmap，帮助后续 PRD 拆成更小的可执行任务。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "MVP 先做阈值提醒和列表标记，后续再做趋势预测。",
-        "第一版只支持主管视图，团队绩效统计后做。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "success_proof", slot: "success_proof", stage: "layer_4", layer: 4, category: "验收证据",
+    plain_language_prompt: "请用一个上周真实例子走一遍验收：谁打开哪里、看到什么、做什么、最后留下什么可检查的证据？",
+    why_it_matters: "真实例子会变成可复现的验收步骤。",
+    accepts: answerExamples("创建“客户”标签并筛选，只看到两个匹配待办。", "把任务设为明天到期，今天负责人看到提醒并打开任务。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: UI_ACCEPTANCE_SLOT,
-    slot: UI_ACCEPTANCE_SLOT,
-    category: "UI 验收方式",
-    plain_language_prompt: "这个 UI 功能怎么算做对？请提供项目已有的验收入口或命令、要看到的结果和证据，并按 JSON 回答 acceptance_adapter manifest（id、commands、evidence、capabilities、applies_to）。",
-    why_it_matters: "UI 验收必须使用你或项目已经声明的方式，系统不会猜一个 adapter 来制造假绿。",
-    accepts: {
-      free_text: true,
-      examples: [
-        "{\"id\":\"inventory-ui\",\"kind\":\"acceptance_adapter\",\"inputs\":[\"url\"],\"outputs\":[\"report\"],\"commands\":[{\"command\":\"项目已声明的 UI smoke 命令\"}],\"evidence\":[\"截图路径\"],\"capabilities\":[\"ui\"],\"applies_to\":[\"ui\"]}",
-        "粘贴项目已有 acceptance_adapter manifest 的完整 JSON。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: UI_ACCEPTANCE_SLOT, slot: UI_ACCEPTANCE_SLOT, stage: "layer_4", layer: 4, category: "界面验收证据",
+    plain_language_prompt: "这个界面从哪个业务入口打开？用户必须看到哪些文字、位置和状态，留下什么截图或记录就能确认做对？",
+    why_it_matters: "界面验收保持业务语言；项目已有的技术验收方式由系统内部解析。",
+    accepts: answerExamples("从待办列表打开，标签在标题下方，筛选后截图只包含匹配任务。", "从任务详情打开，到期提醒显示在日期旁，截图能看到任务名和提醒时间。"),
     required_for: ["prd_intake"],
-  },
-  {
-    id: "execution_approval",
-    slot: "execution_approval",
-    category: "执行批准",
-    plain_language_prompt: "以上信息确认无误后，是否批准进入 PRD intake？请明确回答“批准”或“暂不批准”。",
-    why_it_matters: "只有你明确批准后，系统才应该把讨论结果推进到可执行 PRD。",
-    accepts: {
-      free_text: true,
-      boolean: true,
-      examples: [
-        "批准，按这个范围进入 PRD。",
-        "暂不批准，还需要先确认客服团队的流程。",
-      ],
-    },
+  }),
+  protocolQuestion({
+    id: "layer_4_confirmation", slot: "layer_4_confirmation", stage: "layer_4", layer: 4, category: "第四层确认",
+    confirmation_gate: true, gate_for: "layer_4",
+    plain_language_prompt: "请确认每项需求都有你能亲眼检查的验收证据；明确回答“确认”后才回放完整需求清单。",
+    why_it_matters: "第四层确认保证不是只写抽象的成功标准。",
+    accepts: answerExamples("确认，每项能力都有可见证据。", "不确认，标签管理还缺删除后的验收。"),
     required_for: ["prd_intake"],
-  },
+  }),
+  protocolQuestion({
+    id: "requirements_confirmation", slot: "requirements_confirmation", stage: "requirements_replay", category: "需求清单确认",
+    confirmation_gate: true, gate_for: "requirements_replay",
+    plain_language_prompt: "系统会在这里按 R-001、R-002…回放完整业务能力清单。请逐条检查遗漏、不准确和不需要的项，明确回答“确认”后才进入批准。",
+    why_it_matters: "R-001 清单是需求与领域任务拆分之间的唯一确认输入。",
+    accepts: answerExamples("确认，R-001 到 R-004 都准确且没有遗漏。", "不确认，R-003 还要支持修改到期时间。"),
+    required_for: ["prd_intake"],
+  }),
+  protocolQuestion({
+    id: "execution_approval", slot: "execution_approval", stage: "approval", category: "执行批准",
+    confirmation_gate: true, gate_for: "approval",
+    plain_language_prompt: "以上四层和 R-001 需求清单确认无误后，是否批准进入 PRD？请明确回答“批准”或“暂不批准”。",
+    why_it_matters: "只有用户明确批准，需求才可以进入 PRD。",
+    accepts: { ...answerExamples("批准，按确认后的需求清单进入 PRD。", "暂不批准，还要补充一个例外。"), boolean: true },
+    required_for: ["prd_intake"],
+  }),
 ];
 
-const DISCUSS_REQUIRED_SLOTS: string[] = ["target_users", "status_quo", "pain_points", "desired_outcome"];
-const FOLLOW_UP_SEVERITY = "warning";
-const PRD_REQUIRED_SLOTS: string[] = [
+const DISCUSS_REQUIRED_SLOTS: string[] = [
+  "premise_current_solution",
+  "premise_consequence",
+  "mvp_priority",
+  "premise_decision",
   "target_users",
   "status_quo",
   "pain_points",
+  "layer_1_confirmation",
+  "day_in_life",
   "desired_outcome",
+  "layer_2_confirmation",
+];
+const FOLLOW_UP_SEVERITY = "warning";
+const PRD_REQUIRED_SLOTS: string[] = [
+  "premise_current_solution",
+  "premise_consequence",
+  "mvp_priority",
+  "premise_decision",
+  "target_users",
+  "status_quo",
+  "pain_points",
+  "layer_1_confirmation",
+  "day_in_life",
+  "desired_outcome",
+  "layer_2_confirmation",
+  "exceptions",
+  "scope_boundaries",
+  "layer_3_confirmation",
   "success_criteria",
   "success_proof",
-  "scope_boundaries",
-  "exceptions",
-  "mvp_priority",
+  "layer_4_confirmation",
+  "requirements_confirmation",
 ];
 
 function acceptanceAdapterDeclaration(value: unknown): DemandRecord | null {
@@ -531,12 +565,16 @@ function technicalOnly(text: unknown): boolean {
 type DetailSignal = "quantified" | "artifact" | "assertion" | "causal" | "role_context" | "explicit_none";
 
 const SLOT_DETAIL_SIGNALS: Record<string, DetailSignal[]> = {
+  premise_current_solution: ["quantified", "artifact", "assertion"],
+  premise_consequence: ["quantified", "assertion", "causal"],
   target_users: ["role_context"],
   status_quo: ["quantified", "artifact", "assertion"],
   pain_points: ["quantified", "artifact", "assertion", "causal"],
+  day_in_life: ["quantified", "assertion", "role_context"],
   desired_outcome: ["quantified", "artifact", "assertion"],
   success_criteria: ["quantified", "artifact", "assertion"],
   success_proof: ["quantified", "artifact", "assertion"],
+  ui_acceptance: ["quantified", "artifact", "assertion"],
   scope_boundaries: ["artifact", "assertion"],
   exceptions: ["explicit_none", "quantified", "artifact", "assertion", "causal"],
   mvp_priority: ["quantified", "artifact", "assertion"],
@@ -586,6 +624,8 @@ function hasAssertionSignal(text: string): boolean {
     /(?:必须|应当|不得|需要|不能|不应|禁止|至少|至多|确保|保证)[^。；;]{2,}/u,
     /(?:当|如果|若|每当|一旦)[^。；;]{2,}/u,
     /[^。；;，,]{2,40}时[，,]?\S{2,}/u,
+    /(?:最小版本|第一版|本次).{0,20}(?:包含|支持|提供|显示)[^。；;]{2,}/u,
+    /(?:用户|店长|成员|负责人|主管|客服|角色).{0,16}(?:可以|能|看到|收到|完成)[^。；;]{2,}/u,
     /(?:不做|不改|不碰|不包含|不要|不允许|不暴露|只做|仅覆盖|仅支持|排除)[^。；;]{2,}/u,
     /\b(?:must|should|shall|need(?:s)? to|has to|cannot|can't|do not|don't|does not|doesn't|only|without|exclude)\b.{2,}/i,
     /\b(?:when|if|whenever|once|after|before|during|while)\b.{2,}/i,
@@ -708,25 +748,33 @@ const MAX_GUIDED_FOLLOW_UPS_PER_SLOT = 2;
 const CAPPED_FOLLOW_UP_REASONS = new Set(["missing_detail", "vague"]);
 
 function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): DemandInterviewAnswerQuality {
-  if (question.slot === "ui_acceptance" && acceptanceAdapterDeclaration(answer)) {
-    return { score: 100, level: "sufficient", reasons: [], follow_up_questions: [] };
-  }
-  if (question.slot === "ui_acceptance") {
-    return {
-      score: 0,
-      level: "needs_follow_up",
-      reasons: ["missing_declaration"],
-      follow_up_questions: [{
-        id: "FU-UI_ACCEPTANCE-MISSING_DECLARATION",
-        question_id: question.id,
-        slot: question.slot,
-        category: question.category,
-        severity: FOLLOW_UP_SEVERITY,
-        code: "FOLLOW_UP_UI_ACCEPTANCE_MISSING_DECLARATION",
-        reason: "missing_declaration",
-        plain_language_prompt: buildUiAcceptanceFollowUp().plain_language_prompt,
-      }],
-    };
+  if (question.confirmation_gate === true) {
+    const decision = question.slot === "execution_approval"
+      ? parseApprovalDecision(answer)
+      : question.slot === "premise_decision"
+        ? parsePremiseDecision(answer) !== null
+        : parseLayerConfirmation(answer);
+    return decision
+      ? { score: 100, level: "sufficient", reasons: [], follow_up_questions: [] }
+      : {
+        score: 0,
+        level: "needs_follow_up",
+        reasons: ["missing_confirmation"],
+        follow_up_questions: [{
+          id: `FU-${String(question.slot).toUpperCase()}-MISSING_CONFIRMATION`,
+          question_id: question.id,
+          slot: question.slot,
+          category: question.category,
+          severity: FOLLOW_UP_SEVERITY,
+          code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_MISSING_CONFIRMATION`,
+          reason: "missing_confirmation",
+          plain_language_prompt: question.slot === "premise_decision"
+            ? "请明确回答“继续”或“不继续”。"
+            : question.slot === "execution_approval"
+              ? "请明确回答“批准”或“暂不批准”。"
+              : "请明确回答“确认”；如果不确认，请直接指出哪一项需要纠正。",
+        }],
+      };
   }
   const text = textFromValue(answer);
   const normalized = clean(text);
@@ -862,7 +910,12 @@ function stateRootFor(input: DemandRuntimeInput = Object(), options: DemandRunti
 }
 
 function questionById(questionId: unknown, questions: DemandInterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): DemandInterviewQuestion | undefined {
-  return questions.find((question) => question.id === questionId);
+  const aliases: Record<string, string> = {
+    mvp_priority: "premise_minimum",
+  };
+  const id = clean(questionId);
+  return questions.find((question) => question.id === id)
+    || questions.find((question) => question.id === aliases[id]);
 }
 
 function questionBySlot(slot: unknown, questions: DemandInterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): DemandInterviewQuestion | undefined {
@@ -905,9 +958,27 @@ function parseApproval(value: unknown): boolean {
   return parseApprovalDecision(value) === true;
 }
 
+function parsePremiseDecision(value: unknown): "continue" | "do_not_continue" | null {
+  const text = textFromValue(value).trim();
+  if (!text) return null;
+  if (/^(?:不继续|停止|先不做|暂不继续|do not continue|stop)(?:$|[，。,.！!\s])/i.test(text)) return "do_not_continue";
+  if (/^(?:继续|值得继续|进入需求澄清|continue|proceed)(?:$|[，。,.！!\s])/i.test(text)) return "continue";
+  return null;
+}
+
+function parseLayerConfirmation(value: unknown): boolean {
+  if (value === true) return true;
+  const text = textFromValue(value).trim();
+  if (!text) return false;
+  const explicitConfirmation = /^(?:确认|确认无误|全部正确|没有遗漏|对，这就是全部|yes|confirmed)(?:$|[，。,.！!\s])/i.test(text);
+  if (explicitConfirmation) return true;
+  if (/差不多|大概|基本|不确认|有偏差|需要纠正|(?:有|存在|还有).{0,4}遗漏|不对/.test(text)) return false;
+  return false;
+}
+
 function hasAnswer(record?: DemandInterviewAnswerRecord | null): boolean {
   if (!record) return false;
-  if (record.slot === "execution_approval") {
+  if (record.slot === "execution_approval" || record.slot === "premise_decision") {
     return typeof record.answer === "boolean" || textFromValue(record.answer).length > 0;
   }
   if (Array.isArray(record.normalized?.items)) return record.normalized.items.length > 0;
@@ -928,6 +999,18 @@ function normalizeAnswer(question: DemandInterviewQuestion, answer: unknown): De
       text: textFromValue(answer),
       items: splitList(answer),
       acceptance_adapter: acceptanceAdapterDeclaration(answer),
+    };
+  }
+  if (question.slot === "premise_decision") {
+    return {
+      decision: parsePremiseDecision(answer),
+      text: textFromValue(answer),
+    };
+  }
+  if (question.confirmation_gate === true) {
+    return {
+      confirmed: parseLayerConfirmation(answer),
+      text: textFromValue(answer),
     };
   }
   return {
@@ -1040,6 +1123,149 @@ function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
   };
 }
 
+function protocolEnabled(session: DemandInterviewSessionInput = Object()): boolean {
+  return (session.questions || []).some((question) => Boolean(question.stage));
+}
+
+function stageDefinition(stageId: string) {
+  return PM_PROTOCOL_STAGES.find((stage) => stage.id === stageId);
+}
+
+function stageQuestions(session: DemandInterviewSessionInput, stageId: string): DemandInterviewQuestion[] {
+  const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
+  const ids = new Set(PM_PROTOCOL_LAYER_QUESTION_IDS[stageId as PMProtocolStageId] || []);
+  return questions.filter((question) => ids.has(clean(question.id)));
+}
+
+function stageContentRecords(session: DemandInterviewSessionInput, stageId: string) {
+  const answers = answerRecords(session.answers);
+  return stageQuestions(session, stageId)
+    .filter((question) => question.confirmation_gate !== true)
+    .map((question) => ({
+      id: clean(question.id),
+      slot: clean(question.slot),
+      category: clean(question.category),
+      answer: textFromValue(answers[question.id || ""]?.answer),
+    }))
+    .filter((item) => item.answer);
+}
+
+function stageContentHash(session: DemandInterviewSessionInput, stageId: string): string {
+  const snapshot = JSON.stringify({
+    protocol: PM_PROTOCOL_SCHEMA,
+    stage: stageId,
+    items: stageId === "requirements_replay"
+      ? requirementChecklist(session)
+      : stageContentRecords(session, stageId),
+  });
+  return `sha256:${createHash("sha256").update(snapshot).digest("hex")}`;
+}
+
+function stageSummary(session: DemandInterviewSessionInput, stageId: string): string {
+  const definition = stageDefinition(stageId);
+  const items = stageContentRecords(session, stageId);
+  if (items.length === 0) return `${definition?.label || stageId}：尚未收集到内容。`;
+  return [
+    `${definition?.label || stageId}小结：`,
+    ...items.map((item) => `- ${item.category}：${item.answer}`),
+  ].join("\n");
+}
+
+function layerGateState(session: DemandInterviewSessionInput, stageId: string) {
+  const definition = stageDefinition(stageId);
+  const question = definition?.confirmation_question_id
+    ? questionById(definition.confirmation_question_id, session.questions || DEMAND_INTERVIEW_QUESTION_BANK)
+    : undefined;
+  const record = question ? answerRecords(session.answers)[question.id || ""] : undefined;
+  const currentHash = stageContentHash(session, stageId);
+  const premiseDecision = stageId === "premise" ? parsePremiseDecision(record?.answer) : null;
+  const confirmed = stageId === "premise"
+    ? premiseDecision !== null
+    : stageId === "approval"
+      ? parseApprovalDecision(record?.answer) === true
+      : record?.normalized?.confirmed === true
+        && clean(record?.normalized?.confirmed_content_hash) === currentHash;
+  return {
+    stage: stageId,
+    question_id: question?.id || null,
+    confirmed,
+    current_content_hash: currentHash,
+    confirmed_content_hash: clean(record?.normalized?.confirmed_content_hash) || null,
+  };
+}
+
+function premiseJudgment(session: DemandInterviewSessionInput) {
+  const decisionRecord = answerRecordForSlot(session, "premise_decision");
+  const explicit = parsePremiseDecision(decisionRecord?.answer);
+  const consequence = textForSlot(session, "premise_consequence");
+  const minimum = textForSlot(session, "mvp_priority");
+  const lowImpact = /(?:没有|无|不会|不产生|几乎没有).{0,8}(?:业务)?影响|没人受影响|无需投入|no (?:business )?impact/i.test(consequence);
+  const noMinimum = /没有.{0,8}(?:最小版本|值得交付)|暂时不值得|no valuable minimum/i.test(minimum);
+  const recommended = lowImpact || noMinimum ? "do_not_continue" : "continue";
+  return {
+    schema: "yolo.demand.premise_judgment.v1",
+    decision: explicit || "pending",
+    recommended_decision: recommended,
+    recommended_answer: recommended === "continue" ? "继续" : "不继续",
+    reason: recommended === "continue"
+      ? "现有办法仍有明确代价，而且已经能说清一个有价值的最小闭环。"
+      : "当前没有足够的不做代价，或还没有一个值得交付的最小闭环。",
+  };
+}
+
+function initialPlaybackConfirmed(session: DemandInterviewSessionInput): boolean {
+  return session.initial_playback?.confirmed === true;
+}
+
+function requirementChecklist(session: DemandInterviewSessionInput): string[] {
+  const desiredOutcomes = itemsForSlot(session, "desired_outcome");
+  const source = desiredOutcomes.length > 0 ? desiredOutcomes : itemsForSlot(session, "success_criteria");
+  const unique = [...new Set(source.map(clean).filter(Boolean))];
+  return unique.map((item, index) => `R-${String(index + 1).padStart(3, "0")}  ${item}`);
+}
+
+function recommendedAnswer(question: DemandInterviewQuestion, session: DemandInterviewSessionInput): string {
+  if (question.id === "premise_decision") return premiseJudgment(session).recommended_answer;
+  if (question.id === "target_users") {
+    const objective = clean(session.objective || session.title || "这项需求");
+    return `建议先写：每天直接处理“${objective}”的业务人员，以及最终为结果负责或查看结果的人。`;
+  }
+  if (question.confirmation_gate === true) {
+    return question.id === "execution_approval" ? "批准" : "确认";
+  }
+  return clean(question.accepts?.examples?.[0]);
+}
+
+function decorateProtocolQuestion(question: DemandInterviewQuestion, session: DemandInterviewSessionInput): DemandInterviewQuestion {
+  if (!question.stage) return question;
+  const recommendation = recommendedAnswer(question, session);
+  let prompt = clean(question.plain_language_prompt);
+  if (question.id === "premise_decision") {
+    const judgment = premiseJudgment(session);
+    prompt = `${stageSummary(session, "premise")}\n\n建议判断：${judgment.recommended_answer}。原因：${judgment.reason}\n\n${prompt}`;
+  } else if (question.id === "requirements_confirmation") {
+    const checklist = requirementChecklist(session);
+    prompt = `${checklist.length ? checklist.join("\n") : "R-001  （尚无可确认的需求）"}\n\n${prompt}`;
+  } else if (question.confirmation_gate === true && question.gate_for) {
+    prompt = `${stageSummary(session, question.gate_for)}\n\n${prompt}`;
+  }
+  return {
+    ...question,
+    plain_language_prompt: prompt,
+    text: prompt,
+    recommended_answer: recommendation,
+    recommendation_reason: recommendation ? "根据已收集的需求和项目上下文生成，可直接确认或修改。" : undefined,
+  };
+}
+
+function invalidProtocolGateSlots(session: DemandInterviewSessionInput): string[] {
+  if (!protocolEnabled(session)) return [];
+  return ["layer_1", "layer_2", "layer_3", "layer_4", "requirements_replay"]
+    .filter((stageId) => !layerGateState(session, stageId).confirmed)
+    .map((stageId) => clean(stageDefinition(stageId)?.confirmation_question_id))
+    .filter(Boolean);
+}
+
 function approvalState(session: DemandInterviewSessionInput = Object()) {
   const record = answerRecordForSlot(session, "execution_approval");
   return {
@@ -1075,6 +1301,29 @@ function nextQuestionFromFollowUp(followUp: DemandInterviewFollowUpQuestion | nu
 
 export function selectDemandInterviewNextQuestion(session: DemandInterviewSessionInput = Object(), coverage = inspectDemandInterviewCoverage(session)): DemandInterviewQuestion | null {
   const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
+  if (protocolEnabled(session)) {
+    const judgment = premiseJudgment(session);
+    if (judgment.decision === "do_not_continue") return null;
+
+    for (const stage of PM_PROTOCOL_STAGES) {
+      if (stage.id === "layer_1" && judgment.decision === "continue" && !initialPlaybackConfirmed(session)) return null;
+      const questionsInStage = stageQuestions(session, stage.id);
+      for (const question of questionsInStage) {
+        const followUp = (coverage.follow_up_questions || []).find((item) => item.question_id === question.id);
+        if (followUp) return decorateProtocolQuestion(nextQuestionFromFollowUp(followUp, questions) || question, session);
+        const record = answerRecords(session.answers)[question.id || ""];
+        const needsAnswer = question.id === "premise_decision"
+          ? parsePremiseDecision(record?.answer) === null
+          : question.id === "execution_approval"
+            ? parseApprovalDecision(record?.answer) !== true
+            : question.confirmation_gate === true
+              ? !layerGateState(session, clean(question.gate_for || question.stage)).confirmed
+              : !hasAnswer(record);
+        if (needsAnswer) return decorateProtocolQuestion(question, session);
+      }
+    }
+    return null;
+  }
   const followUp = (coverage.follow_up_questions || [])[0];
   if (followUp) return nextQuestionFromFollowUp(followUp, questions);
   const missing = new Set(coverage.missing.map((item) => item.question_id));
@@ -1125,6 +1374,10 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
   const followUpPlan = followUpPlanForQuality(answerQuality);
   const followUpQuestions = followUpPlan.follow_up_questions;
   const acceptedAssumptions = acceptedAssumptionsFromQuality(answerQuality);
+  const protocol = protocolEnabled(session);
+  const premise = protocol ? premiseJudgment(session) : null;
+  const stopped = premise?.decision === "do_not_continue";
+  const awaitingInitialPlayback = premise?.decision === "continue" && !initialPlaybackConfirmed(session);
   const hasFollowUps = followUpQuestions.length > 0;
   const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
 
@@ -1132,7 +1385,11 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
   const requiredPrdSlots = questions.some((question) => question.slot === "ui_acceptance")
     ? [...PRD_REQUIRED_SLOTS, "ui_acceptance"]
     : PRD_REQUIRED_SLOTS;
-  const missingPrd = missingSlots(session, requiredPrdSlots);
+  const invalidGateSlots = invalidProtocolGateSlots(session);
+  const missingPrd = [...new Set([
+    ...missingSlots(session, requiredPrdSlots),
+    ...invalidGateSlots,
+  ])];
   const approval = approvalState(session);
   const missingSlotsForQuestioning = [...new Set([
     ...missingDiscuss,
@@ -1149,8 +1406,8 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       required_for: question?.required_for || ["prd_intake"],
     };
   });
-  const readyForDiscuss = missingDiscuss.length === 0 && discussFollowUps.length === 0;
-  const readyForPrdIntake = missingPrd.length === 0 && approval.approved === true && !hasFollowUps;
+  const readyForDiscuss = !stopped && !awaitingInitialPlayback && missingDiscuss.length === 0 && discussFollowUps.length === 0;
+  const readyForPrdIntake = !stopped && !awaitingInitialPlayback && missingPrd.length === 0 && approval.approved === true && !hasFollowUps;
   const blockers = [
     ...missingPrd.map((slot) => ({
       code: `MISSING_${slot.toUpperCase()}`,
@@ -1168,6 +1425,16 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       slot: "execution_approval",
       message: "Explicit user approval is required before PRD intake.",
     }]),
+    ...(awaitingInitialPlayback ? [{
+      code: "INITIAL_PLAYBACK_REQUIRED",
+      slot: "initial_playback",
+      message: "Confirm the scenario playback before entering layer one.",
+    }] : []),
+    ...(stopped ? [{
+      code: "PREMISE_DO_NOT_CONTINUE",
+      slot: "premise_decision",
+      message: "The premise judgment explicitly stopped this demand before the four layers.",
+    }] : []),
   ];
   const warnings = followUpQuestions.map((question) => ({
     code: question.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`,
@@ -1178,7 +1445,25 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
   }));
   const totalRequired = requiredPrdSlots.length + 1;
   const answeredRequired = requiredPrdSlots.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
-  const nextActionPrompt = followUpQuestions[0]?.plain_language_prompt
+  const layerGates = Object.fromEntries(
+    ["layer_1", "layer_2", "layer_3", "layer_4", "requirements_replay"]
+      .map((stageId) => [stageId, layerGateState(session, stageId)]),
+  );
+  const activeStage = stopped
+    ? null
+    : awaitingInitialPlayback
+      ? "initial_playback"
+      : PM_PROTOCOL_STAGES.find((stage) => stageQuestions(session, stage.id).some((question) => {
+        const record = answers[question.id || ""];
+        if (question.id === "execution_approval") return parseApprovalDecision(record?.answer) !== true;
+        if (question.confirmation_gate === true) return !layerGateState(session, clean(question.gate_for || question.stage)).confirmed;
+        return !hasAnswer(record) || followUpQuestions.some((followUp) => followUp.question_id === question.id);
+      }))?.id || null;
+  const nextActionPrompt = stopped
+    ? "Premise judgment is do-not-continue. Start a new interview only if the business premise changes."
+    : awaitingInitialPlayback
+      ? "Generate and confirm the scenario playback before layer one."
+      : followUpQuestions[0]?.plain_language_prompt
     || missing[0]?.plain_language_prompt
     || (readyForPrdIntake ? "Convert interview answers to demand input and run demand discuss/PRD intake." : "Review interview status before continuing.");
 
@@ -1197,8 +1482,14 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
     approval,
     ready_for_discuss: readyForDiscuss,
     ready_for_prd_intake: readyForPrdIntake,
+    active_stage: activeStage,
+    awaiting_initial_playback: awaitingInitialPlayback,
+    stopped,
+    premise_judgment: premise || undefined,
+    layer_gates: layerGates,
+    requirement_checklist: requirementChecklist(session),
     readiness: {
-      status: readyForPrdIntake ? "ready" : hasFollowUps ? "needs_follow_up" : readyForDiscuss ? "discuss_ready" : "collecting",
+      status: stopped ? "stopped" : readyForPrdIntake ? "ready" : hasFollowUps ? "needs_follow_up" : readyForDiscuss ? "discuss_ready" : "collecting",
       ready_for_discuss: readyForDiscuss,
       ready_for_prd_intake: readyForPrdIntake,
       quality_score: Math.round((answeredRequired / totalRequired) * 100),
@@ -1225,6 +1516,26 @@ function refreshSession(session: DemandInterviewSession): DemandInterviewSession
   session.follow_up_plan = coverage.follow_up_plan;
   session.next_question = selectDemandInterviewNextQuestion(session, coverage);
   return session;
+}
+
+function invalidateProtocolConfirmations(session: DemandInterviewSessionInput, changedQuestion: DemandInterviewQuestion, now: string) {
+  if (!changedQuestion.stage || changedQuestion.confirmation_gate === true) return;
+  const changedStageIndex = PM_PROTOCOL_STAGES.findIndex((stage) => stage.id === changedQuestion.stage);
+  if (changedStageIndex < 0) return;
+  const answers = answerRecords(session.answers);
+  for (const stage of PM_PROTOCOL_STAGES.slice(changedStageIndex)) {
+    const gateId = stage.confirmation_question_id;
+    if (gateId && gateId !== changedQuestion.id) delete answers[gateId];
+  }
+  session.answers = answers;
+  if (changedQuestion.stage === "premise" && session.initial_playback) {
+    session.initial_playback = {
+      ...session.initial_playback,
+      confirmed: false,
+      invalidated_at: now,
+      invalidation_reason: "premise_answer_changed",
+    };
+  }
 }
 
 export function createDemandInterviewSession(input: DemandRuntimeInput = Object(), options: DemandRuntimeOptions = Object()): DemandInterviewSession {
@@ -1269,6 +1580,7 @@ export function answerDemandInterviewQuestion(
     throw new Error(`Unknown demand interview question: ${questionId}`);
   }
   const answeredAt = clean(now) || new Date().toISOString();
+  invalidateProtocolConfirmations(session, question, answeredAt);
   const baseQuality = answerQualityFor(question, answer);
   const followUpReason = cappedFollowUpReason(baseQuality);
   const followUpCounts = followUpCountRecords(session.follow_up_counts);
@@ -1293,6 +1605,10 @@ export function answerDemandInterviewQuestion(
     }
   }
   session.follow_up_counts = followUpCounts;
+  const normalized = normalizeAnswer(question, answer);
+  if (question.confirmation_gate === true && question.gate_for && question.slot !== "premise_decision" && question.slot !== "execution_approval") {
+    normalized.confirmed_content_hash = stageContentHash(session, question.gate_for);
+  }
   session.answers = {
     ...answerRecords(session.answers),
     [question.id]: {
@@ -1300,7 +1616,7 @@ export function answerDemandInterviewQuestion(
       slot: question.slot,
       category: question.category,
       answer,
-      normalized: normalizeAnswer(question, answer),
+      normalized,
       quality,
       answered_at: answeredAt,
     },
@@ -1378,6 +1694,9 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
   const scopeBoundaries = itemsForSlot(session, "scope_boundaries");
   const exceptions = itemsForSlot(session, "exceptions");
   const roadmap = itemsForSlot(session, "mvp_priority");
+  const confirmedRequirements = (coverage.requirement_checklist || [])
+    .map((item) => item.replace(/^R-\d{3}\s+/, "").trim())
+    .filter(Boolean);
   const approval = approvalState(session);
   const acceptanceAdapter = answerRecordForSlot(session, "ui_acceptance")?.normalized?.acceptance_adapter;
   const objective = clean(session.objective || session.title || desiredOutcomes[0] || painPoints[0]);
@@ -1403,6 +1722,13 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
     constraints: scopeBoundaries,
     exceptions,
     roadmap,
+    requirement_checklist: confirmedRequirements,
+    premise_challenges: [
+      textForSlot(session, "premise_current_solution"),
+      textForSlot(session, "premise_consequence"),
+      textForSlot(session, "mvp_priority"),
+      clean(coverage.premise_judgment?.decision),
+    ].filter(Boolean),
     acceptance_adapter: acceptanceAdapter || undefined,
     decisions: decisionLines(session),
     questions: answeredQuestionRounds(session),
@@ -1437,6 +1763,10 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
         follow_up_plan: coverage.follow_up_plan,
         assumptions: coverage.assumptions,
         warnings: coverage.readiness.warnings,
+        active_stage: coverage.active_stage,
+        premise_judgment: coverage.premise_judgment,
+        layer_gates: coverage.layer_gates,
+        requirement_checklist: coverage.requirement_checklist,
       },
       accepted_assumptions: coverage.assumptions,
     },

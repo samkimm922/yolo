@@ -505,6 +505,12 @@ function hasSentenceStoryIntent(value: unknown): boolean {
   return enablingVerb && hasAny(source, DELIVERABLE_GERUND_TERMS);
 }
 
+export function isSingleDomainCrudStory(text: string): boolean {
+  const source = normalizeStorySlice(text);
+  return /(?:设置|指定|填写|set|assign)\s*(?:和|及|与|、|and)\s*(?:修改|更新|编辑|modify|update|edit)\s*(?:同一|the same)?\s*(?:到期时间|截止日期|日期|字段|值|名称|标题|描述|状态|due date|deadline|date|field|value|name|title|description|status)/i.test(source)
+    || /(?:创建|新增|添加|create|add)\s*(?:和|及|与|、|and)\s*(?:管理|修改|编辑|manage|modify|edit)\s*(?:待办)?(?:标签|分类|tag|label|category)/i.test(source);
+}
+
 function splitHardStoryClauses(text: string): string[] {
   const source = normalizeStorySlice(text);
   const hardClauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
@@ -571,6 +577,7 @@ function expandWhenClauseEnumeration(clause: string): string[] {
 export function splitGenericStorySlices(text: string): string[] {
   const source = normalizeStorySlice(text);
   if (!source) return [];
+  if (isSingleDomainCrudStory(source)) return [source];
   const repeated = splitRepeatedStoryOpeners(source);
   if (repeated.length > 1) return uniqueStorySlices(repeated.flatMap(splitGenericStorySlices));
   const clauses = splitHardStoryClauses(source);
@@ -597,6 +604,7 @@ function genericStructureSignatures(text: string): StorySignature[] {
 
 function detectGenericStories(rawText: string): StorySignature[] {
   const text = stripStructuralLabels(rawText);
+  if (isSingleDomainCrudStory(text)) return [];
   const structural = genericStructureSignatures(text);
   if (structural.length >= 2) return structural;
   const stories: StorySignature[] = [];

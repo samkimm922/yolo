@@ -9,7 +9,7 @@ import {
   buildEvidenceRequirements,
   evidenceRequirementSummary,
 } from "./evidence-requirements.js";
-import { splitGenericStorySlices } from "./story-atomicity.js";
+import { isSingleDomainCrudStory, splitGenericStorySlices } from "./story-atomicity.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
@@ -150,28 +150,197 @@ function extname(path) {
   return match ? match[1].toLowerCase() : "";
 }
 
+function parseJsonConfig(path) {
+  try {
+    const source = readFileSync(path, "utf8");
+    let withoutComments = "";
+    let inString = false;
+    let escaped = false;
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      const next = source[index + 1];
+      if (inString) {
+        withoutComments += character;
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+        withoutComments += character;
+      } else if (character === "/" && next === "/") {
+        while (index + 1 < source.length && source[index + 1] !== "\n") index += 1;
+      } else if (character === "/" && next === "*") {
+        index += 1;
+        while (index + 1 < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
+        index += 1;
+      } else {
+        withoutComments += character;
+      }
+    }
+    const withoutTrailingCommas = withoutComments.replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(withoutTrailingCommas);
+  } catch {
+    return null;
+  }
+}
+
+function configPathPrefix(value, treatAsFile = false) {
+  const source = clean(value).replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!source || source.startsWith("!")) return "";
+  const segments = source.split("/");
+  const globIndex = segments.findIndex((segment) => /[*?{[]/.test(segment));
+  const prefix = (globIndex >= 0 ? segments.slice(0, globIndex) : segments).join("/");
+  if (!prefix) return "";
+  if (treatAsFile || (globIndex < 0 && SCOUT_EXTENSIONS.has(extname(prefix)))) return dirname(prefix);
+  return prefix;
+}
+
+function repoConfigRoot(projectRoot, configDir, value, treatAsFile = false) {
+  const prefix = configPathPrefix(value, treatAsFile);
+  if (!prefix || prefix === ".") return "";
+  const absolute = resolve(configDir, prefix);
+  const rel = relative(projectRoot, absolute).replace(/\\/g, "/");
+  if (!rel || rel === "." || rel === ".." || rel.startsWith("../")) return "";
+  return rel.replace(/\/$/, "");
+}
+
+function declaredSourceRoots(projectRoot, configFiles = [], options = Object()) {
+  const roots = [];
+  const add = (configDir, value, treatAsFile = false) => {
+    for (const item of asArray(value)) {
+      const root = repoConfigRoot(projectRoot, configDir, item, treatAsFile);
+      if (root) roots.push(root);
+    }
+  };
+  add(projectRoot, options.sourceRoots || options.source_roots || options.sourceDirs || options.source_dirs);
+  for (const configFile of configFiles) {
+    const config = parseJsonConfig(configFile);
+    if (!isPlainObject(config)) continue;
+    const configDir = dirname(configFile);
+    if (configFile.replace(/\\/g, "/").endsWith("/package.json")) {
+      add(configDir, config.source || config.sources);
+      add(configDir, config.directories?.src || config.directories?.lib);
+      add(configDir, config.workspaces?.packages || config.workspaces);
+      continue;
+    }
+    add(configDir, config.compilerOptions?.rootDir);
+    add(configDir, config.include);
+    add(configDir, config.files, true);
+  }
+  return [...new Set(roots)].sort((left, right) => right.split("/").length - left.split("/").length || left.localeCompare(right));
+}
+
+function directoryStratifiedFiles(files: string[] = []) {
+  const byDirectory = new Map();
+  for (const file of files) {
+    const directory = dirname(file).replace(/\\/g, "/");
+    const current = byDirectory.get(directory) || [];
+    current.push(file);
+    byDirectory.set(directory, current);
+  }
+  const queues = [...byDirectory.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, entries]) => ({
+      entries: entries.sort((left, right) => left.localeCompare(right)),
+      index: 0,
+    }));
+  const ordered = [];
+  let remaining = files.length;
+  while (remaining > 0) {
+    for (const queue of queues) {
+      const next = queue.entries[queue.index];
+      if (!next) continue;
+      queue.index += 1;
+      remaining -= 1;
+      ordered.push(next);
+    }
+  }
+  return ordered;
+}
+
+function selectAcrossScopes(scopes = [], selected: Set<string> = new Set<string>(), maxFiles = 600, predicate: (file: string) => boolean = () => true) {
+  const queues = scopes
+    .map((scope) => ({
+      scope,
+      files: directoryStratifiedFiles(scope.files.filter((file) => !selected.has(file) && predicate(file))),
+      index: 0,
+    }))
+    .filter((item) => item.files.length > 0);
+  while (selected.size < maxFiles && queues.some((item) => item.index < item.files.length)) {
+    for (const item of queues) {
+      if (selected.size >= maxFiles) break;
+      const file = item.files[item.index];
+      item.index += 1;
+      if (file) selected.add(file);
+    }
+  }
+}
+
+function projectFileScanWarning(scan) {
+  const partial = scan.partially_covered_directories
+    .slice(0, 8)
+    .map((item) => `${item.directory} (${item.selected_files}/${item.discovered_files})`);
+  const directorySummary = partial.length > 0
+    ? ` Partially covered directories: ${partial.join(", ")}${scan.partially_covered_directories.length > partial.length ? `, and ${scan.partially_covered_directories.length - partial.length} more` : ""}.`
+    : "";
+  const inaccessibleSummary = scan.inaccessible_directories.length > 0
+    ? ` Inaccessible directories: ${scan.inaccessible_directories.join(", ")}.`
+    : "";
+  return `Project file candidate scan was partial: selected ${scan.selected_files} of ${scan.discovered_files} eligible files; ${scan.omitted_files} files were omitted from mapping scores.${directorySummary}${inaccessibleSummary}`;
+}
+
 function collectProjectFiles(projectRoot, options = Object()) {
   const root = resolve(clean(projectRoot) || process.cwd());
-  const maxFiles = Number(options.maxFiles || 600);
-  if (!existsSync(root)) return [];
-  const files = [];
+  const configuredMax = Number(options.maxFiles ?? 600);
+  const maxFiles = Number.isFinite(configuredMax) && configuredMax > 0 ? Math.floor(configuredMax) : 600;
+  const discoveredFiles: string[] = [];
+  const configFiles: string[] = [];
+  const inaccessibleDirectories: string[] = [];
+  const excludedDirectories: string[] = [];
+  if (!existsSync(root)) {
+    return {
+      files: [],
+      scan: {
+        schema: "yolo.demand.project_file_scan.v1",
+        status: "unavailable",
+        candidate_coverage_complete: false,
+        strategy: "declared_source_roots_then_stratified_directory_budget",
+        max_files: maxFiles,
+        discovered_files: 0,
+        selected_files: 0,
+        omitted_files: 0,
+        declared_source_roots: [],
+        partially_covered_directories: [],
+        inaccessible_directories: ["."],
+        excluded_directories: [],
+        warning: `Project file candidate scan was unavailable: project root does not exist (${root}).`,
+      },
+    };
+  }
   function visit(dir) {
-    if (files.length >= maxFiles) return;
     let entries = [];
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     } catch {
+      inaccessibleDirectories.push(relative(root, dir).replace(/\\/g, "/") || ".");
       return;
     }
     for (const entry of entries) {
-      if (files.length >= maxFiles) return;
-      if (SCOUT_EXCLUDED_DIRS.has(entry.name)) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (SCOUT_EXCLUDED_DIRS.has(entry.name)) {
+          excludedDirectories.push(relative(root, full).replace(/\\/g, "/"));
+          continue;
+        }
         visit(full);
       } else if (entry.isFile() && SCOUT_EXTENSIONS.has(extname(entry.name))) {
         try {
-          if (statSync(full).size <= 250_000) files.push(relative(root, full));
+          if (statSync(full).size <= 250_000) {
+            discoveredFiles.push(relative(root, full).replace(/\\/g, "/"));
+            if (entry.name === "package.json" || /^tsconfig(?:\.[^.]+)*\.json$/i.test(entry.name)) configFiles.push(full);
+          }
         } catch {
           // Ignore transient files during a lightweight scout.
         }
@@ -179,7 +348,53 @@ function collectProjectFiles(projectRoot, options = Object()) {
     }
   }
   visit(root);
-  return files.sort();
+  const sourceRoots = declaredSourceRoots(root, configFiles, options)
+    .filter((sourceRoot) => discoveredFiles.some((file) => file === sourceRoot || file.startsWith(`${sourceRoot}/`)));
+  const scopesByDirectory = new Map();
+  for (const file of discoveredFiles) {
+    const declaredRoot = sourceRoots.find((sourceRoot) => file === sourceRoot || file.startsWith(`${sourceRoot}/`));
+    const directory = declaredRoot || (file.includes("/") ? file.split("/")[0] : ".");
+    const scope = scopesByDirectory.get(directory) || { directory, declared: Boolean(declaredRoot), files: [] };
+    scope.files.push(file);
+    scopesByDirectory.set(directory, scope);
+  }
+  const scopes = [...scopesByDirectory.values()].sort((left, right) => left.directory.localeCompare(right.directory));
+  const selected = new Set<string>();
+  const declaredScopes = scopes.filter((scope) => scope.declared);
+  selectAcrossScopes(declaredScopes, selected, maxFiles, isImplementationProjectFile);
+  selectAcrossScopes(declaredScopes, selected, maxFiles);
+  selectAcrossScopes(scopes.filter((scope) => !scope.declared), selected, maxFiles, isImplementationProjectFile);
+  selectAcrossScopes(scopes.filter((scope) => !scope.declared), selected, maxFiles);
+  const partiallyCoveredDirectories = scopes
+    .map((scope) => {
+      const selectedFiles = scope.files.filter((file) => selected.has(file)).length;
+      return {
+        directory: scope.directory,
+        discovered_files: scope.files.length,
+        selected_files: selectedFiles,
+        omitted_files: scope.files.length - selectedFiles,
+      };
+    })
+    .filter((scope) => scope.omitted_files > 0);
+  const omittedFiles = Math.max(0, discoveredFiles.length - selected.size);
+  const partial = omittedFiles > 0 || inaccessibleDirectories.length > 0;
+  const scan = {
+    schema: "yolo.demand.project_file_scan.v1",
+    status: partial ? "partial" : "complete",
+    candidate_coverage_complete: !partial,
+    strategy: "declared_source_roots_then_stratified_directory_budget",
+    max_files: maxFiles,
+    discovered_files: discoveredFiles.length,
+    selected_files: selected.size,
+    omitted_files: omittedFiles,
+    declared_source_roots: sourceRoots,
+    partially_covered_directories: partiallyCoveredDirectories,
+    inaccessible_directories: [...new Set(inaccessibleDirectories)].sort(),
+    excluded_directories: [...new Set(excludedDirectories)].sort(),
+    warning: "",
+  };
+  if (partial) scan.warning = projectFileScanWarning(scan);
+  return { files: [...selected].sort(), scan };
 }
 
 function tokens(value) {
@@ -238,11 +453,97 @@ function scoreCandidateFile(file, tokenList, kind) {
   return score;
 }
 
-function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = Object()) {
+const DOMAIN_CONCEPTS = [
+  { text: /标签|分类|tag|label|category|taxonomy/i, file: /tag|label|category|taxonomy/i, weight: 14 },
+  { text: /筛选|过滤|检索|filter|search|query/i, file: /filter|search|query/i, weight: 14 },
+  { text: /到期|截止|期限|due|deadline|expiry|expiration/i, file: /due|deadline|expiry|expiration/i, weight: 14 },
+  { text: /提醒|通知|调度|remind|notification|notify|schedule/i, file: /remind|notification|notify|schedule/i, weight: 14 },
+  { text: /待办|任务|todo|task/i, file: /todo|task/i, weight: 5 },
+  { text: /库存|商品|inventory|stock|sku|product/i, file: /inventory|stock|sku|product/i, weight: 8 },
+  { text: /用户|账号|成员|user|account|member|profile/i, file: /user|account|member|profile/i, weight: 8 },
+  { text: /订单|支付|账单|order|payment|billing|invoice/i, file: /order|payment|billing|invoice/i, weight: 8 },
+];
+
+function domainFileScore(file, text, preferredKinds = []) {
+  const normalizedFile = clean(file).toLowerCase();
+  const source = clean(text);
+  let score = 0;
+  for (const concept of DOMAIN_CONCEPTS) {
+    if (concept.text.test(source) && concept.file.test(normalizedFile)) score += concept.weight;
+  }
+  for (const token of tokens(source)) {
+    const normalized = token.toLowerCase();
+    if (/^[a-z0-9_-]{3,}$/.test(normalized) && normalizedFile.includes(normalized)) score += 5;
+  }
+  if (preferredKinds.includes(surfaceKindFromFile(file))) score += 3;
+  if (/(^|\/)(?:readme|changelog|docs?|specs?)\b|(?:lock|manifest)\.json$/i.test(normalizedFile)) score -= 10;
+  return score;
+}
+
+function isImplementationProjectFile(file) {
+  if (surfaceKindFromFile(file) === "doc" || surfaceKindFromFile(file) === "test") return false;
+  if (/(^|\/)(?:package(?:-lock)?|tsconfig|eslint|vite\.config|vitest\.config)\.(?:json|[cm]?[jt]s)$/i.test(file)) return false;
+  if (/(^|\/)\.[^/]+(?:manifest|config)\.json$/i.test(file)) return false;
+  return /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|vue|svelte)$/i.test(file);
+}
+
+function sessionDeclaredSourceRoots(session = Object()) {
+  return uniqueStrings([
+    session.project?.source_roots,
+    session.project?.sourceRoots,
+    session.project?.source_dirs,
+    session.project?.sourceDirs,
+    session.project_facts?.source_roots,
+    session.project_facts?.sourceRoots,
+    session.context?.source_roots,
+    session.context?.sourceRoots,
+  ]);
+}
+
+function inferProjectStructureTargets(session = Object(), projectRoot = process.cwd(), options = Object()) {
+  const collection = collectProjectFiles(projectRoot, {
+    ...options,
+    sourceRoots: uniqueStrings([
+      sessionDeclaredSourceRoots(session),
+      options.sourceRoots,
+      options.source_roots,
+      options.sourceDirs,
+      options.source_dirs,
+    ]),
+  });
+  const projectFiles = collection.files.filter(isImplementationProjectFile);
+  if (projectFiles.length === 0) return { project_files: [], targets: [], file_scan: collection.scan };
+  const selected = new Map();
+  for (const requirement of requirementRefs(session)) {
+    const preferredKinds = inferSurfaceKinds(requirement.text, []);
+    const ranked = projectFiles
+      .map((file) => ({ file, score: domainFileScore(file, requirement.text, preferredKinds) }))
+      .filter((item) => item.score >= 5)
+      .sort((left, right) => right.score - left.score || left.file.localeCompare(right.file));
+    const best = ranked[0];
+    if (!best) continue;
+    const current = selected.get(best.file) || {
+      file: best.file,
+      exists: true,
+      status: "verified",
+      kind: surfaceKindFromFile(best.file),
+      source: "project_structure_inference",
+      requirement_ids: [],
+      relevance_score: best.score,
+    };
+    current.requirement_ids = uniqueStrings([...current.requirement_ids, requirement.id]);
+    current.relevance_score = Math.max(current.relevance_score, best.score);
+    selected.set(best.file, current);
+  }
+  return { project_files: projectFiles, targets: [...selected.values()], file_scan: collection.scan };
+}
+
+function inferTargetFileCandidates({ projectRoot, text, explicitFiles = [], maxPerKind = 2, sourceRoots = [] } = Object()) {
   const explicit = uniqueStrings(explicitFiles);
-  if (explicit.length > 0) return explicit;
-  const files = collectProjectFiles(projectRoot);
-  if (files.length === 0) return [];
+  if (explicit.length > 0) return { files: explicit, file_scan: null };
+  const collection = collectProjectFiles(projectRoot, { sourceRoots });
+  const files = collection.files;
+  if (files.length === 0) return { files: [], file_scan: collection.scan };
   const tokenList = tokens(text);
   const kinds = inferSurfaceKinds(text);
   const selected = [];
@@ -255,7 +556,7 @@ function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 
       .map((item) => item.file);
     selected.push(...ranked);
   }
-  return [...new Set(selected)].slice(0, 8);
+  return { files: [...new Set(selected)].slice(0, 8), file_scan: collection.scan };
 }
 
 function resolveProjectFile(projectRoot, file) {
@@ -474,18 +775,25 @@ function explicitGroundingTargets(input = Object()) {
   return uniqueStrings(input.target_files || input.targetFiles || input.targets || input.target || input.files || input.file);
 }
 
-export function inferGreenfieldTargetFiles(session = Object(), options = Object()) {
+function inferGreenfieldTargetFileResult(session = Object(), options = Object()) {
   const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
   const text = demandText(session);
   const explicit = explicitGroundingTargets(options);
-  const source = explicit.length > 0
-    ? explicit
-    : [defaultTargetForKind(targetKind(text), projectNameSlug(session, text))];
+  const projectStructure = explicit.length === 0
+    ? inferProjectStructureTargets(session, projectRoot, options)
+    : { project_files: [], targets: [], file_scan: null };
+  if (explicit.length === 0 && projectStructure.targets.length > 0) {
+    return { targets: projectStructure.targets, file_scan: projectStructure.file_scan };
+  }
+  if (explicit.length === 0 && projectStructure.project_files.length > 0) {
+    return { targets: [], file_scan: projectStructure.file_scan };
+  }
+  const source = explicit.length > 0 ? explicit : [defaultTargetForKind(targetKind(text), projectNameSlug(session, text))];
   const files = uniqueStrings(source)
     .map((file) => safeRepoFile(projectRoot, file))
     .filter(Boolean)
     .slice(0, Number(options.maxTargetFiles || options.max_target_files || 2));
-  return files.map((file) => {
+  const targets = files.map((file) => {
     const exists = existsSync(resolve(projectRoot, file));
     return {
       file,
@@ -495,6 +803,11 @@ export function inferGreenfieldTargetFiles(session = Object(), options = Object(
       source: explicit.length > 0 ? "explicit_target" : "demand_greenfield_inference",
     };
   });
+  return { targets, file_scan: projectStructure.file_scan };
+}
+
+export function inferGreenfieldTargetFiles(session = Object(), options = Object()) {
+  return inferGreenfieldTargetFileResult(session, options).targets;
 }
 
 function executionScopeFiles(session = Object()) {
@@ -526,6 +839,7 @@ function plannedNewFileConflicts(projectRoot, targets = []) {
 
 function shouldBlockCandidatePromotion(candidates = [], targets = [], explicit = [], projectRoot = process.cwd()) {
   if (explicit.length > 0) return false;
+  if (candidates.length === 0 && targets.length > 0 && targets.every((target) => target?.source === "project_structure_inference" && target?.exists === true)) return false;
   if (plannedNewFileConflicts(projectRoot, targets).length > 0) return true;
   return candidates.length > 0 && candidatePromotionBlockers(candidates, targets).length > 0;
 }
@@ -537,8 +851,14 @@ function existingTargetFacts(session = Object()) {
     .filter(Boolean);
 }
 
-function filesForSurface(surface = Object(), files = []) {
+function filesForSurface(surface = Object(), files = [], scenarioText = "") {
   const kind = clean(surface.kind).toLowerCase();
+  const preferredKinds = kind ? [kind] : inferSurfaceKinds(scenarioText, []);
+  const ranked = files
+    .map((file) => ({ file, score: domainFileScore(file, scenarioText, preferredKinds) }))
+    .filter((item) => item.score >= 5)
+    .sort((left, right) => right.score - left.score || left.file.localeCompare(right.file));
+  if (ranked.length > 0) return [ranked[0].file];
   const matching = files.filter((file) => {
     const fileKind = surfaceKindFromFile(file);
     return fileKind === kind || (kind === "service" && fileKind === "code") || (kind === "code" && fileKind === "service");
@@ -546,10 +866,44 @@ function filesForSurface(surface = Object(), files = []) {
   return matching.length ? matching : files;
 }
 
-function applyFilesToScenarios(session = Object(), files = []) {
+function applyFilesToScenarios(session = Object(), targets = []) {
+  const files = uniqueStrings(targets.map((target) => typeof target === "string" ? target : target?.file));
   const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
   if (scenarios.length === 0) return;
   for (const scenario of scenarios) {
+    const requirement = asArray(session.requirements?.active || session.requirements)
+      .find((item) => clean(item?.id) === clean(scenario.requirement_id));
+    const scenarioText = [scenario.desired_behavior, scenario.proof, requirement?.text].map(clean).filter(Boolean).join("\n");
+    const projectStructureMode = targets.some((target) => target?.source === "project_structure_inference");
+    if (projectStructureMode) {
+      const requirementId = clean(scenario.requirement_id);
+      const linkedFiles = uniqueStrings(targets
+        .filter((target) => asArray(target?.requirement_ids).map(clean).includes(requirementId))
+        .map((target) => target?.file));
+      const scopedFiles = linkedFiles.length > 0 ? linkedFiles : filesForSurface({}, files, scenarioText);
+      if (scopedFiles.length === 0) continue;
+      const groundedKind = surfaceKindFromFile(scopedFiles[0]);
+      const sourceSurface = asArray(scenario.surfaces)[0] || {};
+      scenario.surfaces = [{
+        ...sourceSurface,
+        id: `${scenario.id || "SCN"}-SFC-001`,
+        kind: groundedKind,
+        label: surfaceLabel(groundedKind),
+        user_visible: groundedKind === "ui",
+        target_files: scopedFiles,
+        readonly_files: [],
+        visual_style_source: groundedKind === "ui" ? asArray(sourceSurface.visual_style_source) : [],
+        allow_new_files: false,
+        session_budget: {
+          ...(sourceSurface.session_budget || {}),
+          expected: sourceSurface.session_budget?.expected || "single_session",
+          max_files: 1,
+          max_lines_per_file: Number(sourceSurface.session_budget?.max_lines_per_file || 120),
+        },
+        grounding_source: "project_structure_inference",
+      }];
+      continue;
+    }
     const surfaces = asArray(scenario.surfaces);
     if (surfaces.length === 0) {
       const kind = surfaceKindFromFile(files[0] || "");
@@ -573,7 +927,7 @@ function applyFilesToScenarios(session = Object(), files = []) {
     for (const surface of surfaces) {
       const current = uniqueStrings(surface.target_files);
       if (current.length > 0) continue;
-      const scopedFiles = filesForSurface(surface, files);
+      const scopedFiles = filesForSurface(surface, files, scenarioText);
       const groundedKind = surfaceKindFromFile(scopedFiles[0] || files[0] || "");
       surface.target_files = scopedFiles;
       surface.kind = groundedKind;
@@ -603,22 +957,36 @@ function plannedTargetFact(session = Object(), target = Object(), groundingId, g
   return {
     file: target.file,
     status: target.status,
-    source: target.exists ? "project_read" : target.source,
+    source: target.exists ? clean(target.source || "project_read") : target.source,
     new_file: !target.exists,
     allow_new_files: !target.exists,
     grounding_id: groundingId,
     grounded_at: generatedAt,
-    requirement_ids: refs.map((item) => item.id).filter(Boolean),
+    requirement_ids: uniqueStrings(target.requirement_ids?.length ? target.requirement_ids : refs.map((item) => item.id)),
     evidence: [
       target.exists
-        ? `${target.file} already exists in project root.`
+        ? `${target.file} exists in project root and matches the approved requirement domain.`
         : `${target.file} does not exist yet; it is planned as a new file from approved demand scope.`,
       groundingReason(session, target.file),
     ],
     message: target.exists
-      ? "Target file is verified enough to enter execution scope."
+      ? "Existing target file is grounded by project structure and approved requirement semantics."
       : "Target file is grounded as a planned new file; scope.allow_new_files must be true for generated tasks.",
   };
+}
+
+function attachIncompleteFileScan(session = Object(), scan = null) {
+  if (!scan || scan.status === "complete") return session;
+  const annotated = cloneDemandObject(session);
+  annotated.project_facts = {
+    ...(annotated.project_facts || {}),
+    file_scan: scan,
+    next_actions: uniqueStrings([
+      annotated.project_facts?.next_actions,
+      scan.warning,
+    ]),
+  };
+  return annotated;
 }
 
 export function groundDemandExecutionScope(session = Object(), options = Object()) {
@@ -662,8 +1030,9 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
     };
   }
 
-  const inferred = inferGreenfieldTargetFiles(session, { ...options, projectRoot });
-  const groundedTargets = inferred.filter((item) => item.file);
+  const inference = inferGreenfieldTargetFileResult(session, { ...options, projectRoot });
+  session = attachIncompleteFileScan(session, inference.file_scan);
+  const groundedTargets = inference.targets.filter((item) => item.file);
 
   if (shouldBlockCandidatePromotion(candidates, groundedTargets, explicit, projectRoot)) {
     const blockers = uniqueStrings([
@@ -736,7 +1105,11 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
     status: "applied",
     applied: true,
     generated_at: generatedAt,
-    mode: explicit.length > 0 ? "explicit_target" : "greenfield_inferred",
+    mode: explicit.length > 0
+      ? "explicit_target"
+      : groundedTargets.some((target) => target.source === "project_structure_inference")
+        ? "project_structure"
+        : "greenfield_inferred",
     project_root: projectRoot,
     target_files: groundedTargets.map((item) => ({
       file: item.file,
@@ -751,7 +1124,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
   grounded.project_facts.grounding = grounded.grounding;
   const existingFactFiles = new Set(existingTargetFacts(grounded));
   for (const target of groundedTargets) existingFactFiles.add(target.file);
-  applyFilesToScenarios(grounded, groundedTargets.map((item) => item.file));
+  applyFilesToScenarios(grounded, groundedTargets);
 
   return {
     ...grounded.grounding,
@@ -1166,6 +1539,7 @@ function storySlicesForRequirement(text) {
   const source = clean(text);
   const repeated = splitRepeatedUserStories(source);
   if (repeated.length > 1) return repeated.flatMap(storySlicesForRequirement);
+  if (isSingleDomainCrudStory(source)) return [source].filter(Boolean);
   const generic = splitGenericStorySlices(source).map(normalizeStoryText).filter(Boolean);
   if (generic.length > 1) return generic.flatMap(storySlicesForRequirement);
   return [source].filter(Boolean);
@@ -1452,11 +1826,25 @@ export function buildDemandSession(input = Object(), options = Object()) {
     successCriteria.join(" "),
     statusQuo.join(" "),
   ].join("\n");
-  const inferredTargetFiles = explicitTargetFiles.length > 0 ? [] : inferTargetFiles({
-    projectRoot,
-    text: scoutText,
-    explicitFiles: [],
-  });
+  const inferredTargetResult = explicitTargetFiles.length > 0
+    ? { files: [], file_scan: null }
+    : inferTargetFileCandidates({
+      projectRoot,
+      text: scoutText,
+      explicitFiles: [],
+      sourceRoots: uniqueStrings([
+        input.source_roots,
+        input.sourceRoots,
+        input.source_dirs,
+        input.sourceDirs,
+        input.project?.source_roots,
+        input.project?.sourceRoots,
+      ]),
+    });
+  const inferredTargetFiles = inferredTargetResult.files;
+  const incompleteFileScan = inferredTargetResult.file_scan?.status !== "complete"
+    ? inferredTargetResult.file_scan
+    : null;
   const targetFileFactRecords = targetFileFacts({
     projectRoot,
     explicitFiles: explicitTargetFiles,
@@ -1485,8 +1873,10 @@ export function buildDemandSession(input = Object(), options = Object()) {
     ...assumptionFactRecords
       .filter((fact) => fact.status === "needs_verification")
       .map((fact) => `Verify assumption ${fact.id} against project evidence before PRD execution.`),
+    ...(incompleteFileScan?.warning ? [incompleteFileScan.warning] : []),
   ];
-  const rawRequirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
+  const confirmedRequirementTexts = uniqueStrings(input.requirement_checklist || input.requirements || input.requirement_text);
+  const rawRequirements = (confirmedRequirementTexts.length > 0 ? confirmedRequirementTexts : successCriteria)
     .map((text, index) => requirementRecord(text, index, { ...input, evidence: evidenceWithDecisionDetails, decisions, questionTrace }));
   const requirements = expandRequirementStories(rawRequirements);
   const nontechnicalIntake = buildNonTechnicalIntake({
@@ -1536,6 +1926,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
     },
     project_facts: {
       schema: "yolo.demand.project_facts.v1",
+      ...(incompleteFileScan ? { file_scan: incompleteFileScan } : {}),
       target_files: targetFileFactRecords,
       candidate_target_files: candidateTargetFiles,
       assumptions: assumptionFactRecords,
@@ -1655,6 +2046,7 @@ export function demandMarkdownArtifacts(session = Object()) {
   const reqs = asArray(session.requirements?.active);
   const decisions = asArray(session.discussion?.decisions).map((item) => item.text || item);
   const rounds = asArray(session.discussion?.rounds);
+  const fileScan = session.project_facts?.file_scan;
   return {
     "VISION.md": [
       `# ${session.project?.title || session.id} Vision`,
@@ -1796,6 +2188,16 @@ export function demandMarkdownArtifacts(session = Object()) {
       "",
       "## Candidate Target Files",
       linesList(session.project_facts?.candidate_target_files),
+      ...(fileScan ? [
+        "",
+        "## Project File Candidate Coverage",
+        fileScan.warning || `Candidate coverage: ${fileScan.selected_files || 0}/${fileScan.discovered_files || 0} eligible files.`,
+        `- Strategy: ${fileScan.strategy || "unknown"}`,
+        `- Declared source roots: ${arrayOfStrings(fileScan.declared_source_roots).join(", ") || "none"}`,
+        `- Partially covered directories: ${asArray(fileScan.partially_covered_directories).map((item) => `${item.directory} (${item.selected_files}/${item.discovered_files})`).join(", ") || "none"}`,
+        `- Inaccessible directories: ${arrayOfStrings(fileScan.inaccessible_directories).join(", ") || "none"}`,
+        `- Excluded directories: ${arrayOfStrings(fileScan.excluded_directories).join(", ") || "none"}`,
+      ] : []),
     ].join("\n"),
     "ROADMAP.md": [
       `# ${session.id} Roadmap`,

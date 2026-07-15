@@ -1426,8 +1426,11 @@ function collectSyntheticAcceptanceProofText(session = Object(), implementationT
   add(session.prd_intake?.desired_outcomes);
   add(session.requirements?.active);
   add(session.requirements?.acceptance_criteria);
-  add(session.scenario_matrix?.scenarios);
-  add(session.context?.current_state);
+  for (const scenario of asArray(session.scenario_matrix?.scenarios)) {
+    add(scenario.desired_behavior);
+    add(scenario.proof || scenario.acceptance || scenario.then || scenario.text);
+    add(scenario.exceptions);
+  }
   add(session.context?.desired_outcome);
   add(session.discussion?.decisions);
 
@@ -1781,7 +1784,8 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
         structured: structuredProjectFacts(session),
         target_files: asArray(session.project_facts?.target_files),
         candidate_target_files: asArray(session.project_facts?.candidate_target_files || session.project?.candidate_target_files),
-        current_state: asArray(session.context?.current_state || session.vision?.status_quo),
+        current_state: [],
+        current_state_reference: demandSourceArtifact(session),
         evidence: asArray(session.investigation?.evidence).map((item) => item.text || item).filter(Boolean),
         assumptions: asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.reflection?.assumptions || session.assumptions),
         decisions: asArray(session.discussion?.decisions).map((item) => item.text || item).filter(Boolean),
@@ -1990,7 +1994,7 @@ function deriveFileDependencies(tasks = []) {
   return tasks;
 }
 
-function buildAtomicDemandTasks(session = Object(), input = Object(), options = Object()) {
+export function buildAtomicDemandTasks(session = Object(), input = Object(), options = Object()) {
   const buildContext = toolchainContext(input, options);
   const automatedAcceptanceRequired = demandRequiresAutomatedAcceptance(session);
   const requirements = requirementById(session);
@@ -2011,7 +2015,10 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
       const scenarioFiles = [...new Set(surfaces.flatMap((item) => asArray(item.target_files)).concat(allFiles).filter(Boolean))];
       const fileChunks = chunk(surfaceFiles, maxFiles);
       for (const [chunkIndex, files] of fileChunks.entries()) {
-        const taskTitle = `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || "DEMAND"}`;
+        const capabilityTitle = clean(requirement.text || scenario.desired_behavior || scenario.proof || scenario.requirement_id || "Demand capability")
+          .replace(/\s+/g, " ")
+          .slice(0, 72);
+        const taskTitle = `${capabilityTitle} · ${surfaceTitle(surface)}`;
         const taskKind = clean(surface.kind).toLowerCase() || fileKind(files[0]) || "code";
         const filesContainTest = files.some((file) => fileKind(file) === "test");
         const testFiles = files.filter((file) => fileKind(file) === "test");
@@ -2062,7 +2069,8 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           structured: structuredProjectFacts(session),
           target_files: asArray(session.project_facts?.target_files),
           candidate_target_files: asArray(session.project_facts?.candidate_target_files || session.project?.candidate_target_files),
-          current_state: asArray(session.context?.current_state || session.vision?.status_quo),
+          current_state: [],
+          current_state_reference: demandSourceArtifact(session),
           evidence: asArray(session.investigation?.evidence).map((item) => item.text || item).filter(Boolean),
           assumptions: asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.reflection?.assumptions || session.assumptions),
           decisions: asArray(session.discussion?.decisions).map((item) => item.text || item).filter(Boolean),
@@ -2072,7 +2080,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           deferred_scope_confirmation: deferredScopeConfirmation(session),
         };
         const followUp = deferredFollowUp(session.discussion?.deferred);
-        const currentBehavior = clean(scenario.current_behavior) || (session.context?.current_state || session.vision?.status_quo || []).join("; ") || "Captured in demand CONTEXT.md.";
+        const currentBehavior = `See ${demandSourceArtifact(session)} for the approved current-state context.`;
         const currentBehaviorWithEvidence = [
           currentBehavior,
           projectFacts.evidence.length ? `Evidence: ${projectFacts.evidence.slice(0, 3).join("; ")}` : "",
@@ -2139,7 +2147,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
               actor: scenario.actor || "target user",
               touchpoint: scenario.touchpoint || "primary user workflow",
               trigger: scenario.trigger || "the user reaches this scenario",
-              current_behavior: clean(scenario.current_behavior) || "",
+              current_behavior: currentBehavior,
               desired_behavior: description,
               proof,
             },
@@ -2203,7 +2211,8 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           scope: {
             targets: files.map((file) => ({ file, description })),
             readonly_files: asArray(surface.readonly_files),
-            allow_new_files: surface.allow_new_files === true || input.allow_new_files !== false,
+            allow_new_files: surface.allow_new_files === true
+              || (surface.allow_new_files !== false && input.allow_new_files !== false),
             allow_delete_files: false,
             max_files: Math.max(1, files.length || maxFiles),
             max_lines_per_file: Number(surface.session_budget?.max_lines_per_file || input.max_lines_per_file || input.maxLinesPerFile || 120),
@@ -2316,6 +2325,48 @@ export interface DemandPrdCompiledResult {
   warnings: ReturnType<typeof inspectDemandReadiness>["warnings"];
   prd: Record<string, unknown> | null;
   next_actions: string[];
+}
+
+function demandSourceArtifact(session = Object()) {
+  return `.yolo/demand/${clean(session.id || "DEMAND")}/session.json`;
+}
+
+function compactQuestionTraceForPrd(session = Object()) {
+  return questionTraceIds(session.question_trace || session.discussion?.rounds)
+    .map((id) => ({ id }));
+}
+
+function compactPrdIntakeForPrd(session = Object(), requirements = []) {
+  const intake = session.prd_intake || session.nontechnical_intake || {};
+  return {
+    schema: clean(intake.schema) || "yolo.demand.prd_intake.reference.v1",
+    source_artifact: demandSourceArtifact(session),
+    question_ids: questionTraceIds(intake.question_ids || session.question_trace),
+    requirement_ids: asArray(requirements).map((requirement) => clean(requirement.id)).filter(Boolean),
+    summary: {
+      audience_count: asArray(intake.audience).length,
+      desired_outcome_count: asArray(intake.desired_outcomes).length,
+      acceptance_proof_count: asArray(intake.success_proof).length,
+      boundary_count: asArray(intake.boundaries).length,
+      exception_count: asArray(intake.exceptions).length,
+    },
+  };
+}
+
+function compactInterviewForPrd(session = Object()) {
+  const interview = session.interview;
+  if (!interview || typeof interview !== "object") return null;
+  const gates = interview.coverage?.layer_gates || {};
+  return {
+    schema: clean(interview.schema) || "yolo.demand.interview.reference.v1",
+    id: clean(interview.id) || null,
+    source_artifact: demandSourceArtifact(session),
+    question_count: questionTraceIds(interview.question_trace || session.question_trace).length,
+    requirement_count: asArray(session.requirements?.active || session.requirements).length,
+    premise_decision: clean(interview.coverage?.premise_judgment?.decision) || null,
+    confirmed_gates: Object.fromEntries(Object.entries(gates as Record<string, { confirmed?: boolean }>)
+      .map(([id, gate]) => [id, gate?.confirmed === true])),
+  };
 }
 
 function buildDemandPrd(session = Object(), input = Object(), options = Object()): DemandPrdCompiledResult {
@@ -2460,10 +2511,10 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       deferred_scope_confirmation: deferredScopeConfirmation(session),
       deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
       out_of_scope: asArray(session.requirements?.out_of_scope),
-      prd_intake: session.prd_intake || session.nontechnical_intake || null,
-      interview: session.interview || null,
-      question_trace: session.question_trace || [],
-      grounding: grounding.applied ? grounding : null,
+      prd_intake: compactPrdIntakeForPrd(session, requirements),
+      interview: compactInterviewForPrd(session),
+      question_trace: compactQuestionTraceForPrd(session),
+      grounding: grounding.applied ? groundingArtifact(grounding) : null,
       readiness_level: readiness.readiness_level,
       readiness_score: readiness.quality_score,
       quality_score: quality.total_score,
@@ -2502,7 +2553,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
         executable_prd_ready: readiness.executable_prd_ready,
         readiness_score: readiness.quality_score,
         quality_score: quality.total_score,
-        quality_report: quality,
+        quality_report_reference: "demand.quality_report",
         checks: readiness.checks.map((item) => ({ code: item.code, passed: item.passed, severity: item.severity })),
       },
     },
@@ -2516,7 +2567,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       readiness_score: readiness.quality_score,
       quality_score: quality.total_score,
       quality_status: quality.status,
-      quality_report: quality,
+      quality_report_reference: "demand.quality_report",
       atomicity_status: atomicity.status,
       session_handoff: sessionHandoff,
     },

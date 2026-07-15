@@ -18,6 +18,57 @@
 
 export const PM_PROTOCOL_SCHEMA = "yolo.pm.protocol.v1";
 
+export const PM_PROTOCOL_STAGES = [
+  {
+    id: "premise",
+    label: "前提质疑",
+    question_ids: ["premise_current_solution", "premise_consequence", "premise_minimum", "premise_decision"],
+    confirmation_question_id: "premise_decision",
+  },
+  {
+    id: "layer_1",
+    label: "角色 / 现状 / 痛点",
+    question_ids: ["target_users", "status_quo", "pain_points", "layer_1_confirmation"],
+    confirmation_question_id: "layer_1_confirmation",
+  },
+  {
+    id: "layer_2",
+    label: "一天的使用故事",
+    question_ids: ["day_in_life", "desired_outcome", "layer_2_confirmation"],
+    confirmation_question_id: "layer_2_confirmation",
+  },
+  {
+    id: "layer_3",
+    label: "例外和边界",
+    question_ids: ["exceptions", "scope_boundaries", "layer_3_confirmation"],
+    confirmation_question_id: "layer_3_confirmation",
+  },
+  {
+    id: "layer_4",
+    label: "验收证据",
+    question_ids: ["success_criteria", "success_proof", "ui_acceptance", "layer_4_confirmation"],
+    confirmation_question_id: "layer_4_confirmation",
+  },
+  {
+    id: "requirements_replay",
+    label: "需求清单回放",
+    question_ids: ["requirements_confirmation"],
+    confirmation_question_id: "requirements_confirmation",
+  },
+  {
+    id: "approval",
+    label: "执行批准",
+    question_ids: ["execution_approval"],
+    confirmation_question_id: "execution_approval",
+  },
+] as const;
+
+export type PMProtocolStageId = typeof PM_PROTOCOL_STAGES[number]["id"];
+
+export const PM_PROTOCOL_LAYER_QUESTION_IDS = Object.fromEntries(
+  PM_PROTOCOL_STAGES.map((stage) => [stage.id, [...stage.question_ids]]),
+) as Record<PMProtocolStageId, string[]>;
+
 export function renderPMProtocolMarkdown(descriptor: {
   id: string;
   name: string;

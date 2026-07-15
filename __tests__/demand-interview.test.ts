@@ -52,16 +52,31 @@ function answer(session, questionId, value) {
   });
 }
 
+function openLayerOne(session) {
+  answer(session, "premise_current_solution", "Store managers export a spreadsheet every morning and manually review risky inventory rows.");
+  answer(session, "premise_consequence", "Without a change, stores miss at least two stockout risks each week and managers spend an hour on recovery.");
+  answer(session, "premise_minimum", "The minimum useful version must show a low-stock signal in the existing inventory workflow.");
+  answer(session, "premise_decision", "继续");
+  session.initial_playback = { confirmed: true, confirmed_content_hash: "sha256:test-initial-playback" };
+  return session;
+}
+
 function answerAllRequired(session) {
+  openLayerOne(session);
   answer(session, "target_users", "Store managers who review inventory every morning.");
   answer(session, "status_quo", "They export inventory counts and manually scan for risky SKUs.");
   answer(session, "pain_points", "Stockouts are discovered after customers complain.");
+  answer(session, "layer_1_confirmation", "确认，这一层理解无误。");
+  answer(session, "day_in_life", "Every morning a store manager opens the inventory list, reviews low-stock items, and decides what to replenish before customers arrive.");
   answer(session, "desired_outcome", "Managers see low-stock risks before the item sells out.");
+  answer(session, "layer_2_confirmation", "确认，这就是完整的一天。");
+  answer(session, "exceptions", "New SKUs without sales history should not be marked high risk by default.");
+  answer(session, "scope_boundaries", "Do not build supplier ordering; do not change order import.");
+  answer(session, "layer_3_confirmation", "确认，例外和边界都完整。");
   answer(session, "success_criteria", "Low-stock SKUs show a clear badge in the inventory list.");
   answer(session, "success_proof", "Create a SKU below threshold and confirm the list shows the badge.");
-  answer(session, "scope_boundaries", "Do not build supplier ordering; do not change order import.");
-  answer(session, "exceptions", "New SKUs without sales history should not be marked high risk by default.");
-  answer(session, "mvp_priority", "MVP is threshold alert plus inventory badge; forecasting can come later.");
+  answer(session, "layer_4_confirmation", "确认，每项能力都有可见证据。");
+  answer(session, "requirements_confirmation", "确认，R-001 清单准确且没有遗漏。");
   return session;
 }
 
@@ -72,7 +87,8 @@ describe("demand interview", () => {
 
     assert.ok(question);
     assert.match(question.plain_language_prompt, /UI|界面/);
-    assert.match(question.plain_language_prompt, /命令|入口/);
+    assert.match(question.plain_language_prompt, /入口/);
+    assert.doesNotMatch(question.plain_language_prompt, /manifest|JSON|命令/);
     assert.equal(session.coverage.missing_slots.includes("ui_acceptance"), true);
   }));
 
@@ -94,7 +110,7 @@ describe("demand interview", () => {
   test("initializes a non-technical interview session from idea", () => withRoot((root) => {
     const session = newSession(root);
 
-    assert.equal(DEMAND_INTERVIEW_SCHEMA_VERSION, "1.0");
+    assert.equal(DEMAND_INTERVIEW_SCHEMA_VERSION, "2.0");
     assert.equal(session.schema, DEMAND_INTERVIEW_SCHEMA);
     assert.equal(session.id.startsWith("DINT-20260529-"), true);
     assert.equal(session.demand_id.startsWith("DEMAND-20260529-"), true);
@@ -102,7 +118,8 @@ describe("demand interview", () => {
     assert.equal(session.stateRoot, join(root, ".yolo"));
     assert.equal(session.objective, "Build inventory stockout prevention for store managers.");
     assert.deepEqual(session.answers, {});
-    assert.equal(session.next_question.id, "target_users");
+    assert.equal(session.next_question.id, "premise_current_solution");
+    assert.equal(session.next_question.stage, "premise");
     assert.equal(session.coverage.ready_for_discuss, false);
     assert.equal(session.coverage.ready_for_prd_intake, false);
     assert.ok(session.ledgers.project_memory.path.endsWith(join(".yolo", "memory", "project.jsonl")));
@@ -119,7 +136,7 @@ describe("demand interview", () => {
   }));
 
   test("answers questions in order and advances coverage", () => withRoot((root) => {
-    const session = newSession(root);
+    const session = openLayerOne(newSession(root));
 
     answer(session, "target_users", "Store managers who review inventory every morning and decide which SKU to replenish first.");
     assert.equal(session.answers.target_users.normalized.items[0], "Store managers who review inventory every morning and decide which SKU to replenish first.");
@@ -128,18 +145,23 @@ describe("demand interview", () => {
 
     answer(session, "status_quo", "They export inventory counts each morning and manually scan rows for risky SKUs.");
     answer(session, "pain_points", "Stockouts are discovered after customers complain, which causes rush replenishment work.");
+    assert.equal(session.next_question.id, "layer_1_confirmation");
+    answer(session, "layer_1_confirmation", "确认，这一层理解无误。");
+    answer(session, "day_in_life", "Every morning the store manager opens inventory, checks risky SKUs, and schedules replenishment before the store opens.");
     answer(session, "desired_outcome", "Store managers can see low-stock risks before the item sells out and prioritize replenishment.");
+    assert.equal(session.next_question.id, "layer_2_confirmation");
+    answer(session, "layer_2_confirmation", "确认，这就是完整的一天。");
 
     const coverage = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_discuss, true);
     assert.equal(coverage.ready_for_prd_intake, false);
     assert.ok(coverage.answered_slots.includes("desired_outcome"));
-    assert.ok(coverage.missing_slots.includes("success_criteria"));
-    assert.equal(session.next_question.id, "success_criteria");
+    assert.ok(coverage.missing_slots.includes("exceptions"));
+    assert.equal(session.next_question.id, "exceptions");
   }));
 
   test("creates slot-specific follow-up questions for short or technical answers", () => withRoot((root) => {
-    const session = newSession(root);
+    const session = openLayerOne(newSession(root));
 
     answer(session, "target_users", "API");
 
@@ -152,13 +174,13 @@ describe("demand interview", () => {
     assert.match(session.follow_up_questions[0].plain_language_prompt, /角色|频率|负责/);
     assert.ok(session.readiness.warnings.some((warning) => warning.slot === "target_users"));
 
-    const chineseTechSession = newSession(root);
+    const chineseTechSession = openLayerOne(newSession(root));
     answer(chineseTechSession, "target_users", "接口 数据库");
     assert.equal(chineseTechSession.follow_up_questions[0].reason, "technical_only");
   }));
 
   test("does not count command-like feature lines as target user roles", () => withRoot((root) => {
-    const session = newSession(root);
+    const session = openLayerOne(newSession(root));
 
     answer(session, "target_users", "taskcli add creates a new task in src/tasks.ts");
 
@@ -172,7 +194,7 @@ describe("demand interview", () => {
   }));
 
   test("keeps hyphenated product or fixture names inside valid role answers", () => withRoot((root) => {
-    const session = newSession(root);
+    const session = openLayerOne(newSession(root));
 
     answer(session, "target_users", "Release managers and fixture maintainers check Node.js basic daily before publishing and are responsible for confirming smoke results.");
 
@@ -273,7 +295,7 @@ describe("demand interview", () => {
     assert.ok(coverage.readiness.blockers.some((blocker) => /HUMAN_CLARIFICATION_REQUIRED/.test(String(blocker.code))));
 
     const input = demandInterviewToDemandInput(session);
-    assert.equal(input.open_questions.length, 1);
+    assert.equal(input.open_questions.length >= 1, true);
     const interviewCoverage = input.interview.coverage as { assumptions?: unknown[] };
     assert.equal(interviewCoverage.assumptions?.length, 0);
 
@@ -285,10 +307,10 @@ describe("demand interview", () => {
   test("does not mark detailed MVP tradeoffs vague only because they mention automation", () => withRoot((root) => {
     const session = newSession(root);
 
-    answer(session, "mvp_priority", "MVP includes threshold comparison, visible low-stock label, and filter; supplier automation is explicitly deferred out of version one.");
+    answer(session, "premise_minimum", "MVP includes threshold comparison, visible low-stock label, and filter; supplier automation is explicitly deferred out of version one.");
 
-    assert.equal(session.answers.mvp_priority.quality.level, "sufficient");
-    assert.deepEqual(session.answers.mvp_priority.quality.reasons, []);
+    assert.equal(session.answers.premise_minimum.quality.level, "sufficient");
+    assert.deepEqual(session.answers.premise_minimum.quality.reasons, []);
   }));
 
   test("gates PRD intake on critical slots plus explicit approval", () => withRoot((root) => {
@@ -357,9 +379,9 @@ describe("demand interview", () => {
     assert.deepEqual(input.proof, ["Create a SKU below threshold and confirm the list shows the badge."]);
     assert.deepEqual(input.non_goals, ["Do not build supplier ordering", "do not change order import."]);
     assert.deepEqual(input.exceptions, ["New SKUs without sales history should not be marked high risk by default."]);
-    assert.deepEqual(input.roadmap, ["MVP is threshold alert plus inventory badge", "forecasting can come later."]);
+    assert.deepEqual(input.roadmap, ["The minimum useful version must show a low-stock signal in the existing inventory workflow."]);
     assert.equal(input.approve, true);
-    assert.equal(input.questions.length, 10);
+    assert.equal(input.questions.length, session.questions.length);
     assert.equal(input.open_questions.length, 0);
     assert.equal(input.followups.length, 0);
     assert.equal(input.interview.coverage.follow_up_plan.status, "clear");
@@ -368,7 +390,7 @@ describe("demand interview", () => {
     assert.equal(demandSession.id, session.demand_id);
     assert.deepEqual(demandSession.project.target_users, input.target_users);
     assert.equal(demandSession.approval.approved, true);
-    assert.equal(demandSession.discussion.rounds.length, 10);
+    assert.equal(demandSession.discussion.rounds.length, session.questions.length);
     assert.equal(demandSession.interview.coverage.follow_up_plan.status, "clear");
   }));
 

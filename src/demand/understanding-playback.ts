@@ -19,6 +19,8 @@ interface DemandAnswerRecord extends Record<string, unknown> {
 
 interface UnderstandingSession {
   answers?: unknown;
+  objective?: unknown;
+  title?: unknown;
 }
 
 function normalizedText(record: DemandAnswerRecord): unknown {
@@ -53,6 +55,17 @@ export interface UnderstandingPlayback {
   confirmation_required: boolean;
   prompt: string;
   content_hash: string;
+  scene?: {
+    actor: string;
+    objective: string;
+    current_behavior: string;
+    pain: string;
+    day_in_life: string;
+    desired_outcome: string;
+    exceptions: string;
+    boundaries: string;
+    acceptance_evidence: string;
+  };
   confirmation_contract: {
     schema: string;
     subject: string;
@@ -71,18 +84,39 @@ function playbackContentHash(items: PlaybackItem[]): string {
 // 这是防"鸡同鸭讲"的结构化对齐步骤：审批门只问"批不批准"，复述步骤先确认"我理解对了吗"。
 export function buildUnderstandingPlayback(session: UnderstandingSession = {}): UnderstandingPlayback {
   const answers = isRecord(session.answers) ? session.answers : {};
-  const items: PlaybackItem[] = [];
-  const seen = new Set<string>();
+  const bySlot = new Map<string, string>();
   for (const value of Object.values(answers)) {
     if (!isRecord(value)) continue;
     const record: DemandAnswerRecord = value;
     const slot = clean(record?.slot);
-    if (!slot || slot === "execution_approval" || seen.has(slot)) continue;
-    const understanding = textFromAnswer(record);
-    if (!understanding) continue;
-    seen.add(slot);
-    items.push({ slot, label: slotLabel(slot), understanding });
+    if (!slot || slot === "execution_approval" || bySlot.has(slot)) continue;
+    const text = textFromAnswer(record);
+    if (text) bySlot.set(slot, text);
   }
+
+  const actor = bySlot.get("target_users") || "目标用户";
+  const objective = clean(session.objective || session.title) || bySlot.get("desired_outcome") || "这项工作";
+  const currentBehavior = bySlot.get("status_quo") || bySlot.get("premise_current_solution") || "沿用现在的临时办法";
+  const pain = bySlot.get("pain_points") || bySlot.get("premise_consequence") || "现有流程仍有明确代价";
+  const dayInLife = bySlot.get("day_in_life") || "进入日常工作入口并处理当天事项";
+  const desiredOutcome = bySlot.get("desired_outcome") || bySlot.get("mvp_priority") || objective;
+  const exceptions = bySlot.get("exceptions") || "尚未确认例外情况";
+  const boundaries = bySlot.get("scope_boundaries") || "尚未确认本次边界";
+  const acceptanceEvidence = bySlot.get("success_proof") || bySlot.get("success_criteria") || "尚未确认验收证据";
+  const cadence = /每天|每日|早上|上午|下午|下班|daily|morning|afternoon/i.test(`${actor}\n${dayInLife}\n${currentBehavior}`)
+    ? "每天"
+    : "在需要处理这件事时";
+  const sceneText = [
+    `${cadence}，${actor}打开与“${objective}”相关的工作入口。`,
+    `她/他们先按当前方式处理：${currentBehavior}；这会带来：${pain}。`,
+    `新流程里，先围绕一天的实际步骤完成“${dayInLife}”，然后看到或完成“${desiredOutcome}”。`,
+  ].join("");
+  const items: PlaybackItem[] = bySlot.size > 0 ? [
+    { slot: "scenario", label: "一天的使用场景", understanding: sceneText },
+    { slot: "exceptions", label: slotLabel("exceptions"), understanding: `流程走不下去时，按以下例外处理：${exceptions}。` },
+    { slot: "scope_boundaries", label: slotLabel("scope_boundaries"), understanding: `这次明确保持以下边界：${boundaries}。` },
+    { slot: "success_proof", label: slotLabel("success_proof"), understanding: `用户将通过以下可见证据判断做对了：${acceptanceEvidence}。` },
+  ] : [];
 
   const summary = items.length > 0
     ? items.map((item) => `- ${item.label}：${item.understanding}`).join("\n")
@@ -101,6 +135,17 @@ export function buildUnderstandingPlayback(session: UnderstandingSession = {}): 
     confirmation_required: confirmationRequired,
     prompt,
     content_hash: contentHash,
+    scene: items.length > 0 ? {
+      actor,
+      objective,
+      current_behavior: currentBehavior,
+      pain,
+      day_in_life: dayInLife,
+      desired_outcome: desiredOutcome,
+      exceptions,
+      boundaries,
+      acceptance_evidence: acceptanceEvidence,
+    } : undefined,
     confirmation_contract: {
       schema: "yolo.demand.playback_confirmation_contract.v1",
       subject: "playback.items",
