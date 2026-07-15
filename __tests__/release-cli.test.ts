@@ -47,6 +47,15 @@ describe("YOLO release-candidate CLI", () => {
       assert.ok(payload.issue_codes.includes("RC_GATE_REPORT_BLOCKED"));
       assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_CLEAN_ENVIRONMENT_NOT_EXECUTED"));
       assert.ok(!payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_CANDIDATE_RESULT_INCONSISTENT"));
+      // RED→GREEN: the default runner now provides placeholder blockers for
+      // review/acceptance/delivery that name the specific report and how to
+      // provide it, instead of silently omitting them.
+      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RC_GATE_REVIEW_REPORT_NOT_PROVIDED"),
+        `should have specific review report blocker: ${JSON.stringify(payload.blockers.map((b) => b.issue_code))}`);
+      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RC_GATE_ACCEPTANCE_REPORT_NOT_PROVIDED"),
+        `should have specific acceptance report blocker`);
+      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RC_GATE_DELIVERY_REPORT_NOT_PROVIDED"),
+        `should have specific delivery report blocker`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
