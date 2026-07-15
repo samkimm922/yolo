@@ -95,6 +95,38 @@ function decisionApproved(record: unknown = Object(), candidate: RuntimeBoundary
     && nonEmptyString(summary.rollback_plan || summary.rollback_plan_path);
 }
 
+const RUNTIME_BOUNDARY_DECISION_RECORD_ATTACH_OPTIONS = Object.freeze(["decisionRecord", "decision_record"]);
+
+function buildRuntimeBoundaryDecisionRecordTemplate(targetExport: string): ReleaseRecord {
+  return {
+    description: "Copy this record, fill in approver/timestamps, and attach it via the decisionRecord / decision_record option to satisfy the approval gate.",
+    attach_via: RUNTIME_BOUNDARY_DECISION_RECORD_ATTACH_OPTIONS[0],
+    attach_options: [...RUNTIME_BOUNDARY_DECISION_RECORD_ATTACH_OPTIONS],
+    required_fields: {
+      approved: "true",
+      approver: "non-empty string (operator also accepted)",
+      approved_at: "ISO-8601 timestamp (executed_at also accepted)",
+      target_export: targetExport,
+      current_tier: "experimental",
+      proposed_tier: "stable",
+      stability_reviewed: "true",
+      rollback_plan_approved: "true",
+      rollback_plan: "non-empty string describing how to revert (rollback_plan_path also accepted)",
+    },
+    entry_template: {
+      approved: true,
+      approver: "<release-owner>",
+      approved_at: "<ISO-8601 timestamp>",
+      target_export: targetExport,
+      current_tier: "experimental",
+      proposed_tier: "stable",
+      stability_reviewed: true,
+      rollback_plan_approved: true,
+      rollback_plan: "revert docs/public-sdk-api-boundary.json ./runtime tier to experimental",
+    },
+  };
+}
+
 export function buildRuntimeBoundaryDecisionPlan(options: RuntimeBoundaryDecisionOptions = Object()): RuntimeBoundaryDecisionPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const targetExport = options.targetExport || options.target_export || "./runtime";
@@ -208,5 +240,6 @@ export function runRuntimeBoundaryDecisionGate(options: RuntimeBoundaryDecisionO
     next_actions: blockers.length === 0
       ? ["Apply the approved boundary/doc changes in a separate reviewed patch; this gate intentionally does not edit them."]
       : ["Resolve candidate blockers or attach an explicit human runtime stable-boundary approval record."],
+    ...(blockers.length > 0 ? { decision_record_template: buildRuntimeBoundaryDecisionRecordTemplate(plan.target_export) } : {}),
   };
 }

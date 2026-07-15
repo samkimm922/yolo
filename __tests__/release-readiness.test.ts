@@ -21,6 +21,34 @@ describe("release readiness", () => {
     assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
   });
 
+  test("inspectYoloReliabilityReadiness blocked result carries an incident evidence schema template", () => {
+    const result = inspectYoloReliabilityReadiness();
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.incident_evidence_template, "blocked gate must surface an incident_evidence_template");
+    const template = result.incident_evidence_template as Record<string, unknown>;
+
+    // Template must show the accepted top-level shape (incidents/results/checks).
+    const acceptedArrays = template.accepted_arrays as unknown[];
+    assert.ok(Array.isArray(acceptedArrays) && acceptedArrays.length > 0, "template must enumerate accepted array fields");
+
+    // Entry skeleton must mirror normalizeIncidentEvidence's accepted shape.
+    assert.ok(template.entry_template);
+    const acceptedIdFields = template.accepted_id_fields as unknown[];
+    assert.ok(Array.isArray(acceptedIdFields) && acceptedIdFields.includes("id"), "template must list accepted id fields including id");
+    const acceptedPassStatuses = template.accepted_pass_statuses as unknown[];
+    assert.ok(Array.isArray(acceptedPassStatuses) && acceptedPassStatuses.includes("pass"), "template must list accepted pass statuses");
+    const acceptedEvidenceFields = template.accepted_evidence_fields as unknown[];
+    assert.ok(Array.isArray(acceptedEvidenceFields) && acceptedEvidenceFields.includes("evidence"), "template must list accepted evidence fields including evidence");
+
+    // A single example entry using the YB-001 id must be valid against the normalize contract:
+    // id present, a pass status, and an evidence link.
+    const example = template.example as Record<string, unknown>;
+    assert.equal(example.id, "YB-001");
+    assert.ok((acceptedPassStatuses as string[]).includes(String(example.status)));
+    assert.ok((acceptedEvidenceFields as string[]).some((field) => example[field] != null));
+  });
+
   test("inspectYoloReliabilityReadiness blocks fake success reports and contaminated external remediation", () => {
     const result = inspectYoloReliabilityReadiness({
       incidentEvidence: {
