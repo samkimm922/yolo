@@ -139,11 +139,20 @@ export function inspectProviderCapabilityGate(options = Object()) {
   }
 
   if (provider === "custom" && required.length > 0) {
-    warnings.push({
-      code: "PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED",
-      provider,
-      message: "custom provider required capabilities cannot be verified automatically",
-    });
+    const overrides = config.ai?.capability_overrides || {};
+    // When the operator sets capability_overrides.acknowledged=true they are
+    // explicitly accepting the custom-provider risk ("I verified this executor
+    // can do what the PRD requires"). Without this escape, any custom provider
+    // with required capabilities produces an inescapable
+    // PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED warning that is then unconditionally
+    // escalated to a hard block — making the custom provider path unusable.
+    if (overrides.acknowledged !== true) {
+      warnings.push({
+        code: "PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED",
+        provider,
+        message: "custom provider required capabilities cannot be verified automatically; set config.ai.capability_overrides.acknowledged=true after verifying the executor can satisfy all required_capabilities",
+      });
+    }
   }
 
   return {

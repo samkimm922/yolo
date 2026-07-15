@@ -85,7 +85,8 @@ const INVENTORY = [
   // must_split-reachable: split-suggestions downgrade comment adds one "warning"; 2 -> 3.
   ["src/runtime/gates/prd-contract-doctor.ts", { WARN: 4, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/pre-execution-gates.ts", { WARN: 0, warning: 12, "best-effort": 0, skip: 0 }],
-  ["src/runtime/gates/provider-capability-gate.ts", { WARN: 0, warning: 8, "best-effort": 0, skip: 0 }],
+  // provider-capability-escape: acknowledged override message adds one "warning" keyword; 8 -> 9.
+  ["src/runtime/gates/provider-capability-gate.ts", { WARN: 0, warning: 9, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/test-generation-validator.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/runtime/learning/learn.ts", { WARN: 9, warning: 0, "best-effort": 1, skip: 0 }],
   ["src/runtime/logging/task-logger.ts", { WARN: 0, warning: 0, "best-effort": 1, skip: 0 }],
