@@ -240,6 +240,44 @@ describe("task loop expansion", () => {
     assert.deepEqual(ordered.preflight.blockers[0].task_ids, ["A", "B", "C"]);
   });
 
+  test("dependency cycle blocker reports the specific edges and how to break the cycle", () => {
+    // RED: the cycle blocker only reported task_ids joined with " -> " and gave
+    // no recovery guidance. It should identify the specific dependency edges
+    // participating in the cycle and suggest how to break it (remove a
+    // depends_on entry or regenerate the PRD).
+    const { preflight } = expandTasksForMainLoop({
+      tasks: [
+        baseTask({ id: "A", priority: "P1", depends_on: ["B"] }),
+        baseTask({ id: "B", priority: "P1", depends_on: ["A"] }),
+      ],
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+    });
+
+    const cycleBlocker = preflight.blockers.find((b) => b.code === "TASK_DEPENDENCY_CYCLE");
+    assert.ok(cycleBlocker, "expected a TASK_DEPENDENCY_CYCLE blocker");
+
+    // The blocker should list the specific edges that form the cycle.
+    assert.ok(Array.isArray(cycleBlocker.cycle_edges), "cycle_edges should be an array");
+    assert.ok(cycleBlocker.cycle_edges.length > 0, "cycle_edges should not be empty");
+
+    // Each edge should name the source task and the dependency it declares.
+    for (const edge of cycleBlocker.cycle_edges) {
+      assert.ok(edge.task_id, "each cycle edge should name a task_id");
+      assert.ok(edge.depends_on, "each cycle edge should name the depends_on target");
+    }
+
+    // The blocker should carry a concrete recovery hint — not just "fix it".
+    assert.ok(
+      cycleBlocker.remediation || cycleBlocker.next_actions,
+      "cycle blocker should carry remediation or next_actions",
+    );
+    const recoveryText = JSON.stringify(cycleBlocker.remediation || cycleBlocker.next_actions);
+    assert.ok(
+      /depends_on|remove|break|regenerate/i.test(recoveryText),
+      `recovery text should mention removing a depends_on edge or regenerating: ${recoveryText}`,
+    );
+  });
+
   test("skips null / non-object task entries instead of crashing during expansion", () => {
     // PRD with null / string / number siblings (manual edits, migration residue,
     // retry PRDs built from already-corrupt state). Same YB family as #104.

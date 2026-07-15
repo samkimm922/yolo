@@ -354,14 +354,92 @@ function noRootDependencyBlocker(nodes) {
   }, "task_graph_no_root");
 }
 
-function dependencyCycleBlocker(nodes) {
+function dependencyCycleBlocker(nodes, dependenciesByKey, nodesByKey) {
   const taskIds = nodes.map((node) => taskDisplayId(node.task, node.key));
+  const cycleEdges = traceCycleEdges(nodes, dependenciesByKey, nodesByKey);
+  const edgeSummary = cycleEdges.length > 0
+    ? cycleEdges.map((edge) => `${edge.task_id} depends_on ${edge.depends_on}`).join("; ")
+    : taskIds.join(" -> ");
+  const suggestedFix = cycleEdges.length > 0
+    ? `Remove one of these depends_on entries to break the cycle, or regenerate the PRD: ${cycleEdges.map((e) => `"${e.task_id}".depends_on`).join(", ")}`
+    : "Remove one dependency edge to break the cycle, or regenerate the PRD.";
   return {
     code: "TASK_DEPENDENCY_CYCLE",
     source: "task-loop-expansion",
     task_ids: taskIds,
-    message: `Circular task dependency blocks execution: ${taskIds.join(" -> ")}`,
+    cycle_edges: cycleEdges,
+    message: `Circular task dependency blocks execution: ${edgeSummary}. ${suggestedFix}`,
+    remediation: {
+      action: "BREAK_DEPENDENCY_CYCLE",
+      cycle_edges: cycleEdges,
+      next_actions: [
+        `Remove one depends_on entry from the cycle edges above (e.g. remove "${cycleEdges[0]?.depends_on || "the redundant dependency"}" from task "${cycleEdges[0]?.task_id || "listed above"}"), then re-run.`,
+        "Alternatively, regenerate the PRD so dependencies form a valid DAG (no cycles).",
+      ],
+    },
   };
+}
+
+/**
+ * Trace one concrete directed cycle among the leftover (non-ordered) nodes
+ * using DFS on the dependencies graph. Returns a list of {task_id, depends_on}
+ * edges that form the cycle. If no cycle is found (e.g. nodes are blocked but
+ * not cyclic), returns [] and the caller falls back to listing task_ids.
+ */
+function traceCycleEdges(nodes, dependenciesByKey, nodesByKey) {
+  const leftoverKeys = new Set(nodes.map((node) => node.key));
+  const visited = new Set();
+  const stack = [];
+  const onStack = new Set();
+
+  function dfs(key) {
+    if (onStack.has(key)) {
+      // Found a cycle: extract edges from the stack.
+      const cycleStart = stack.indexOf(key);
+      const path = stack.slice(cycleStart);
+      const edges = [];
+      for (let i = 0; i < path.length; i++) {
+        const fromKey = path[i];
+        const toKey = path[(i + 1) % path.length];
+        const fromNode = nodesByKey.get(fromKey);
+        const toNode = nodesByKey.get(toKey);
+        if (fromNode && toNode) {
+          edges.push({
+            task_id: taskDisplayId(fromNode.task, fromNode.key),
+            depends_on: taskDisplayId(toNode.task, toNode.key),
+          });
+        }
+      }
+      return edges;
+    }
+    if (visited.has(key)) return null;
+
+    visited.add(key);
+    onStack.add(key);
+    stack.push(key);
+
+    const deps = dependenciesByKey.get(key);
+    if (deps) {
+      for (const depKey of deps) {
+        if (leftoverKeys.has(depKey)) {
+          const result = dfs(depKey);
+          if (result) return result;
+        }
+      }
+    }
+
+    stack.pop();
+    onStack.delete(key);
+    return null;
+  }
+
+  for (const node of nodes) {
+    if (!visited.has(node.key)) {
+      const result = dfs(node.key);
+      if (result) return result;
+    }
+  }
+  return [];
 }
 
 function passPreflight() {
@@ -442,7 +520,7 @@ export function orderTasksByDependencies(tasks = [], { priorityOrder = Object() 
   if (ordered.length !== nodes.length) {
     const orderedKeys = new Set(ordered.map((node) => node.key));
     const cycleNodes = nodes.filter((node) => !orderedKeys.has(node.key));
-    blockers.push(dependencyCycleBlocker(cycleNodes));
+    blockers.push(dependencyCycleBlocker(cycleNodes, dependenciesByKey, nodesByKey));
     return {
       tasks: [...ordered, ...cycleNodes].map((node) => node.task),
       preflight: dependencyBlockedPreflight(blockers),
