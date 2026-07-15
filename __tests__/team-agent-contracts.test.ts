@@ -74,4 +74,44 @@ describe("team agent contracts", () => {
     assert.deepEqual(bound.edit_authority.code_writing_agents, ["implementer-agent"]);
     assert.equal(bound.edit_authority.requires_explicit_user_confirmation, true);
   });
+
+  test("runtime binding blocker exposes a schema skeleton and next actions for each unresolved role", () => {
+    const blocked = buildTeamDispatchPlan({
+      currentStage: "run",
+      objective: "Implement checked PRD",
+      executable: true,
+      runtimeBindings: {
+        "pi-agent": { runtime: "sdk.pi" },
+      },
+    });
+
+    assert.equal(blocked.status, "blocked");
+    assert.deepEqual(blocked.unresolved_roles.map((role) => role.agent_id), ["implementer-agent"]);
+
+    // Each unresolved role points the operator at the shape a runtime binding takes.
+    for (const role of blocked.unresolved_roles) {
+      assert.ok(role.example_runtime_binding, `unresolved role ${role.agent_id} should include an example binding`);
+      const example = role.example_runtime_binding as Record<string, unknown>;
+      assert.equal(example.runtime, "external");
+      assert.equal(example.provider, "");
+      assert.equal(example.evidence_output, "");
+      assert.deepEqual(role.evidence_only_roles, ["implementer-agent"]);
+    }
+
+    // Each blocker also carries the per-role skeleton plus next actions.
+    const blocker = blocked.blockers.find((item) => item.code === "TEAM_AGENT_RUNTIME_BINDING_REQUIRED");
+    assert.ok(blocker, "expected a runtime binding blocker");
+
+    const runtimeExample = blocker.example_runtime_binding as Record<string, unknown>;
+    assert.deepEqual(
+      Object.keys(runtimeExample).sort(),
+      ["evidence_output", "provider", "runtime"],
+    );
+    assert.deepEqual(blocker.example_evidence_only_roles, ["implementer-agent"]);
+
+    assert.ok(Array.isArray(blocker.next_actions) && blocker.next_actions.length > 0);
+    const next = blocker.next_actions as string[];
+    assert.ok(next.some((action) => action.includes("implementer-agent")));
+    assert.ok(next.some((action) => action.toLowerCase().includes("runtime binding") || action.toLowerCase().includes("evidence_only")));
+  });
 });

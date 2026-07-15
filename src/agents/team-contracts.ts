@@ -188,6 +188,31 @@ function normalizeRuntimeBinding(agent: TeamAgentContract, bindings: RuntimeBind
   };
 }
 
+// Skeleton mirroring the { runtime, provider, evidence_output } shape that
+// normalizeRuntimeBinding accepts, with the same default values it falls back
+// to. Used to show operators exactly what a runtime binding should look like.
+function runtimeBindingSkeleton() {
+  return {
+    runtime: "external",
+    provider: "",
+    evidence_output: "",
+  };
+}
+
+function nextActionsForUnresolvedBindings(unresolvedIds: string[], evidenceOnlyIds: string[]): string[] {
+  const actions: string[] = [];
+  const roleList = unresolvedIds.join(", ") || "the unresolved role(s)";
+  actions.push(
+    `Provide a runtime binding for ${roleList}, e.g. runtimeBindings: { "${unresolvedIds[0] || "implementer-agent"}": ${JSON.stringify(runtimeBindingSkeleton())} }.`,
+  );
+  if (evidenceOnlyIds.length > 0) {
+    actions.push(
+      `Or mark ${evidenceOnlyIds.join(", ")} as evidence_only by passing evidenceOnlyRoles: ${JSON.stringify(evidenceOnlyIds)} to skip executable dispatch for those roles.`,
+    );
+  }
+  return actions;
+}
+
 export function listTeamAgentContracts() {
   return TEAM_AGENT_CONTRACTS.map(clone);
 }
@@ -256,6 +281,9 @@ export function buildTeamDispatchPlan(options: DispatchOptions = {}) {
   });
   const unresolved = resolvedAgents.filter((agent) => agent.binding_status === "unresolved");
   const executableAgents = resolvedAgents.filter((agent) => agent.executable);
+  const unresolvedIds = unresolved.map((agent) => agent.id);
+  const evidenceOnlyIds = unresolved.map((agent) => agent.id);
+  const bindingNextActions = nextActionsForUnresolvedBindings(unresolvedIds, evidenceOnlyIds);
   return {
     schema_version: TEAM_AGENT_CONTRACT_SCHEMA_VERSION,
     schema: TEAM_DISPATCH_PLAN_SCHEMA,
@@ -269,11 +297,16 @@ export function buildTeamDispatchPlan(options: DispatchOptions = {}) {
       agent_id: agent.id,
       label: agent.label,
       reason: "runtime_binding_or_explicit_evidence_only_required",
+      example_runtime_binding: runtimeBindingSkeleton(),
+      evidence_only_roles: [agent.id],
     })),
     blockers: unresolved.map((agent) => ({
       code: "TEAM_AGENT_RUNTIME_BINDING_REQUIRED",
       agent_id: agent.id,
       message: "Executable team dispatch requires each role to have a runtime binding or explicit evidence_only status.",
+      example_runtime_binding: runtimeBindingSkeleton(),
+      example_evidence_only_roles: [agent.id],
+      next_actions: bindingNextActions,
     })),
     handoffs: selected.map((agent, index) => ({
       order: index + 1,

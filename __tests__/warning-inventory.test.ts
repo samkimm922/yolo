@@ -16,6 +16,8 @@ const SOURCE_ROOTS = ["src", "bin"];
 const ROOT_ENTRYPOINTS = ["runner.ts", "gate.ts", "prompt.ts", "learn.ts", "sdk.ts"];
 
 const INVENTORY = [
+  // team-dispatch-binding: next_actions text uses "skip" for evidence-only roles.
+  ["src/agents/team-contracts.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/cli/gate.ts", { WARN: 10, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/cli/prd-preflight.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/cli/prompt.ts", { WARN: 1, warning: 2, "best-effort": 0, skip: 0 }],
@@ -122,6 +124,7 @@ const INVENTORY = [
 ];
 
 const COVERAGE_RULES = [
+  { prefix: "src/agents/", rationale: "Agent team dispatch binding skips are evidence-only role assignments, not silent pass-throughs.", coveredBy: ["__tests__/team-agent-contracts.test.ts"] },
   { prefix: "src/lib/", rationale: "Legacy evaluator warnings are allowed only as non-blocking diagnostics.", coveredBy: ["__tests__/engine.test.ts"] },
   { prefix: "src/cli/", rationale: "CLI warning and support-entry paths must remain visible through public CLI smoke tests.", coveredBy: ["__tests__/public-entrypoints.test.ts", "__tests__/command-registry.test.ts"] },
   { prefix: "src/core/setup.ts", rationale: "Project setup may skip already-present scaffolding while reporting the plan.", coveredBy: ["__tests__/project-setup.test.ts"] },
