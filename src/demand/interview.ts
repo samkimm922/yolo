@@ -34,12 +34,6 @@ export interface DemandInterviewQuestion extends DemandRecord {
     examples?: string[];
   };
   required_for?: string[];
-  follow_up?: boolean;
-  follow_up_id?: string;
-  follow_up_code?: string;
-  follow_up_reason?: string;
-  follow_up_severity?: string;
-  original_prompt?: string;
   stage?: PMProtocolStageId | string;
   layer?: number;
   confirmation_gate?: boolean;
@@ -47,45 +41,6 @@ export interface DemandInterviewQuestion extends DemandRecord {
   recommended_answer?: string;
   recommendation_reason?: string;
   protocol_schema?: string;
-}
-
-export interface DemandInterviewFollowUpQuestion extends DemandRecord {
-  id?: string;
-  question_id: string;
-  slot: string;
-  category: string;
-  severity?: string;
-  code?: string;
-  reason?: string;
-  plain_language_prompt: string;
-  text?: string;
-  message?: string;
-}
-
-export interface DemandInterviewFollowUpCounter extends DemandRecord {
-  slot: string;
-  count: number;
-  reasons: string[];
-  updated_at?: string | null;
-}
-
-export interface DemandInterviewAcceptedAssumption extends DemandRecord {
-  slot: string;
-  question_id: string;
-  answer: string;
-  reasons: string[];
-  message: string;
-  follow_up_count: number;
-  accepted_at?: string | null;
-}
-
-export interface DemandInterviewAnswerQuality extends DemandRecord {
-  score: number;
-  level: string;
-  reasons: string[];
-  follow_up_questions: DemandInterviewFollowUpQuestion[];
-  original_score?: number;
-  assumption?: DemandInterviewAcceptedAssumption | null;
 }
 
 export interface DemandInterviewAnswerRecord extends DemandRecord {
@@ -98,36 +53,10 @@ export interface DemandInterviewAnswerRecord extends DemandRecord {
     text?: string;
     items?: string[];
   };
-  quality?: DemandInterviewAnswerQuality;
-  answer_quality?: DemandInterviewAnswerQuality;
   answered_at?: string | null;
 }
 
 export type DemandInterviewAnswers = Record<string, DemandInterviewAnswerRecord>;
-
-export interface DemandInterviewFollowUpPlan extends DemandRecord {
-  schema: string;
-  status: string;
-  total: number;
-  follow_up_questions: DemandInterviewFollowUpQuestion[];
-  by_slot: Array<{
-    slot?: string;
-    question_id?: string;
-    category?: string;
-    severity: string;
-    code?: string;
-    reason?: string;
-    questions: string[];
-  }>;
-}
-
-export interface DemandInterviewQualitySummary extends DemandRecord {
-  score: number;
-  level: string;
-  checked_slots: string[];
-  low_quality_slots: string[];
-  accepted_with_assumption_slots?: string[];
-}
 
 export interface DemandInterviewApprovalState extends DemandRecord {
   answered: boolean;
@@ -141,26 +70,15 @@ export interface DemandInterviewReadiness extends DemandRecord {
   ready_for_discuss: boolean;
   ready_for_prd_intake: boolean;
   quality_score: number;
-  answer_quality_score: number;
-  answer_quality: DemandInterviewQualitySummary;
   blockers: DemandRecord[];
-  warnings: DemandRecord[];
-  follow_up_questions: DemandInterviewFollowUpQuestion[];
-  follow_up_plan: DemandInterviewFollowUpPlan;
-  assumptions: DemandInterviewAcceptedAssumption[];
   next_actions: string[];
 }
 
 export interface DemandInterviewCoverage extends DemandRecord {
   readiness: DemandInterviewReadiness;
-  follow_up_questions: DemandInterviewFollowUpQuestion[];
-  follow_up_plan: DemandInterviewFollowUpPlan;
   missing: DemandInterviewQuestion[];
   missing_slots: string[];
   answered_slots: string[];
-  quality: DemandInterviewQualitySummary;
-  answer_quality: DemandRecord[];
-  assumptions: DemandInterviewAcceptedAssumption[];
   approval: DemandInterviewApprovalState;
   ready_for_discuss: boolean;
   ready_for_prd_intake: boolean;
@@ -198,10 +116,6 @@ export interface DemandInterviewSession extends Omit<DemandRuntimeInput, "answer
   answers?: DemandInterviewAnswers;
   coverage?: DemandInterviewCoverage;
   readiness?: DemandInterviewReadiness;
-  follow_up_questions?: DemandInterviewFollowUpQuestion[];
-  follow_up_plan?: DemandInterviewFollowUpPlan;
-  follow_up_counts?: Record<string, DemandInterviewFollowUpCounter>;
-  accepted_assumptions?: DemandInterviewAcceptedAssumption[];
   next_question?: DemandInterviewQuestion | null;
   ledgers?: DemandInterviewLedgers;
 }
@@ -330,7 +244,6 @@ const DISCUSS_REQUIRED_SLOTS: string[] = [
   "day_in_life",
   "desired_outcome",
 ];
-const FOLLOW_UP_SEVERITY = "warning";
 const PRD_REQUIRED_SLOTS: string[] = [
   "premise_consequence",
   "mvp_priority",
@@ -430,381 +343,6 @@ export function targetUserRoleItems(value: unknown): string[] {
 
 export function hasTargetUserRole(value: unknown): boolean {
   return targetUserRoleItems(value).length > 0;
-}
-
-function wordTokens(text: unknown): string[] {
-  return clean(text).match(/[A-Za-z0-9]+|[\u4e00-\u9fff]/g) || [];
-}
-
-function hasPattern(text: string, patterns: RegExp[] = []): boolean {
-  return patterns.some((pattern) => pattern.test(text));
-}
-
-function compactReasons(reasons: Array<string | null | undefined> = []): string[] {
-  return [...new Set(reasons.filter(Boolean))];
-}
-
-const VAGUE_PATTERNS = [
-  /^(users?|admins?|customers?|staff|operator|manager|system|平台|用户|客户|管理员|人员|业务|系统)$/i,
-  /^(做好一点|做得更好|让用户满意就行|用户满意就行|尽快完成|越快越好|差不多就行)$/i,
-  /(etc\.?|等等|之类|相关|一些|某些|各种|多种|优化|提升|改善|更好|方便|智能|自动化|看情况)/i,
-  /(满意|尽快|差不多|随便|都可以|不确定|先这样|越快越好)/i,
-  /(better|improve|optimi[sz]e|nice|easy|fast|smart|automation|dashboard|tooling)/i,
-];
-
-const TECHNICAL_TERMS = [
-  "api",
-  "sdk",
-  "db",
-  "sql",
-  "redis",
-  "kafka",
-  "react",
-  "vue",
-  "node",
-  "typescript",
-  "python",
-  "java",
-  "endpoint",
-  "service",
-  "backend",
-  "frontend",
-  "database",
-  "schema",
-  "server",
-  "cache",
-  "queue",
-  "cron",
-  "webhook",
-  "token",
-  "jwt",
-  "oauth",
-  "微服务",
-  "接口",
-  "数据库",
-  "缓存",
-  "队列",
-  "前端",
-  "后端",
-  "服务",
-  "模型",
-  "算法",
-];
-
-function technicalOnly(text: unknown): boolean {
-  const cleanText = clean(text).toLowerCase();
-  if (!cleanText) return false;
-  const chunks = cleanText.split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
-  if (chunks.length === 0) return false;
-  const technicalHits = TECHNICAL_TERMS.filter((term) => cleanText.includes(term)).length;
-  const hasBusinessSignal = hasPattern(cleanText, [
-    /manager|customer|support|sales|ops|operator|user|store|finance|legal|客服|店长|运营|销售|财务|法务|主管|用户|客户|门店|仓库|工单|订单|库存/,
-    /when|daily|weekly|每[天周月]|上线|验收|现场|负责|处理|查看|确认|投诉|缺货|违约|审批|交付/,
-  ]);
-  return technicalHits > 0 && technicalHits / Math.max(chunks.length, technicalHits) >= 0.5 && !hasBusinessSignal;
-}
-
-type DetailSignal = "quantified" | "artifact" | "assertion" | "causal" | "role_context" | "explicit_none";
-
-const SLOT_DETAIL_SIGNALS: Record<string, DetailSignal[]> = {
-  premise_consequence: ["quantified", "assertion", "causal"],
-  target_users: ["role_context"],
-  status_quo: ["quantified", "artifact", "assertion"],
-  pain_points: ["quantified", "artifact", "assertion", "causal"],
-  day_in_life: ["quantified", "assertion", "role_context"],
-  desired_outcome: ["quantified", "artifact", "assertion"],
-  success_criteria: ["quantified", "artifact", "assertion"],
-  ui_acceptance: ["quantified", "artifact", "assertion"],
-  scope_boundaries: ["artifact", "assertion"],
-  exceptions: ["explicit_none", "quantified", "artifact", "assertion", "causal"],
-  mvp_priority: ["quantified", "artifact", "assertion"],
-};
-
-const DETAIL_SIGNAL_GUIDANCE: Record<DetailSignal, string> = {
-  quantified: "具体数量/日期/百分比/时长",
-  artifact: "可执行的命令或产物名",
-  assertion: "“当…时…”或“必须…”式可观察结果",
-  causal: "“因为/导致/造成/后果”式影响说明",
-  role_context: "角色名词加具体场景描述",
-  explicit_none: "明确写“没有特殊情况”",
-};
-
-function hasQuantifiedSignal(text: string): boolean {
-  const value = clean(text);
-  return hasPattern(value, [
-    /\d/u,
-    /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/u,
-    /[零一二两三四五六七八九十百千万\d]+(?:个|次|天|周|月|年|小时|分钟|秒|行|条|件|类|名|位|份|组|列|项|轮|版|步|种|%)/u,
-    /(?:每天|每日|每周|每月|每年|每次|每当|每[天日周月年次])/u,
-    /\b(?:daily|weekly|monthly|hourly|each|every|once|twice|at least|at most|counts?|counted|counting|totals?)\b/i,
-  ]);
-}
-
-function hasArtifactSignal(text: string): boolean {
-  const value = clean(text);
-  return hasPattern(value, [
-    CLI_COMMAND_START,
-    CODE_STYLE_SIGNAL,
-    COMMAND_VERB_START,
-    /https?:\/\/\S+|www\.\S+/i,
-    /(?:^|\s)(?:\.{1,2}\/|\/[\w.-]+\/|[A-Za-z]:\\|[\w.-]+\/[\w./-]+)/u,
-    /--[A-Za-z0-9][\w-]*/u,
-    /`[^`]+`|"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’/u,
-    /\b[A-Z]{2,}s?\b/u,
-    /\b[A-Z][A-Z0-9_]{1,}\b/u,
-    /\b[A-Z][a-z]+\/[A-Z][a-z]+\b/u,
-    /\b[A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+)+\b/u,
-    /\b[A-Z][A-Za-z0-9]+(?:\s+[A-Za-z0-9]+){0,3}\s*:/u,
-  ]);
-}
-
-function hasAssertionSignal(text: string): boolean {
-  const value = clean(text);
-  return hasPattern(value, [
-    /(?:必须|应当|不得|需要|不能|不应|禁止|至少|至多|确保|保证)[^。；;]{2,}/u,
-    /(?:当|如果|若|每当|一旦)[^。；;]{2,}/u,
-    /[^。；;，,]{2,40}时[，,]?\S{2,}/u,
-    /(?:最小版本|第一版|本次).{0,20}(?:包含|支持|提供|显示)[^。；;]{2,}/u,
-    /(?:用户|店长|成员|负责人|主管|客服|角色).{0,16}(?:可以|能|看到|收到|完成)[^。；;]{2,}/u,
-    /(?:不做|不改|不碰|不包含|不要|不允许|不暴露|只做|仅覆盖|仅支持|排除)[^。；;]{2,}/u,
-    /\b(?:must|should|shall|need(?:s)? to|has to|cannot|can't|do not|don't|does not|doesn't|only|without|exclude)\b.{2,}/i,
-    /\b(?:when|if|whenever|once|after|before|during|while)\b.{2,}/i,
-  ]);
-}
-
-function hasCausalSignal(text: string): boolean {
-  const value = clean(text);
-  return hasPattern(value, [
-    /(?:因为|导致|造成|后果|影响|使得|以免|避免|返工|风险|太[慢晚贵长高低]|过[慢晚长高低])[^。；;]*/u,
-    /\b(?:because|caus(?:e|es|ed|ing)|so that|therefore|leads? to|results? in|impact|risk|prevents?|avoid|after|too\s+\w+)\b/i,
-  ]);
-}
-
-function hasExplicitNoExceptionSignal(text: string): boolean {
-  return hasPattern(clean(text), [
-    /^(?:没有|无|暂无|没有特殊情况|无特殊情况|没有异常|无异常)[。.!！\s]*$/u,
-    /^(?:none|no special cases?|no exceptions?|n\/a)[.! \t]*$/i,
-  ]);
-}
-
-function hasRoleContextSignal(text: string): boolean {
-  const value = clean(text);
-  const tokens = wordTokens(value);
-  const hasChineseRole = /[\u4e00-\u9fff]{2,}(?:员|师|官|经理|主管|负责人|编辑|审核|维护者|管理员|用户|客户|团队|小组|角色)/u.test(value);
-  const hasEnglishRole = /\b[A-Za-z][A-Za-z-]+(?:\s+[A-Za-z][A-Za-z-]+){0,3}\s+(?:managers?|owners?|operators?|editors?|reviewers?|maintainers?|analysts?|admins?|users?|customers?|leads?|teams?|staff|engineers?)\b/i.test(value)
-    || /\b[A-Za-z][A-Za-z-]*(?:ers|ors|ists|ants|ees)\b/i.test(value);
-  const hasContext = hasQuantifiedSignal(value)
-    || hasAssertionSignal(value)
-    || /\b(?:who|that|during|while|responsible for|need(?:s)? to|review(?:s)?|check(?:s)?|confirm(?:s)?)\b/i.test(value)
-    || /(?:负责|需要|用于|用来|查看|确认|处理|审核|维护|在.+时)/u.test(value)
-    || tokens.length >= 7;
-  return (hasChineseRole || hasEnglishRole) && hasContext;
-}
-
-function signalMatches(signal: DetailSignal, text: string): boolean {
-  if (signal === "quantified") return hasQuantifiedSignal(text);
-  if (signal === "artifact") return hasArtifactSignal(text);
-  if (signal === "assertion") return hasAssertionSignal(text);
-  if (signal === "causal") return hasCausalSignal(text);
-  if (signal === "role_context") return hasRoleContextSignal(text);
-  if (signal === "explicit_none") return hasExplicitNoExceptionSignal(text);
-  return false;
-}
-
-function hasSlotDetail(slot: string, text: string): boolean {
-  const signals = SLOT_DETAIL_SIGNALS[slot] || ["quantified", "artifact", "assertion"];
-  return signals.some((signal) => signalMatches(signal, text));
-}
-
-function shortAnswerAllowed(slot: string, text: string): boolean {
-  return slot === "exceptions" && hasExplicitNoExceptionSignal(text);
-}
-
-const SLOT_FOLLOW_UPS: Record<string, Record<string, string>> = {
-  target_users: {
-    missing_detail: "还缺以下任一种：角色名词加具体场景描述、具体数量/日期、或“当…时…”/“必须…”式可观察结果。",
-    technical_only: "还缺真实使用或负责的人：请写角色名词、具体场景描述，或补充具体数量/日期。",
-    not_role: "还缺真实角色：当前像命令或功能名，请改成角色名词加具体场景描述。",
-    vague: "还缺以下任一种：角色名词加具体场景描述、具体数量/日期、或“当…时…”/“必须…”式可观察结果。",
-  },
-  status_quo: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-    technical_only: "还缺当前流程的可观察结果：请补具体数量/日期、产物名，或“当…时…”式描述。",
-    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式当前流程。",
-  },
-  pain_points: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、“当…时…”式场景，或“因为/导致/造成/后果”式影响说明。",
-    technical_only: "还缺痛点影响：请补具体数量/日期，或写清“因为/导致/造成/后果”。",
-    vague: "还缺以下任一种：具体数量/日期、“当…时…”式场景，或“因为/导致/造成/后果”式影响说明。",
-  },
-  desired_outcome: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-    technical_only: "还缺可观察结果：请补具体数量/日期、产物名，或“当…时…”式结果。",
-    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式目标结果。",
-  },
-  success_criteria: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-    technical_only: "还缺可验收的观察点：请补具体数量/日期、产物名，或“当…时…”/“必须…”式结果。",
-    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
-  },
-  scope_boundaries: {
-    missing_detail: "还缺以下任一种：明确“不做/不改/不碰/只做”的可观察边界、具体数量/日期、或产物名。",
-    technical_only: "还缺范围边界：请写明确“不做/不改/不碰/只做”的可观察边界。",
-    vague: "还缺以下任一种：明确“不做/不改/不碰/只做”的可观察边界、具体数量/日期、或产物名。",
-  },
-  exceptions: {
-    missing_detail: "还缺以下任一种：明确写“没有特殊情况”、具体数量/日期、产物名、“当…时…”式边界，或“因为/导致/造成/后果”式影响说明。",
-    technical_only: "还缺异常条件和可观察结果：请补具体数量/日期、产物名，或“当…时…”式边界。",
-    vague: "还缺以下任一种：明确写“没有特殊情况”、具体数量/日期，或“当…时…”式边界。",
-  },
-  mvp_priority: {
-    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“必须/后续/暂缓”式可观察取舍。",
-    technical_only: "还缺第一版取舍：请补具体数量/日期、产物名，或“必须/后续/暂缓”式边界。",
-    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“必须/后续/暂缓”式可观察取舍。",
-  },
-  execution_approval: {
-    missing_detail: "请明确回答“批准”或“暂不批准”，如果暂不批准请说明还缺什么。",
-    technical_only: "请直接确认是否批准进入 PRD intake。",
-    vague: "请明确批准状态：批准进入 PRD，还是暂不批准继续补信息。",
-  },
-};
-
-function followUpFor(slot: string, reason: string): string {
-  const slotPrompts = SLOT_FOLLOW_UPS[slot] || {};
-  if (slotPrompts[reason]) return slotPrompts[reason];
-  if (slotPrompts.missing_detail) return slotPrompts.missing_detail;
-  const signals = (SLOT_DETAIL_SIGNALS[slot] || ["quantified", "artifact", "assertion"])
-    .map((signal) => DETAIL_SIGNAL_GUIDANCE[signal])
-    .filter(Boolean);
-  return `还缺以下任一种：${signals.join("、")}。`;
-}
-
-const MAX_GUIDED_FOLLOW_UPS_PER_SLOT = 2;
-const CAPPED_FOLLOW_UP_REASONS = new Set(["missing_detail", "vague"]);
-
-function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): DemandInterviewAnswerQuality {
-  if (question.confirmation_gate === true) {
-    const decision = question.slot === "execution_approval"
-      ? parseApprovalDecision(answer)
-      : question.slot === "premise_decision"
-        ? parsePremiseDecision(answer) !== null
-        : parseLayerConfirmation(answer);
-    return decision
-      ? { score: 100, level: "sufficient", reasons: [], follow_up_questions: [] }
-      : {
-        score: 0,
-        level: "needs_follow_up",
-        reasons: ["missing_confirmation"],
-        follow_up_questions: [{
-          id: `FU-${String(question.slot).toUpperCase()}-MISSING_CONFIRMATION`,
-          question_id: question.id,
-          slot: question.slot,
-          category: question.category,
-          severity: FOLLOW_UP_SEVERITY,
-          code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_MISSING_CONFIRMATION`,
-          reason: "missing_confirmation",
-          plain_language_prompt: question.slot === "premise_decision"
-            ? "请明确回答“继续”或“不继续”。"
-            : question.slot === "execution_approval"
-              ? "请明确回答“批准”或“暂不批准”。"
-              : "请明确回答“确认”；如果不确认，请直接指出哪一项需要纠正。",
-        }],
-      };
-  }
-  const text = textFromValue(answer);
-  const normalized = clean(text);
-  if (!normalized) {
-    return {
-      score: 0,
-      level: "missing",
-      reasons: ["missing"],
-      follow_up_questions: [],
-    };
-  }
-
-  const tokens = wordTokens(normalized);
-  const approvalClear = question.slot === "execution_approval"
-    && parseApprovalDecision(answer) !== null;
-  const hasDetail = question.slot !== "execution_approval" && hasSlotDetail(question.slot, normalized);
-  const tooShort = !approvalClear
-    && !shortAnswerAllowed(question.slot, normalized)
-    && (normalized.length < 14 || tokens.length <= 2);
-  const vague = hasPattern(normalized, VAGUE_PATTERNS) && (!hasDetail || normalized.length < 18 || tokens.length <= 3);
-  const techOnly = technicalOnly(normalized);
-  const commandOrFeatureAsRole = question.slot === "target_users" && isCommandOrCodeLikeTargetUser(normalized);
-  const missingDetail = question.slot !== "execution_approval" && !hasDetail;
-  const approvalMissing = question.slot === "execution_approval" && !approvalClear;
-
-  const reasons = compactReasons([
-    commandOrFeatureAsRole ? "not_role" : null,
-    tooShort ? "too_short" : null,
-    vague ? "vague" : null,
-    techOnly ? "technical_only" : null,
-    missingDetail || approvalMissing ? "missing_detail" : null,
-  ]);
-
-  const penalty = reasons.reduce((total, reason) => total + ({
-    too_short: 30,
-    vague: 20,
-    technical_only: 35,
-    missing_detail: 25,
-    not_role: 45,
-  }[reason] || 0), 0);
-  const score = Math.max(0, Math.min(100, 100 - penalty));
-  const followUpReason = commandOrFeatureAsRole ? "not_role" : techOnly ? "technical_only" : vague ? "vague" : missingDetail || approvalMissing || tooShort ? "missing_detail" : null;
-  const needsFollowUp = score < 75 || Boolean(followUpReason);
-  const followUps: DemandInterviewFollowUpQuestion[] = needsFollowUp && followUpReason ? [{
-    id: `FU-${String(question.slot).toUpperCase()}-${String(followUpReason).toUpperCase()}`,
-    question_id: question.id,
-    slot: question.slot,
-    category: question.category,
-    severity: FOLLOW_UP_SEVERITY,
-    code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_${String(followUpReason).toUpperCase()}`,
-    reason: followUpReason,
-    plain_language_prompt: followUpFor(question.slot, followUpReason),
-  }] : [];
-
-  return {
-    score,
-    level: needsFollowUp ? "needs_follow_up" : "sufficient",
-    reasons,
-    follow_up_questions: followUps,
-  };
-}
-
-function followUpCountRecords(value: unknown): Record<string, DemandInterviewFollowUpCounter> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value as Record<string, DemandInterviewFollowUpCounter>)
-    .map(([slot, record]) => [slot, {
-      slot: clean(record?.slot || slot),
-      count: Number(record?.count || 0),
-      reasons: compactReasons(record?.reasons || []),
-      updated_at: clean(record?.updated_at) || null,
-    }]));
-}
-
-function cappedFollowUpReason(quality: DemandInterviewAnswerQuality): string {
-  const reason = clean(quality.follow_up_questions?.[0]?.reason);
-  return CAPPED_FOLLOW_UP_REASONS.has(reason) ? reason : "";
-}
-
-function blockAfterGuidedFollowUps(
-  question: DemandInterviewQuestion,
-  quality: DemandInterviewAnswerQuality,
-  counter: DemandInterviewFollowUpCounter,
-): DemandInterviewAnswerQuality {
-  const followUp = quality.follow_up_questions[0];
-  if (!followUp) return quality;
-  return {
-    ...quality,
-    level: "blocked_needs_clarification",
-    follow_up_questions: [{
-      ...followUp,
-      severity: "error",
-      code: `${followUp.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`}_HUMAN_CLARIFICATION_REQUIRED`,
-      plain_language_prompt: `${followUp.plain_language_prompt} 已连续 ${counter.count} 次未得到明确答案；为避免错误放行，请人工澄清后再继续。`,
-    }],
-  };
 }
 
 function nowIso(options: DemandRuntimeOptions = Object()): string {
@@ -966,98 +504,6 @@ function missingSlots(session: DemandInterviewSessionInput = Object(), slots: st
   return slots.filter((slot) => !hasAnswer(answerRecordForSlot(session, slot)));
 }
 
-function qualityForAnsweredRecord(question?: DemandInterviewQuestion, record?: DemandInterviewAnswerRecord | null): DemandInterviewAnswerQuality | null {
-  if (!question || !hasAnswer(record)) return null;
-  const stored = record.quality || record.answer_quality;
-  if (stored && typeof stored === "object" && Number.isFinite(Number(stored.score))) {
-    if (clean(stored.level) === "accepted_with_assumption") return answerQualityFor(question, record.answer);
-    return {
-      score: Number(stored.score),
-      level: clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")),
-      reasons: compactReasons(stored.reasons || []),
-      follow_up_questions: asArray(stored.follow_up_questions).filter(Boolean),
-      original_score: Number.isFinite(Number(stored.original_score)) ? Number(stored.original_score) : undefined,
-      assumption: stored.assumption && typeof stored.assumption === "object"
-        ? stored.assumption as DemandInterviewAcceptedAssumption
-        : null,
-    };
-  }
-  return answerQualityFor(question, record.answer);
-}
-
-function answeredQualityItems(session: DemandInterviewSessionInput = Object(), questions: DemandInterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK) {
-  const answers = answerRecords(session.answers);
-  return questions
-    .map((question) => {
-      const record = answers[question.id || ""];
-      const quality = qualityForAnsweredRecord(question, record);
-      if (!quality) return null;
-      return {
-        question_id: question.id,
-        slot: question.slot,
-        category: question.category,
-        score: quality.score,
-        level: quality.level,
-        reasons: quality.reasons,
-        follow_up_questions: quality.follow_up_questions,
-        assumption: quality.assumption || null,
-      };
-    })
-    .filter(Boolean);
-}
-
-function followUpPlanForQuality(items: ReturnType<typeof answeredQualityItems> = []) {
-  const followUpQuestions = items.flatMap((item) => item.follow_up_questions || []);
-  const bySlot = followUpQuestions.map((question) => ({
-    slot: question.slot,
-    question_id: question.question_id,
-    category: question.category,
-    severity: question.severity || "warning",
-    code: question.code,
-    reason: question.reason,
-    questions: [question.plain_language_prompt].filter(Boolean),
-  }));
-  return {
-    schema: "yolo.demand.interview.follow_up_plan.v1",
-    status: followUpQuestions.length ? "needs_follow_up" : "clear",
-    total: followUpQuestions.length,
-    follow_up_questions: followUpQuestions,
-    by_slot: bySlot,
-  };
-}
-
-function acceptedAssumptionsFromQuality(items: ReturnType<typeof answeredQualityItems> = []): DemandInterviewAcceptedAssumption[] {
-  return items
-    .map((item) => item.assumption)
-    .filter((item): item is DemandInterviewAcceptedAssumption => Boolean(item && typeof item === "object"));
-}
-
-function acceptedAssumptionMessages(items: DemandInterviewAcceptedAssumption[] = []): string[] {
-  return items.map((item) => clean(item.message)).filter(Boolean);
-}
-
-function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
-  if (items.length === 0) {
-    return {
-      score: 0,
-      level: "missing",
-      checked_slots: [],
-      low_quality_slots: [],
-      accepted_with_assumption_slots: [],
-    };
-  }
-  const score = Math.round(items.reduce((total, item) => total + Number(item.score || 0), 0) / items.length);
-  const lowQuality = items.filter((item) => ["needs_follow_up", "blocked_needs_clarification", "missing"].includes(item.level));
-  const acceptedWithAssumption = items.filter((item) => item.level === "accepted_with_assumption");
-  return {
-    score,
-    level: lowQuality.length ? "needs_follow_up" : acceptedWithAssumption.length ? "accepted_with_assumption" : "sufficient",
-    checked_slots: items.map((item) => item.slot),
-    low_quality_slots: lowQuality.map((item) => item.slot),
-    accepted_with_assumption_slots: acceptedWithAssumption.map((item) => item.slot),
-  };
-}
-
 function protocolEnabled(session: DemandInterviewSessionInput = Object()): boolean {
   return (session.questions || []).some((question) => Boolean(question.stage));
 }
@@ -1207,29 +653,6 @@ function approvalState(session: DemandInterviewSessionInput = Object()) {
   };
 }
 
-function nextQuestionFromFollowUp(followUp: DemandInterviewFollowUpQuestion | null | undefined, questions: DemandInterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): DemandInterviewQuestion | null {
-  if (!followUp) return null;
-  const original = questionById(followUp.question_id, questions) || questionBySlot(followUp.slot, questions);
-  const prompt = clean(followUp.plain_language_prompt || followUp.text || followUp.message || original?.plain_language_prompt);
-  const questionId = clean(followUp.question_id || original?.id || followUp.slot);
-  return {
-    ...(original || {}),
-    id: questionId,
-    question_id: questionId,
-    slot: clean(followUp.slot || original?.slot || questionId),
-    category: clean(followUp.category || original?.category || followUp.slot),
-    plain_language_prompt: prompt,
-    text: prompt,
-    why_it_matters: original?.why_it_matters,
-    follow_up: true,
-    follow_up_id: followUp.id,
-    follow_up_code: followUp.code,
-    follow_up_reason: followUp.reason,
-    follow_up_severity: followUp.severity || "warning",
-    original_prompt: original?.plain_language_prompt,
-  };
-}
-
 export function selectDemandInterviewNextQuestion(session: DemandInterviewSessionInput = Object(), coverage = inspectDemandInterviewCoverage(session)): DemandInterviewQuestion | null {
   const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
   if (protocolEnabled(session)) {
@@ -1239,8 +662,6 @@ export function selectDemandInterviewNextQuestion(session: DemandInterviewSessio
     for (const stage of PM_PROTOCOL_STAGES) {
       const questionsInStage = stageQuestions(session, stage.id);
       for (const question of questionsInStage) {
-        const followUp = (coverage.follow_up_questions || []).find((item) => item.question_id === question.id);
-        if (followUp) return decorateProtocolQuestion(nextQuestionFromFollowUp(followUp, questions) || question, session);
         const record = answerRecords(session.answers)[question.id || ""];
         const needsAnswer = question.id === "premise_decision"
           ? parsePremiseDecision(record?.answer) === null
@@ -1254,8 +675,6 @@ export function selectDemandInterviewNextQuestion(session: DemandInterviewSessio
     }
     return null;
   }
-  const followUp = (coverage.follow_up_questions || [])[0];
-  if (followUp) return nextQuestionFromFollowUp(followUp, questions);
   const missing = new Set(coverage.missing.map((item) => item.question_id));
   return questions.find((question) => missing.has(question.id)) || null;
 }
@@ -1299,17 +718,9 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       category: question.category,
       answered_at: record.answered_at || null,
     }));
-  const answerQuality = answeredQualityItems(session, questions);
-  const quality = qualitySummary(answerQuality);
-  const followUpPlan = followUpPlanForQuality(answerQuality);
-  const followUpQuestions = followUpPlan.follow_up_questions;
-  const acceptedAssumptions = acceptedAssumptionsFromQuality(answerQuality);
   const protocol = protocolEnabled(session);
   const premise = protocol ? premiseJudgment(session) : null;
   const stopped = premise?.decision === "do_not_continue";
-  const hasFollowUps = followUpQuestions.length > 0;
-  const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
-
   const missingDiscuss = missingSlots(session, DISCUSS_REQUIRED_SLOTS);
   const requiredPrdSlots = questions.some((question) => question.slot === "ui_acceptance")
     ? [...PRD_REQUIRED_SLOTS, "ui_acceptance"]
@@ -1335,19 +746,13 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       required_for: question?.required_for || ["prd_intake"],
     };
   });
-  const readyForDiscuss = !stopped && missingDiscuss.length === 0 && discussFollowUps.length === 0;
-  const readyForPrdIntake = !stopped && missingPrd.length === 0 && approval.approved === true && !hasFollowUps;
+  const readyForDiscuss = !stopped && missingDiscuss.length === 0;
+  const readyForPrdIntake = !stopped && missingPrd.length === 0 && approval.approved === true;
   const blockers = [
     ...missingPrd.map((slot) => ({
       code: `MISSING_${slot.toUpperCase()}`,
       slot,
       message: `${questionBySlot(slot, questions)?.category || slot} is required before PRD intake.`,
-    })),
-    ...followUpQuestions.map((question) => ({
-      code: question.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`,
-      slot: question.slot,
-      message: question.plain_language_prompt,
-      reason: question.reason,
     })),
     ...(approval.approved ? [] : [{
       code: "APPROVAL_REQUIRED",
@@ -1360,13 +765,6 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       message: "The premise judgment explicitly stopped this demand before the four layers.",
     }] : []),
   ];
-  const warnings = followUpQuestions.map((question) => ({
-    code: question.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`,
-    slot: question.slot,
-    severity: question.severity || "warning",
-    message: question.plain_language_prompt,
-    reason: question.reason,
-  }));
   const totalRequired = requiredPrdSlots.length + 1;
   const answeredRequired = requiredPrdSlots.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
   const layerGates = Object.fromEntries(
@@ -1379,12 +777,11 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
         const record = answers[question.id || ""];
         if (question.id === "execution_approval") return parseApprovalDecision(record?.answer) !== true;
         if (question.confirmation_gate === true) return !layerGateState(session, clean(question.gate_for || question.stage)).confirmed;
-        return !hasAnswer(record) || followUpQuestions.some((followUp) => followUp.question_id === question.id);
+        return !hasAnswer(record);
       }))?.id || null;
   const nextActionPrompt = stopped
     ? "Premise judgment is do-not-continue. Start a new interview only if the business premise changes."
-    : followUpQuestions[0]?.plain_language_prompt
-    || missing[0]?.plain_language_prompt
+    : missing[0]?.plain_language_prompt
     || (readyForPrdIntake ? "Convert interview answers to demand input and run demand discuss/PRD intake." : "Review interview status before continuing.");
 
   return {
@@ -1392,11 +789,6 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
     schema: "yolo.demand.interview.coverage.v1",
     answered,
     answered_slots: answered.map((item) => item.slot),
-    answer_quality: answerQuality,
-    quality,
-    follow_up_questions: followUpQuestions,
-    follow_up_plan: followUpPlan,
-    assumptions: acceptedAssumptions,
     missing,
     missing_slots: missing.map((item) => item.slot),
     approval,
@@ -1408,17 +800,11 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
     layer_gates: layerGates,
     requirement_checklist: requirementChecklist(session),
     readiness: {
-      status: stopped ? "stopped" : readyForPrdIntake ? "ready" : hasFollowUps ? "needs_follow_up" : readyForDiscuss ? "discuss_ready" : "collecting",
+      status: stopped ? "stopped" : readyForPrdIntake ? "ready" : readyForDiscuss ? "discuss_ready" : "collecting",
       ready_for_discuss: readyForDiscuss,
       ready_for_prd_intake: readyForPrdIntake,
       quality_score: Math.round((answeredRequired / totalRequired) * 100),
-      answer_quality_score: quality.score,
-      answer_quality: quality,
       blockers,
-      warnings,
-      follow_up_questions: followUpQuestions,
-      follow_up_plan: followUpPlan,
-      assumptions: acceptedAssumptions,
       next_actions: [nextActionPrompt].filter(Boolean),
     },
   };
@@ -1427,12 +813,8 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
 function refreshSession(session: DemandInterviewSession): DemandInterviewSession {
   session.questions = decorateQuestions(session.questions || DEMAND_INTERVIEW_QUESTION_BANK, session.answers || {});
   const coverage = inspectDemandInterviewCoverage(session);
-  session.accepted_assumptions = coverage.assumptions;
-  session.assumptions = acceptedAssumptionMessages(coverage.assumptions);
   session.coverage = coverage;
   session.readiness = coverage.readiness;
-  session.follow_up_questions = coverage.follow_up_questions;
-  session.follow_up_plan = coverage.follow_up_plan;
   session.next_question = selectDemandInterviewNextQuestion(session, coverage);
   return session;
 }
@@ -1475,8 +857,6 @@ export function createDemandInterviewSession(input: DemandRuntimeInput = Object(
     state_root: stateRoot,
     questions: decorateQuestions(questions, {}),
     answers: {},
-    follow_up_counts: {},
-    accepted_assumptions: [],
     ledgers: ledgerInfo({ id, demandId, projectRoot, stateRoot }),
   };
   return refreshSession(session);
@@ -1492,30 +872,6 @@ export function answerDemandInterviewQuestion(
   }
   const answeredAt = clean(now) || new Date().toISOString();
   invalidateProtocolConfirmations(session, question);
-  const baseQuality = answerQualityFor(question, answer);
-  const followUpReason = cappedFollowUpReason(baseQuality);
-  const followUpCounts = followUpCountRecords(session.follow_up_counts);
-  let quality = baseQuality;
-  if (followUpReason) {
-    const slot = clean(question.slot || question.id);
-    const current = followUpCounts[slot] || {
-      slot,
-      count: 0,
-      reasons: [],
-      updated_at: null,
-    };
-    const nextCounter = {
-      slot,
-      count: current.count + 1,
-      reasons: compactReasons([...current.reasons, followUpReason]),
-      updated_at: answeredAt,
-    };
-    followUpCounts[slot] = nextCounter;
-    if (nextCounter.count > MAX_GUIDED_FOLLOW_UPS_PER_SLOT) {
-      quality = blockAfterGuidedFollowUps(question, baseQuality, nextCounter);
-    }
-  }
-  session.follow_up_counts = followUpCounts;
   const normalized = normalizeAnswer(question, answer);
   if (question.confirmation_gate === true && question.gate_for && question.slot !== "premise_decision" && question.slot !== "execution_approval") {
     normalized.confirmed_content_hash = stageContentHash(session, question.gate_for);
@@ -1528,7 +884,6 @@ export function answerDemandInterviewQuestion(
       category: question.category,
       answer,
       normalized,
-      quality,
       answered_at: answeredAt,
     },
   };
@@ -1592,10 +947,6 @@ function decisionLines(session: DemandInterviewSessionInput = Object()): string[
 
 export function demandInterviewToDemandInput(session: DemandInterviewSessionInput): DemandRuntimeInput {
   const coverage = inspectDemandInterviewCoverage(session);
-  const followUpPrompts = (coverage.follow_up_questions || [])
-    .map((item) => item.plain_language_prompt)
-    .filter(Boolean);
-  const acceptedAssumptionMessagesForDemand = acceptedAssumptionMessages(coverage.assumptions);
   const targetUsers = itemsForSlot(session, "target_users");
   const statusQuo = itemsForSlot(session, "status_quo");
   const painPoints = itemsForSlot(session, "pain_points");
@@ -1648,15 +999,10 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
     approval_note: textFromValue(approval.answer),
     assumptions: [
       "Interview answers are user-provided and should be validated against product or operational evidence before implementation.",
-      ...acceptedAssumptionMessagesForDemand,
     ],
-    followups: followUpPrompts,
     open_questions: coverage.ready_for_prd_intake
       ? []
-      : [...new Set([
-        ...followUpPrompts,
-        ...coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean),
-      ])],
+      : [...new Set(coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean))],
     interview: {
       id: session.id,
       schema: session.schema,
@@ -1666,18 +1012,11 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
         ready_for_prd_intake: coverage.ready_for_prd_intake,
         missing_slots: coverage.missing_slots,
         answered_slots: coverage.answered_slots,
-        quality: coverage.quality,
-        answer_quality: coverage.answer_quality,
-        follow_up_questions: coverage.follow_up_questions,
-        follow_up_plan: coverage.follow_up_plan,
-        assumptions: coverage.assumptions,
-        warnings: coverage.readiness.warnings,
         active_stage: coverage.active_stage,
         premise_judgment: coverage.premise_judgment,
         layer_gates: coverage.layer_gates,
         requirement_checklist: coverage.requirement_checklist,
       },
-      accepted_assumptions: coverage.assumptions,
     },
     ledgers: session.ledgers && typeof session.ledgers === "object" ? session.ledgers as DemandRecord : undefined,
     playback: session.playback && typeof session.playback === "object" ? session.playback as DemandRecord : null,

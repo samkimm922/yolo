@@ -201,11 +201,6 @@ export interface DemandDecision extends DemandRecord {
 
 export interface DemandInterviewCoverageSnapshot extends DemandRecord {
   answered_slots?: string[];
-  quality?: DemandRecord & { low_quality_slots?: string[] };
-  answer_quality?: DemandRecord[];
-  follow_up_questions?: DemandBlockerLike[];
-  follow_up_plan?: DemandRecord & { status?: string };
-  warnings?: DemandBlockerLike[];
 }
 
 export interface DemandInterviewSnapshot extends DemandRecord {

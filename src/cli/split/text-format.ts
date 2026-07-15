@@ -13,26 +13,6 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-function assumptionList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object") {
-        const record = item as { message?: unknown; text?: unknown; answer?: unknown };
-        return typeof record.message === "string"
-          ? record.message
-          : typeof record.text === "string"
-            ? record.text
-            : typeof record.answer === "string"
-              ? record.answer
-              : "";
-      }
-      return "";
-    })
-    .filter(Boolean);
-}
-
 function joinList(value: unknown, sep = ", "): string {
   return stringList(value).join(sep);
 }
@@ -359,39 +339,6 @@ export function formatInterviewText(label: string, result: TextResult = {}) {
   if (coverage) {
     const counts = coverageCounts(coverage, result.interview as Record<string, unknown>);
     lines.push(`coverage: ${counts.answered}/${counts.total} (${counts.percent}%)`);
-    const coverageQuality = coverage.quality as { score?: number } | undefined;
-    const coverageDetail = result.coverage_detail as {
-      quality?: { score?: number };
-      readiness?: { answer_quality_score?: number };
-      follow_up_questions?: Array<{ slot?: string; question_id?: string; plain_language_prompt?: string; text?: string; message?: string }>;
-    } | undefined;
-    const answerQualityScore = coverage.answer_quality_score
-      ?? coverageQuality?.score
-      ?? coverageDetail?.quality?.score
-      ?? coverageDetail?.readiness?.answer_quality_score;
-    if (answerQualityScore != null) {
-      lines.push(`answer_quality: ${answerQualityScore}`);
-    }
-  }
-  const coverageDetail2 = result.coverage_detail as {
-    follow_up_questions?: Array<{ slot?: string; question_id?: string; plain_language_prompt?: string; text?: string; message?: string }>;
-    assumptions?: unknown[];
-  } | undefined;
-  const followUps = coverageDetail2?.follow_up_questions || (coverage?.follow_up_questions as Array<{ slot?: string; question_id?: string; plain_language_prompt?: string; text?: string; message?: string }> | undefined) || [];
-  if (followUps.length) {
-    lines.push("follow_up:");
-    for (const followUp of followUps.slice(0, 3)) {
-      lines.push(`  - ${followUp.slot || followUp.question_id}: ${followUp.plain_language_prompt || followUp.text || followUp.message}`);
-    }
-  }
-  const interview = result.interview as { accepted_assumptions?: unknown[]; assumptions?: unknown[] } | undefined;
-  const assumptions = assumptionList(coverageDetail2?.assumptions)
-    .concat(assumptionList(interview?.accepted_assumptions))
-    .concat(assumptionList(interview?.assumptions));
-  const uniqueAssumptions = [...new Set(assumptions)];
-  if (uniqueAssumptions.length) {
-    lines.push("assumptions:");
-    for (const assumption of uniqueAssumptions.slice(0, 3)) lines.push(`  - ${assumption}`);
   }
   const blockers = result.blockers as Array<{ code?: string; message?: string; slot?: string }> | undefined;
   if (Array.isArray(blockers) && blockers.length) {
