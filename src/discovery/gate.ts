@@ -247,6 +247,14 @@ export function inspectDiscoveryReadiness(input: DiscoveryInput = Object(), opti
   const warnings = checks.filter((item) => item.severity === "warning" && item.passed !== true);
   const status = blockers.length > 0 ? "blocked" : (warnings.length > 0 ? "warning" : "pass");
 
+  const evidenceBlockerActions = blockers
+    .filter((item) => item.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED")
+    .map((item) => {
+      const id = clean(item.evidence_requirement_id);
+      const topic = clean(item.topic);
+      return `Evidence requirement ${id} (${topic || "external evidence"}) is unsatisfied: run \`yolo demand dispatch\` to collect scope=external evidence and bind it via evidence.covers = [${id}].`;
+    });
+
   return {
     schema_version: DISCOVERY_GATE_SCHEMA_VERSION,
     schema: DISCOVERY_READINESS_SCHEMA,
@@ -259,6 +267,7 @@ export function inspectDiscoveryReadiness(input: DiscoveryInput = Object(), opti
     warnings,
     next_actions: blockers.length > 0
       ? [
+          ...evidenceBlockerActions,
           "Run /yolo-discover with the idea and answer the missing problem, success criteria, and scope questions.",
           "Do not generate executable PRD or run implementation until discovery readiness passes.",
         ]
