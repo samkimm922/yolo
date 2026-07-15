@@ -701,6 +701,38 @@ describe("demand findings generator output parsing", () => {
 });
 
 describe("demand runtime", () => {
+  test("interview requirements confirmation replaces the playback hard gate", () => {
+    const session = {
+      mode: "interview",
+      phase: "prd",
+      requirements: { active: [{ id: "REQ-001", text: "Store managers can see a low-stock warning before an item sells out." }] },
+      interview: {
+        coverage: {
+          layer_gates: {
+            requirements_replay: { confirmed: true },
+          },
+        },
+      },
+      playback: null,
+    };
+
+    let readiness = inspectDemandReadiness(session, { phase: "prd" });
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "PLAYBACK_CONFIRMED"), false);
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "REQUIREMENTS_CONFIRMED"), false);
+
+    session.interview.coverage.layer_gates.requirements_replay.confirmed = false;
+    readiness = inspectDemandReadiness(session, { phase: "prd" });
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "PLAYBACK_CONFIRMED"), false);
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "REQUIREMENTS_CONFIRMED"), true);
+
+    const standardReadiness = inspectDemandReadiness({
+      ...session,
+      mode: "standard",
+      playback: null,
+    }, { phase: "prd" });
+    assert.equal(standardReadiness.blockers.some((blocker) => blocker.code === "PLAYBACK_CONFIRMED"), true);
+  });
+
   test("infers a traceable planned new file from greenfield CLI demand text", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-"));
     try {

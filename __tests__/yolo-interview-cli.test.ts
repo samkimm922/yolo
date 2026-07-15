@@ -100,7 +100,6 @@ async function startLayerOneInterview(root, id = "stock-alerts") {
   await answer(root, started.session_path, "premise_consequence", "Without a change, managers miss at least two stockout risks each week and spend an hour recovering.");
   await answer(root, started.session_path, "premise_minimum", "The minimum useful version must show a low-stock signal in the current inventory workflow.");
   await answer(root, started.session_path, "premise_decision", "继续");
-  await confirmCurrentPlayback(root, started.session_path);
   return started;
 }
 
@@ -109,20 +108,16 @@ async function openLayerFourInterview(root, id = "stock-alerts") {
   await answer(root, started.session_path, "target_users", "Store managers check inventory every morning and are responsible for reordering before shelves run out.");
   await answer(root, started.session_path, "status_quo", "Managers export an inventory spreadsheet each morning and manually check low quantities.");
   await answer(root, started.session_path, "pain_points", "Manual checks are slow and managers discover stockouts after customers complain at least twice each week.");
-  await answer(root, started.session_path, "layer_1_confirmation", "确认，这一层理解无误。");
   await answer(root, started.session_path, "day_in_life", "Every morning the manager opens inventory, checks low-stock items, and schedules replenishment before the store opens.");
   await answer(root, started.session_path, "desired_outcome", "Managers see low-stock risks before each item sells out and can prioritize replenishment.");
-  await answer(root, started.session_path, "layer_2_confirmation", "确认，这就是完整的一天。");
   await answer(root, started.session_path, "exceptions", "Hidden or discontinued SKUs should not show alerts, and empty inventory should show a clear empty state.");
   await answer(root, started.session_path, "scope_boundaries", "Do not build supplier ordering or change the existing order import workflow.");
-  await answer(root, started.session_path, "layer_3_confirmation", "确认，例外和边界都完整。");
   return started;
 }
 
 async function completeInterview(root, id = "stock-alerts") {
   const started = await openLayerFourInterview(root, id);
   await answer(root, started.session_path, "success_criteria", "A low-stock SKU shows a clear badge before quantity reaches zero.");
-  await answer(root, started.session_path, "layer_4_confirmation", "确认，每项能力都有可见证据。");
   await answer(root, started.session_path, "requirements_confirmation", "确认，R-001 清单准确且没有遗漏。");
   await answer(root, started.session_path, "execution_approval", "批准，按确认后的需求清单进入 PRD。");
   return started;
@@ -152,7 +147,7 @@ describe("yolo interview CLI", () => {
     assert.equal(playbackText.input.confirm, "Looks right");
   });
 
-  test("cannot bypass a protocol gate by naming a future question explicitly", async () => {
+  test("cannot bypass the ordered interview by naming a future question explicitly", async () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
@@ -267,7 +262,7 @@ describe("yolo interview CLI", () => {
     }
   });
 
-  test("to-demand rejects a persisted confirmation when answers no longer match its snapshot", async () => {
+  test("a stale optional playback does not replace the final interview gates", async () => {
     const root = tempProject();
     try {
       const started = await startLayerOneInterview(root);
@@ -292,8 +287,8 @@ describe("yolo interview CLI", () => {
         "--json",
       ], { cwd: root, stdout: out.stream });
 
-      assert.equal(exitCode, 2);
-      assert.equal(out.json().code, "PLAYBACK_CONFIRMATION_STALE");
+      assert.equal(exitCode, 1);
+      assert.equal(out.json().code, "INTERVIEW_PRD_INTAKE_BLOCKED");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -388,7 +383,6 @@ describe("yolo interview CLI", () => {
         "pain_points",
         "Manual checks are too slow because managers discover stockouts after customers complain.",
       );
-      await answer(root, started.session_path, "layer_1_confirmation", "确认，这一层理解无误。");
       await answer(root, started.session_path, "day_in_life", "Every morning the manager opens inventory, checks risky rows, and decides what to replenish before the store opens.");
 
       const result = await answer(root, started.session_path, "desired_outcome", "优化体验，更智能");
@@ -495,8 +489,6 @@ describe("yolo interview CLI", () => {
       writeFileSync(join(root, "src", "services", "inventory-alerts.ts"), "export const threshold = 3;\n", "utf8");
       const started = await completeInterview(root);
 
-      await confirmCurrentPlayback(root, started.session_path);
-
       const out = capture();
       const exitCode = await runYoloCli([
         "interview",
@@ -541,8 +533,6 @@ describe("yolo interview CLI", () => {
     try {
       const started = await completeInterview(root, "private-notes");
 
-      await confirmCurrentPlayback(root, started.session_path);
-
       const out = capture();
       const exitCode = await runYoloCli([
         "interview",
@@ -572,8 +562,6 @@ describe("yolo interview CLI", () => {
       writeFileSync(join(root, "src", "services", "inventory-alerts.ts"), "export const threshold = 3;\n", "utf8");
       const started = await startLayerOneInterview(root);
       await answer(root, started.session_path, "target_users", "用户");
-
-      await confirmCurrentPlayback(root, started.session_path);
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -630,12 +618,10 @@ describe("yolo interview CLI", () => {
       await answer(root, sessionPath, "premise_consequence", "不做会每周漏掉至少两次到期任务，项目负责人需要临时追赶和补救。");
       await answer(root, sessionPath, "premise_minimum", "最小版本必须包含标签管理、标签筛选、到期时间和到期前站内提醒。");
       await answer(root, sessionPath, "premise_decision", "继续");
-      await confirmCurrentPlayback(root, sessionPath);
 
       await answer(root, sessionPath, "target_users", "每天维护待办并负责按时交付的团队成员，以及每天查看延期风险的项目负责人。");
       await answer(root, sessionPath, "status_quo", "成员用标题前缀分类待办，负责人每天下班前人工翻看所有任务日期。");
       await answer(root, sessionPath, "pain_points", "标签写法不一致导致筛选困难，人工查看日期每周至少漏掉两次到期任务。");
-      await answer(root, sessionPath, "layer_1_confirmation", "确认，这一层理解无误。");
 
       await answer(root, sessionPath, "day_in_life", "每天早上成员创建标签并整理待办，工作中按标签筛选，下午更新到期时间，负责人下班前查看到期提醒。");
       await answer(root, sessionPath, "desired_outcome", [
@@ -644,11 +630,9 @@ describe("yolo interview CLI", () => {
         "3. 团队成员可以为待办设置和修改到期时间。",
         "4. 团队成员会在待办到期前收到站内提醒。",
       ].join("\n"));
-      await answer(root, sessionPath, "layer_2_confirmation", "确认，这就是完整的一天。");
 
       await answer(root, sessionPath, "exceptions", "没有到期时间的待办不提醒，已完成待办取消提醒，重复修改日期只保留最新提醒。");
       await answer(root, sessionPath, "scope_boundaries", "保留现有待办创建和完成流程；本次不做邮件、短信和移动推送。");
-      await answer(root, sessionPath, "layer_3_confirmation", "确认，例外和边界都完整。");
 
       await answer(root, sessionPath, "success_criteria", [
         "创建标签后能在待办上选择并重新编辑。",
@@ -656,14 +640,13 @@ describe("yolo interview CLI", () => {
         "把待办设为明天到期后详情显示新日期。",
         "到期前负责人能看到包含任务名称的站内提醒。",
       ].join("\n"));
-      await answer(root, sessionPath, "layer_4_confirmation", "确认，每项能力都有可见证据。");
       await answer(root, sessionPath, "requirements_confirmation", "确认，R-001 到 R-004 准确且没有遗漏。");
       await answer(root, sessionPath, "execution_approval", "批准，按确认后的四项需求进入 PRD。");
-      await confirmCurrentPlayback(root, sessionPath);
 
       const saved = JSON.parse(readFileSync(sessionPath, "utf8"));
-      assert.equal(saved.initial_playback.confirmed, true);
-      assert.equal((Object.values(saved.coverage.layer_gates) as Array<{ confirmed?: boolean }>).every((gate) => gate.confirmed === true), true);
+      assert.equal("initial_playback" in saved, false);
+      assert.deepEqual(Object.keys(saved.coverage.layer_gates), ["requirements_replay"]);
+      assert.equal(saved.coverage.layer_gates.requirements_replay.confirmed, true);
       assert.equal(saved.coverage.requirement_checklist.length, 4, JSON.stringify(saved.coverage.requirement_checklist, null, 2));
 
       const toDemandOut = capture();
@@ -684,6 +667,11 @@ describe("yolo interview CLI", () => {
         writeArtifacts: false,
       });
       assert.equal(prd.status, "success", JSON.stringify({ status: prd.status, blockers: prd.blockers }, null, 2));
+      assert.equal(prd.prd.demand.interview.requirements_confirmed, true);
+      assert.equal("confirmed_gates" in prd.prd.demand.interview, false);
+      for (const removedGate of ["initial_playback", "layer_1_confirmation", "layer_2_confirmation", "layer_3_confirmation", "layer_4_confirmation"]) {
+        assert.equal(JSON.stringify(prd.prd.demand).includes(removedGate), false, removedGate);
+      }
       const tasks = prd.prd.tasks.filter((task) => task.task_kind === "demand_atomic_task");
       assert.equal(tasks.length, 4, JSON.stringify(tasks.map((task) => ({ title: task.title, scope: task.scope })), null, 2));
       assert.equal(new Set(tasks.map((task) => task.title)).size, 4);

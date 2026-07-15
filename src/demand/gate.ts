@@ -722,6 +722,7 @@ const READINESS_FIELD_LABELS = {
   INVESTIGATION_COMPLETE: "evidence_or_assumptions",
   QUESTIONING_ROUNDS_COMPLETE: "interview/question_trace",
   REQUIREMENTS_PRESENT: "requirements",
+  REQUIREMENTS_CONFIRMED: "requirements_confirmation",
   ACCEPTANCE_SCENARIOS_PRESENT: "acceptance_scenarios",
   SCENARIO_MATRIX_PRESENT: "scenario_matrix",
   SCENARIO_PROOF_PRESENT: "scenario_proof",
@@ -766,6 +767,10 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const phase = clean(options.phase || session.phase || "discuss");
   const approval = session.approval || {};
   const requirements = asArray(session.requirements?.active || session.requirements);
+  const interviewMode = clean(session.mode) === "interview";
+  const interviewRequirementsGate = session.interview?.coverage?.layer_gates?.requirements_replay;
+  const interviewRequirementsConfirmed = interviewRequirementsGate?.confirmed === true
+    || (interviewRequirementsGate == null && session.interview?.coverage?.ready_for_prd_intake === true);
   const scenarios = scenarioMatrix(session);
   const surfaceBudgetIssues = surfaceBudgetFailures(session);
   const blockingQuestions = blockingOpenQuestions(session);
@@ -823,6 +828,12 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
       requirementCount(session) > 0,
       "error",
       "At least one confirmed requirement is required.",
+    ),
+    check(
+      "REQUIREMENTS_CONFIRMED",
+      interviewMode ? interviewRequirementsConfirmed : requirementCount(session) > 0,
+      "error",
+      "Interview requirements must be explicitly confirmed through the final R-001 checklist before PRD.",
     ),
     check(
       "ACCEPTANCE_SCENARIOS_PRESENT",
@@ -900,9 +911,9 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "PLAYBACK_CONFIRMED",
-      session.playback?.confirmed === true,
+      interviewMode || session.playback?.confirmed === true,
       prdMode || deepMode ? "error" : "warning",
-      "Understanding playback must be generated and confirmed by the user before PRD. Run playback confirmation in the interview before to-demand.",
+      "Standard demand intake requires a confirmed understanding playback before PRD.",
     ),
     check(
       "EVIDENCE_GROUNDED",

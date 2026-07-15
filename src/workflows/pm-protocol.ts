@@ -7,7 +7,7 @@
  * 自检清单（审查用）：
  * - [X] 纯业务语言铁律
  * - [X] 先复述再提问
- * - [X] 业务版四层提问，每层确认门
+ * - [X] 业务版四层连续提问，最终清单统一确认
  * - [X] 具体化强制
  * - [X] 完整性挖掘（角色×场景×例外矩阵）
  * - [X] 需求清单回放
@@ -18,7 +18,16 @@
 
 export const PM_PROTOCOL_SCHEMA = "yolo.pm.protocol.v1";
 
-export const PM_PROTOCOL_STAGES = [
+export type PMProtocolStageId = "premise" | "layer_1" | "layer_2" | "layer_3" | "layer_4" | "requirements_replay" | "approval";
+
+interface PMProtocolStage {
+  id: PMProtocolStageId;
+  label: string;
+  question_ids: readonly string[];
+  confirmation_question_id?: string;
+}
+
+export const PM_PROTOCOL_STAGES: readonly PMProtocolStage[] = [
   {
     id: "premise",
     label: "前提质疑",
@@ -28,26 +37,22 @@ export const PM_PROTOCOL_STAGES = [
   {
     id: "layer_1",
     label: "角色 / 现状 / 痛点",
-    question_ids: ["target_users", "status_quo", "pain_points", "layer_1_confirmation"],
-    confirmation_question_id: "layer_1_confirmation",
+    question_ids: ["target_users", "status_quo", "pain_points"],
   },
   {
     id: "layer_2",
     label: "一天的使用故事",
-    question_ids: ["day_in_life", "desired_outcome", "layer_2_confirmation"],
-    confirmation_question_id: "layer_2_confirmation",
+    question_ids: ["day_in_life", "desired_outcome"],
   },
   {
     id: "layer_3",
     label: "例外和边界",
-    question_ids: ["exceptions", "scope_boundaries", "layer_3_confirmation"],
-    confirmation_question_id: "layer_3_confirmation",
+    question_ids: ["exceptions", "scope_boundaries"],
   },
   {
     id: "layer_4",
     label: "验收证据",
-    question_ids: ["success_criteria", "ui_acceptance", "layer_4_confirmation"],
-    confirmation_question_id: "layer_4_confirmation",
+    question_ids: ["success_criteria", "ui_acceptance"],
   },
   {
     id: "requirements_replay",
@@ -62,8 +67,6 @@ export const PM_PROTOCOL_STAGES = [
     confirmation_question_id: "execution_approval",
   },
 ] as const;
-
-export type PMProtocolStageId = typeof PM_PROTOCOL_STAGES[number]["id"];
 
 export const PM_PROTOCOL_LAYER_QUESTION_IDS = Object.fromEntries(
   PM_PROTOCOL_STAGES.map((stage) => [stage.id, [...stage.question_ids]]),
@@ -118,20 +121,20 @@ export function renderPMProtocolMarkdown(descriptor: {
     "",
     "## 铁律二：先复述，再提问（Playback First — NEVER skip this step）",
     "",
-    "用户在描述完想法后，你**必须先用自己的话复述**，用一个具体的、可感知的使用场景来确认理解。",
+    "用户在描述完想法后，你**必须先用自己的话复述**，用一个具体的、可感知的使用场景来呈现理解。",
     "",
     "格式：",
     '"我理解你要的大概是这样：早上店长打开页面，会先看到今天缺货的商品列表，每个商品旁边标注了预计到货时间。然后她可以点进去看这个商品过去7天的销售曲线，再决定要不要从其他门店调货。这个理解对吗？哪里说错了请纠正。"',
     "",
-    "**确认用户说「对」或给出纠正之后，才能进入下一阶段。**",
-    "用户说「差不多」= 不够，必须追问「哪里还有偏差？」直到用户明确认可。",
+    "复述不是一道确认门：展示场景后直接进入第一层；用户指出偏差时，立即吸收纠正并继续追问。",
+    "不得要求用户复制 hash 或额外确认复述快照。",
     "",
     "---",
     "",
-    "## 铁律三：业务版四层提问，每层确认门",
+    "## 铁律三：业务版四层连续提问，最终统一确认",
     "",
-    "你必须按顺序走完四层，**每层结束打印小结让用户逐项确认**。",
-    "用户不确认不进下一层。每层确认门不可跳过。",
+    "你必须按顺序走完四层，层与层之间连续推进，不插入重复确认。",
+    "每层内容都要完整保留，全部采集完成后统一进入 R-001 需求清单确认。",
     "",
     "### 第一层：谁在用 / 现在怎么解决 / 痛在哪",
     "",
@@ -141,8 +144,6 @@ export function renderPMProtocolMarkdown(descriptor: {
     "- 现在的方式哪里最痛？（时间？出错率？找不到信息？）",
     "- 如果不做这个功能，谁最难受？",
     "",
-    "第一层确认门：打印角色清单 + 每角色的现状和痛点，要求用户确认「对，这就是全部角色/现状」。",
-    "",
     "### 第二层：一天的使用故事（Day-in-the-Life Walkthrough）",
     "",
     "目标：从用户视角完整走一遍业务流程。",
@@ -150,8 +151,6 @@ export function renderPMProtocolMarkdown(descriptor: {
     '- "然后呢？下一步做什么？做完这个之后呢？"',
     '- "这个流程里，你觉得最卡、最容易出错的是哪一步？"',
     '- "有没有什么时候你会跳过这个系统、直接用老办法？为什么？"',
-    "",
-    "第二层确认门：按时间顺序回放完整的一天使用故事，标注每一步的系统交互点，要求用户确认。",
     "",
     "### 第三层：例外和边界（Exceptions & Edge Cases）",
     "",
@@ -163,8 +162,6 @@ export function renderPMProtocolMarkdown(descriptor: {
     '- "有没有只有月底/月初/节假日才会出现的特殊情况？"',
     '- "这个功能有没有权限问题？比如店长能做但店员不能做？"',
     "",
-    "第三层确认门：打印例外清单，每个例外标注触发条件、期望行为、通知对象，要求用户逐条确认。",
-    "",
     "### 第四层：验收用业务证据表达（Acceptance in Business Language）",
     "",
     "目标：用户自己能判断「做对了没有」，无需看代码、看测试报告。",
@@ -173,7 +170,7 @@ export function renderPMProtocolMarkdown(descriptor: {
     '- "如果做错了，第一个发现的人会是谁？他会发现什么异常？"',
     '- "有没有一个你上周真实遇到的例子，我们一起过一遍：如果当时有这个功能，你的操作会有什么不同？"',
     "",
-    "第四层确认门：每条需求对应至少一个「用户能亲眼看到的验收证据」。用用户原话表达。",
+    "四层结束后，把每条需求及其「用户能亲眼看到的验收证据」统一写入 R-001 清单，用用户原话表达。",
     "",
     "---",
     "",
@@ -290,32 +287,30 @@ export function renderPMProtocolMarkdown(descriptor: {
     "4. **替用户做决定** — 用户说「A 或 B 都行」时直接选一个，不解释差异让用户选。",
     '   反例：用户说"库存预警通知微信还是短信都行" → 你直接选短信，不追问两个渠道的成本和可靠性差异。',
     "",
-    "5. **跳跃确认** — 不回放就进入下一层，或用户说「差不多」就放行。",
+    "5. **跳过最终确认** — 未回放完整 R-001 清单，或用户未明确确认清单就进入执行批准。",
     "",
     "---",
     "",
     "## 执行流程总结",
     "",
     "1. 用户描述想法",
-    "2. **【铁律一 + 四】第一层** — 角色/现状/痛点（纯业务语言，具体化强制）",
-    "3. → 第一层小结回放，用户确认",
+    "2. 复述一个具体使用场景并邀请用户随时纠正，不等待额外确认",
+    "3. **【铁律一 + 四】第一层** — 角色/现状/痛点（纯业务语言，具体化强制）",
     "4. **【铁律一 + 四】第二层** — Day-in-the-Life 完整走一遍",
-    "5. → 第二层小结回放，用户确认",
-    "6. **【铁律一 + 四】第三层** — 例外和边界穷举",
-    "7. → 第三层小结回放，用户确认",
-    "8. **【铁律一 + 四】第四层** — 验收用业务证据表达",
-    "9. → 第四层小结回放，用户确认",
-    "10. **【铁律五】完整性挖掘** — 角色×场景×例外矩阵穷举，直到用户确认再无新增",
-    "11. **【铁律六】需求清单回放** — R-001 形式打印全表，逐条勾认",
-    "12. **【铁律七】术语保真** — 用户原词进入文档，不擅自 MVP 化",
-    "13. **翻译层** — agent 私下映射到 9 槽机器契约，用户不感知",
+    "5. **【铁律一 + 四】第三层** — 例外和边界穷举",
+    "6. **【铁律一 + 四】第四层** — 验收用业务证据表达",
+    "7. **【铁律五】完整性挖掘** — 角色×场景×例外矩阵穷举，直到再无新增",
+    "8. **【铁律六】需求清单回放** — R-001 形式打印全表，逐条勾认",
+    "9. **执行批准** — 仅在需求清单明确确认后请求批准进入 PRD",
+    "10. **【铁律七】术语保真** — 用户原词进入文档，不擅自 MVP 化",
+    "11. **翻译层** — agent 私下映射到机器契约，用户不感知",
     "",
     "---",
     "",
     "## Execution Contract",
     "",
-    "- 本协议是强制性的。任何跳过确认门、使用技术语言、接受模糊答案的行为视为协议违规。",
-    "- Fail closed：当用户对回放的确认不明确时，不得进入下一阶段。",
+    "- 本协议是强制性的。任何跳过前提决策、最终需求清单确认或执行批准，使用技术语言，接受模糊答案的行为视为协议违规。",
+    "- Fail closed：前提决策、R-001 清单确认或执行批准不明确时，不得进入下一阶段。",
     "- 本 workflow 为 no_code_change —— 不在此阶段写代码、生成 PRD 或做技术设计。",
     "- 输出：确认后的需求清单（业务语言 R-001 形式）+ agent 内部槽位映射（不展示给用户）。",
     "",
