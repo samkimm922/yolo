@@ -117,12 +117,21 @@ function missingExpectedFiles(coverage: unknown): string[] {
   return cleanPathList(coverage.missing_expected_files);
 }
 
+export type CoverageTemplate = {
+  scanner_version: string;
+  scanned_files: string[];
+  rules: unknown[] | Record<string, unknown>;
+  expected_scope: unknown;
+  coverage_status: "complete" | "pass" | "covered";
+};
+
 export type ReviewCoverageBlocker = {
   code: string;
   message: string;
   coverage_status?: unknown;
   missing_expected_files?: string[];
   missing_fields?: string[];
+  coverage_template?: CoverageTemplate;
 };
 
 export type ReviewCoverageInspection = {
@@ -134,12 +143,36 @@ export type ReviewCoverageInspection = {
   blockers: ReviewCoverageBlocker[];
   missing_expected_files?: string[];
   missing_fields?: string[];
+  coverage_template?: CoverageTemplate;
 };
+
+/**
+ * Coverage artifact skeleton that scanner authors can copy verbatim and fill in.
+ *
+ * Derived from the field checks in `inspectReviewScannerCoverage`:
+ *  - `scanner_version`  non-empty string
+ *  - `scanned_files`    array of file paths
+ *  - `rules`            array or object describing the rules that ran
+ *  - `expected_scope`   any non-null value describing what should be scanned
+ *  - `coverage_status`  one of "complete" | "pass" | "covered"
+ *    (the allow-list enforced by `incompleteCoverageBlock`)
+ */
+const COVERAGE_STATUS_VALUES = ["complete", "pass", "covered"] as const;
+
+function coverageTemplate(): CoverageTemplate {
+  return {
+    scanner_version: "your-scanner-name@1.0.0",
+    scanned_files: ["src/example.ts"],
+    rules: ["R-example"],
+    expected_scope: ["src/example.ts"],
+    coverage_status: "complete",
+  };
+}
 
 function incompleteCoverageBlock(coverage: unknown): ReviewCoverageInspection | null {
   if (!isCoverageObject(coverage)) return null;
   const coverageStatus = clean(coverage.coverage_status).toLowerCase();
-  if (coverageStatus && !["complete", "pass", "covered"].includes(coverageStatus)) {
+  if (coverageStatus && !COVERAGE_STATUS_VALUES.includes(coverageStatus as typeof COVERAGE_STATUS_VALUES[number])) {
     return {
       status: "blocked",
       blocks_execution: true,
@@ -259,6 +292,7 @@ export function inspectReviewScannerCoverage(
     if (!clean(coverage.coverage_status)) missingFields.push("coverage_status");
   }
   if (missingFields.length > 0) {
+    const template = coverageTemplate();
     return {
       status: "blocked",
       blocks_execution: true,
@@ -266,10 +300,12 @@ export function inspectReviewScannerCoverage(
       message: `Scanner returned empty findings without complete coverage artifact: ${missingFields.join(", ")}`,
       coverage: coverage || null,
       missing_fields: missingFields,
+      coverage_template: template,
       blockers: [{
         code: "REVIEW_SCANNER_COVERAGE_MISSING",
-        message: "Empty review findings require a complete scanner coverage artifact.",
+        message: "Empty review findings require a complete scanner coverage artifact. Copy coverage_template, fill it in, and emit it as coverage_artifact.",
         missing_fields: missingFields,
+        coverage_template: template,
       }],
     };
   }
