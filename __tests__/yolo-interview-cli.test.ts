@@ -341,7 +341,7 @@ describe("yolo interview CLI", () => {
     }
   });
 
-  test("weak answers keep next question on the same slot follow-up", async () => {
+  test("prose answers advance without regex quality follow-up", async () => {
     const root = tempProject();
     try {
       const started = await startLayerOneInterview(root);
@@ -349,19 +349,18 @@ describe("yolo interview CLI", () => {
 
       assert.equal(result.coverage.answered, 4);
       assert.equal(result.coverage.ready_for_prd_intake, false);
-      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
-      assert.equal(result.next_question.id, "target_users");
-      assert.equal(result.next_question.follow_up, true);
-      assert.match(result.next_question.text, /角色|频率|负责/);
-      assert.equal(result.coverage_detail.follow_up_questions[0].slot, "target_users");
+      assert.equal(result.coverage_detail.readiness.status, "collecting");
+      assert.equal(result.next_question.id, "status_quo");
+      assert.equal("follow_up" in result.next_question, false);
+      assert.equal("follow_up_questions" in result.coverage_detail, false);
       assert.equal(result.next_actions.length <= 2, true);
-      assert.match(result.next_actions[0], /--question target_users/);
+      assert.match(result.next_actions[0], /--question status_quo/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("vague outcome words require a business follow-up", async () => {
+  test("vague outcome words advance without regex follow-up", async () => {
     const root = tempProject();
     try {
       const started = await startLayerOneInterview(root);
@@ -387,18 +386,16 @@ describe("yolo interview CLI", () => {
 
       const result = await answer(root, started.session_path, "desired_outcome", "优化体验，更智能");
 
-      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
-      assert.equal(result.next_question.id, "desired_outcome");
-      assert.equal(result.next_question.follow_up, true);
-      assert.match(result.next_question.text, /具体数量\/日期/);
-      assert.match(result.next_question.text, /当…时…/);
-      assert.equal(result.coverage_detail.follow_up_questions[0].slot, "desired_outcome");
+      assert.equal(result.coverage_detail.readiness.status, "discuss_ready");
+      assert.equal(result.next_question.id, "exceptions");
+      assert.equal("follow_up" in result.next_question, false);
+      assert.equal("follow_up_questions" in result.coverage_detail, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("text output shows follow-up prompts for weak answers", async () => {
+  test("text output omits regex quality and follow-up metadata", async () => {
     const root = tempProject();
     try {
       const started = await startLayerOneInterview(root);
@@ -414,15 +411,15 @@ describe("yolo interview CLI", () => {
       ], { cwd: root, stdout: out.stream });
 
       assert.equal(exitCode, 0);
-      assert.match(out.text(), /answer_quality:/);
-      assert.match(out.text(), /follow_up:/);
-      assert.match(out.text(), /角色|频率|负责/);
+      assert.doesNotMatch(out.text(), /answer_quality:/);
+      assert.doesNotMatch(out.text(), /follow_up:/);
+      assert.match(out.text(), /next_question: status_quo/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("text output shows fail-closed guidance after repeated vague answers", async () => {
+  test("repeated vague answers never escalate to a regex-driven human block", async () => {
     const root = tempProject();
     try {
       const started = await openLayerFourInterview(root);
@@ -441,13 +438,14 @@ describe("yolo interview CLI", () => {
       ], { cwd: root, stdout: out.stream });
 
       assert.equal(exitCode, 0);
-      assert.match(out.text(), /follow_up:/);
-      assert.match(out.text(), /人工澄清/);
+      assert.doesNotMatch(out.text(), /follow_up:/);
+      assert.doesNotMatch(out.text(), /人工澄清/);
+      assert.match(out.text(), /next_question: requirements_confirmation/);
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
-      assert.equal(saved.answers.success_criteria.quality.level, "blocked_needs_clarification");
-      assert.equal(saved.follow_up_counts.success_criteria.count, 3);
-      assert.equal(saved.accepted_assumptions.length, 0);
+      assert.equal("quality" in saved.answers.success_criteria, false);
+      assert.equal("follow_up_counts" in saved, false);
+      assert.equal("accepted_assumptions" in saved, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -555,13 +553,13 @@ describe("yolo interview CLI", () => {
     }
   });
 
-  test("to-demand does not mark PRD intake ready while follow-up is unresolved", async () => {
+  test("to-demand stays blocked when a command is supplied instead of a target role", async () => {
     const root = tempProject();
     try {
       mkdirSync(join(root, "src", "services"), { recursive: true });
       writeFileSync(join(root, "src", "services", "inventory-alerts.ts"), "export const threshold = 3;\n", "utf8");
       const started = await startLayerOneInterview(root);
-      await answer(root, started.session_path, "target_users", "用户");
+      await answer(root, started.session_path, "target_users", "taskcli add creates a new task in src/tasks.ts");
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -579,15 +577,15 @@ describe("yolo interview CLI", () => {
       assert.match(result.next_actions.join("\n"), /Missing demand fields\/approvals:/);
       assert.match(result.next_actions.join("\n"), /yolo interview answer/);
       assert.equal(result.coverage.ready_for_prd_intake, false);
-      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
+      assert.equal(result.coverage_detail.readiness.status, "collecting");
       assert.equal(result.next_question.id, "target_users");
-      assert.equal(result.next_question.follow_up, true);
-      assert.match(result.next_question.text, /角色|频率|负责/);
+      assert.equal("follow_up" in result.next_question, false);
+      assert.equal("follow_up_questions" in result.coverage_detail, false);
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
       assert.equal(saved.coverage.ready_for_prd_intake, false);
       assert.equal(saved.next_question.id, "target_users");
-      assert.equal(saved.next_question.follow_up, true);
+      assert.equal("follow_up" in saved.next_question, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

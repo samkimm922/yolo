@@ -418,13 +418,6 @@ export function runDemandApprovedRuntime(input = Object(), options = Object()) {
         message: `Interview slot ${slot} must be answered before approved demand handoff.`,
       });
     }
-    for (const followUp of asArray(coverage.follow_up_questions)) {
-      handoffBlockers.push({
-        code: followUp.code || `FOLLOW_UP_${String(followUp.slot || "INTERVIEW").toUpperCase()}`,
-        slot: followUp.slot,
-        message: followUp.plain_language_prompt || followUp.text || followUp.message || "Resolve interview follow-up before approved demand handoff.",
-      });
-    }
   }
   const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
   const demandPath = artifacts.find((path) => path.endsWith("session.json")) || join(outputDir, "session.json");

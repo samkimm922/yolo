@@ -61,11 +61,6 @@ type InterviewQuestion = {
   confirmation_gate?: boolean;
   recommended_answer?: string;
   recommendation_reason?: string;
-  follow_up?: boolean;
-  follow_up_id?: string;
-  follow_up_code?: string;
-  follow_up_reason?: string;
-  original_prompt?: string;
 };
 
 type InterviewCoverage = {
@@ -111,11 +106,6 @@ export function decorateInterviewState(state: InterviewState = {}): InterviewSta
       confirmation_gate: next.confirmation_gate === true,
       recommended_answer: next.recommended_answer,
       recommendation_reason: next.recommendation_reason,
-      follow_up: next.follow_up === true,
-      follow_up_id: next.follow_up_id,
-      follow_up_code: next.follow_up_code,
-      follow_up_reason: next.follow_up_reason,
-      original_prompt: next.original_prompt,
     } : null,
     coverage,
   };

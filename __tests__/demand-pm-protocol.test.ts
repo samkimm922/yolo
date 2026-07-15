@@ -238,5 +238,6 @@ describe("PM protocol interview stages", () => {
     assert.doesNotMatch(markdown, /第[一二三四]层确认门/);
     assert.match(markdown, /需求清单回放/);
     assert.match(markdown, /用户不逐条勾认，不进入下一步/);
+    assert.doesNotMatch(markdown, /质检正则/);
   });
 });
